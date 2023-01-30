@@ -678,7 +678,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i32;
             let shamt = (f.imm & 0x1f) as i32;
 
-            let wb_data = rs1 >> f.imm;
+            let wb_data = rs1.wrapping_shr(shamt as u32);
             cpu.gpr.write(f.rd, wb_data as i32 as u64);
             
             Ok(())

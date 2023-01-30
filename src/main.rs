@@ -9,6 +9,7 @@ mod traptype;
 mod inst_decode;
 mod device_uart;
 mod inst_rv64z;
+mod inst_rv64m;
 fn main() {
     println!("Hello, world!");
 }

@@ -48,7 +48,7 @@ impl CpuCore {
 
         match x {
             Some(i) => {
-                println!("{}", i.name);
+                // println!("pc:{:X},{}",self.pc, i.name);
                 (i.operation)(self, inst, self.pc);
             }
             None => panic!(),
@@ -78,6 +78,7 @@ impl CpuCore {
             }
             _ => {
                 println!("BAD TRAP");
+                self.cpu_state = CpuState::Stop;
                 1
             }
         }
@@ -86,14 +87,18 @@ impl CpuCore {
 
 #[cfg(test)]
 mod tests_cpu {
+    use std::{
+        fs::read_dir,
+        path::{self, Path},
+    };
+
     use crate::{bus::DeviceType, dram::Dram};
 
     use super::{CpuCore, CpuState};
 
-    #[test]
-    fn test1() {
-        let file_name =
-            "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
+    fn run_once(file_name: &str) {
+        // let file_name =
+        //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
         let mut cpu = CpuCore::new();
         let mut dr = Box::new(Dram::new(128 * 1024 * 1024));
         dr.load_binary(file_name);
@@ -111,14 +116,38 @@ mod tests_cpu {
         let mut cycle = 0;
         loop {
             cpu.execute(1);
-            cycle +=1;
+            cycle += 1;
             if cpu.cpu_state != CpuState::Running {
                 break;
             }
         }
-
         println!("total:{cycle}");
+        let a0_val = cpu.gpr.read_by_name("a0");
+        assert_eq!(a0_val, 0);
+    }
+
+    #[test]
+    fn cpu_test() {
+        let dir = Path::new("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build");
+        for file in read_dir(dir).unwrap() {
+            let entry = file.unwrap();
+            let path = entry.path();
+
+
+            if path.is_file() {
+                
+                let ext = path.extension().unwrap();
+                if ext == "bin" {
+                    run_once(path.to_str().unwrap());
+                    let f_name = path.file_name().unwrap().to_str().unwrap();
+                    println!("{f_name}:  OK");
+                }
+            }
+        }
+    }
+    #[test]
+    fn test1(){
+
+        run_once("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/recursion-riscv64-nemu.bin");
     }
 }
-
-
