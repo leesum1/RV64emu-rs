@@ -32,10 +32,10 @@ pub const INSTRUCTIONS_M: [Instruction; 13] = [
         operation: |cpu, inst, pc| {
             // x[rd] = (x[rs1] s ×s x[rs2]) >>s XLEN
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as i128;
-            let rs2 = cpu.gpr.read(f.rs2) as i128;
+            let rs1 = cpu.gpr.read(f.rs1) as i64 as i128;
+            let rs2 = cpu.gpr.read(f.rs2) as i64 as i128;
 
-            let mul_data = rs1.wrapping_mul(rs2);
+            let (mul_data, _) = rs1.overflowing_mul(rs2);
             let wb_data = (mul_data >> 64) as i64;
 
             cpu.gpr.write(f.rd, wb_data as u64);
@@ -49,10 +49,10 @@ pub const INSTRUCTIONS_M: [Instruction; 13] = [
         operation: |cpu, inst, pc| {
             // x[rd] = (x[rs1] s ×u x[rs2]) >>s XLEN
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as i128;
+            let rs1 = cpu.gpr.read(f.rs1) as i64 as i128;
             let rs2 = cpu.gpr.read(f.rs2) as u128 as i128;
 
-            let mul_data = rs1.wrapping_mul(rs2);
+            let (mul_data, _) = rs1.overflowing_mul(rs2);
             let wb_data = (mul_data >> 64) as i64;
 
             cpu.gpr.write(f.rd, wb_data as u64);

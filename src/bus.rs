@@ -1,9 +1,9 @@
 use crate::device_trait::DeviceBase;
 
 pub struct DeviceType {
-   pub start: u64,
-   pub len: u64,
-   pub instance: Box<dyn DeviceBase>,
+    pub start: u64,
+    pub len: u64,
+    pub instance: Box<dyn DeviceBase>,
 }
 
 pub struct Bus {
@@ -22,53 +22,48 @@ impl Bus {
 
     pub fn read(&mut self, addr: u64, len: usize) -> u64 {
         Bus::check_aligned(addr, len as u64);
-        for device in &mut self.devices {
-            if Bus::check_area(device.start, device.len, addr) {
-                let r_data = device.instance.do_read(addr - device.start, len);
-                return r_data;
-            }
-        }
-        // Handle error when no device is found
-        println!("can not find device,read addr{:X}", addr);
-        0
+
+        self.devices
+            .iter_mut()
+            .find(|device| Bus::check_area(device.start, device.len, addr))
+            .map_or_else(
+                || {
+                    println!("can not find device,read addr{addr:X}");
+                    0
+                },
+                |device| device.instance.do_read(addr - device.start, len),
+            )
     }
 
     fn check_area(start: u64, len: u64, addr: u64) -> bool {
         (addr >= start) && (addr < start + len)
     }
 
-    fn check_aligned(addr: u64, len: u64) {
-        match len {
-            1 => (),
-            2 => {
-                if (addr & 0b1) != 0 {
-                    panic!();
-                }
-            }
-            4 => {
-                if (addr & 0b11) != 0 {
-                    panic!();
-                }
-            }
-            8 => {
-                if (addr & 0b111) != 0 {
-                    panic!();
-                }
-            }
-            _ => panic!(),
+    pub fn check_aligned(addr: u64, len: u64) {
+        let mask = match len {
+            1 => 0,
+            2 => 1,
+            4 => 3,
+            8 => 7,
+            _ => panic!(" addr len err:{len}"),
         };
+        // let mask = (1u64 << (len.trailing_zeros())) - 1;
+        if (addr & mask) != 0 {
+            panic!("misaligned addr{addr:X}");
+        }
     }
 
     pub fn write(&mut self, addr: u64, data: u64, len: usize) {
         Bus::check_aligned(addr, len as u64);
-        for device in &mut self.devices {
-            if Bus::check_area(device.start, device.len, addr) {
-                let _w_data = device.instance.do_write(addr - device.start, data, len);
-                return;
-            }
-        }
-        // Handle error when no device is found
-        println!("can not find device,write addr{:X}", addr);
+
+        self.devices
+            .iter_mut()
+            .find(|device| Bus::check_area(device.start, device.len, addr))
+            .map(|device| device.instance.do_write(addr - device.start, data, len))
+            .unwrap_or_else(|| {
+                println!("can not find device,read addr{addr:X}");
+                0
+            });
     }
 }
 

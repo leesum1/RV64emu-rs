@@ -1,3 +1,5 @@
+use std::{fs::File, io::Write};
+
 use crate::{
     bus::{Bus, DeviceType},
     dram::Dram,
@@ -49,9 +51,9 @@ impl CpuCore {
         match x {
             Some(i) => {
                 // println!("pc:{:X},{}",self.pc, i.name);
-                (i.operation)(self, inst, self.pc);
+                (i.operation)(self, inst, self.pc).unwrap();
             }
-            None => panic!(),
+            None => panic!("inst err:{inst:X}"),
         }
     }
 
@@ -62,8 +64,7 @@ impl CpuCore {
                     let inst = self.inst_fetch();
                     self.step(inst);
                 }
-                CpuState::Stop => break,
-                CpuState::Abort => break,
+                _ => break,
             };
         }
     }
@@ -83,6 +84,28 @@ impl CpuCore {
             }
         }
     }
+
+    pub fn dump_signature(&mut self, file_name: &str) {
+        let fd = File::create(file_name);
+
+        let sig_start = self.gpr.read_by_name("a1");
+        let sig_end = self.gpr.read_by_name("a2");
+
+        // for i in (sig_start..sig_end).step_by(4) {
+        //     let tmp_data = self.bus.read(i, 4);
+        //     file.write_fmt(format_args! {"{tmp_data:x}\n"});
+        // }
+
+        fd.map_or_else(
+            |err| println!("{err}"),
+            |mut file| {
+                for i in (sig_start..sig_end).step_by(4) {
+                    let tmp_data = self.bus.read(i, 4);
+                    file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
+                }
+            },
+        )
+    }
 }
 
 #[cfg(test)]
@@ -92,7 +115,10 @@ mod tests_cpu {
         path::{self, Path},
     };
 
-    use crate::{bus::DeviceType, dram::Dram};
+    use crate::{
+        bus::{Bus, DeviceType},
+        dram::Dram,
+    };
 
     use super::{CpuCore, CpuState};
 
@@ -133,9 +159,7 @@ mod tests_cpu {
             let entry = file.unwrap();
             let path = entry.path();
 
-
             if path.is_file() {
-                
                 let ext = path.extension().unwrap();
                 if ext == "bin" {
                     run_once(path.to_str().unwrap());
@@ -146,8 +170,7 @@ mod tests_cpu {
         }
     }
     #[test]
-    fn test1(){
-
+    fn test1() {
         run_once("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/recursion-riscv64-nemu.bin");
     }
 }

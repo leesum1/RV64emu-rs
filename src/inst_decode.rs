@@ -20,14 +20,8 @@ impl InstDecode {
     }
 
     pub fn step(&mut self, inst_i: u32) -> Option<&Instruction> {
-        for element in self.inst_vec.iter() {
-            if element.mask & inst_i == element.match_data {
-                return Some(element);
-            }
-        }
-
-        println!("inst:{inst_i:x}");
-        panic!();
-        None
+        self.inst_vec
+            .iter()
+            .find(|x| x.mask & inst_i == x.match_data)
     }
 }

@@ -31,8 +31,9 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             let f = parse_format_j(inst);
             let wdata = pc.wrapping_add(4);
-            cpu.gpr.write(f.rd, wdata);
+            
             cpu.npc = pc.wrapping_add(f.imm);
+            cpu.gpr.write(f.rd, wdata);
             Ok(())
         },
     },
@@ -45,6 +46,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let f = parse_format_i(inst);
             let wdata = pc.wrapping_add(4);
             cpu.npc = (cpu.gpr.read(f.rs1).wrapping_add(f.imm as u64))&!1_u64;
+            cpu.gpr.write(f.rd, wdata);
             Ok(())
         },
     },
@@ -453,7 +455,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as i64;
 
-            let wb_data = rs1 << rs2;
+            // let wb_data = rs1 << rs2;
+            let wb_data = rs1.wrapping_shl(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data as u64);
             
             Ok(())
@@ -517,7 +520,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as u64;
             let rs2 = cpu.gpr.read(f.rs2) as u64;
 
-            let wb_data = rs1 >> rs2;
+            let wb_data = rs1.wrapping_shr(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data as u64);
             
             Ok(())
@@ -534,7 +537,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as i64;
 
-            let wb_data = rs1 >> rs2;
+            let wb_data = rs1.wrapping_shr(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data as u64);
             
             Ok(())

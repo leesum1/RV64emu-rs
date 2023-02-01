@@ -74,6 +74,3 @@ mod tests_dram {
         assert_eq!(result as u128, data1);
     }
 }
-
-
-
