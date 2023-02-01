@@ -1,12 +1,6 @@
 use std::{fs::File, io::Write};
 
-use crate::{
-    bus::{Bus, DeviceType},
-    dram::Dram,
-    gpr::Gpr,
-    inst_decode::{self, InstDecode},
-    traptype::TrapType,
-};
+use crate::{bus::Bus, gpr::Gpr, inst_decode::InstDecode};
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -26,7 +20,7 @@ pub struct CpuCore {
 
 impl CpuCore {
     pub fn new() -> Self {
-        let mut bus_u = Bus::new();
+        let bus_u = Bus::new();
 
         CpuCore {
             gpr: Gpr::new(),
@@ -110,15 +104,9 @@ impl CpuCore {
 
 #[cfg(test)]
 mod tests_cpu {
-    use std::{
-        fs::read_dir,
-        path::{self, Path},
-    };
+    use std::{fs::read_dir, path::Path};
 
-    use crate::{
-        bus::{Bus, DeviceType},
-        dram::Dram,
-    };
+    use crate::{bus::DeviceType, dram::Dram};
 
     use super::{CpuCore, CpuState};
 

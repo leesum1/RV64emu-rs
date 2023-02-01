@@ -4,6 +4,12 @@ use crate::device_trait::DeviceBase;
 
 pub struct DeviceUart {}
 
+impl DeviceUart {
+    pub fn new() -> Self {
+        DeviceUart {}
+    }
+}
+
 impl DeviceBase for DeviceUart {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
         panic!();
@@ -27,12 +33,9 @@ mod test_gpr {
 
     use super::DeviceUart;
 
-
     #[test]
     fn tset1() {
-
-        let mut uart = DeviceUart{};
-
+        let mut uart = DeviceUart {};
 
         let hello = "hello\n";
 
@@ -40,6 +43,5 @@ mod test_gpr {
             // println!("byte:{}",s as u32);
             uart.do_write(0, s as u64, 1);
         }
-        
     }
 }

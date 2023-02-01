@@ -1,7 +1,7 @@
-use std::fmt::Debug;
+
 
 use crate::{
-    cpu_core::CpuCore, inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I,
+    inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I,
     inst_rv64m::INSTRUCTIONS_M, inst_rv64z::INSTRUCTIONS_Z,
 };
 

@@ -1,5 +1,6 @@
 mod bus;
 mod cpu_core;
+mod device_rtc;
 mod device_trait;
 mod device_uart;
 mod dram;
@@ -15,10 +16,24 @@ use clap::Parser;
 use crate::{
     bus::DeviceType,
     cpu_core::{CpuCore, CpuState},
+    device_rtc::DeviceRTC,
+    device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT},
+    device_uart::DeviceUart,
     dram::Dram,
 };
+// /* 各个设备地址 */
+// #define MEM_BASE 0x80000000
+// #define DEVICE_BASE 0xa0000000
+// #define MMIO_BASE 0xa0000000
+// #define SERIAL_PORT     (DEVICE_BASE + 0x00003f8)
+// #define KBD_ADDR        (DEVICE_BASE + 0x0000060)
+// #define RTC_ADDR        (DEVICE_BASE + 0x0000048)
+// #define VGACTL_ADDR     (DEVICE_BASE + 0x0000100)
+// #define AUDIO_ADDR      (DEVICE_BASE + 0x0000200)
+// #define DISK_ADDR       (DEVICE_BASE + 0x0000300)
+// #define FB_ADDR         (MMIO_BASE   + 0x1000000)
+// #define AUDIO_SBUF_ADDR (MMIO_BASE   + 0x1200000)
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -33,21 +48,36 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    println!("{}", args.img);
-
     let mut cpu = CpuCore::new();
 
+    // device dram
     let mut mem = Box::new(Dram::new(128 * 1024 * 1024));
     mem.load_binary(&args.img);
 
     cpu.bus.add_device(DeviceType {
-        start: 0x8000_0000,
+        start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem,
     });
+    // device uart
+    let uart = Box::new(DeviceUart::new());
 
+    cpu.bus.add_device(DeviceType {
+        start: SERIAL_PORT,
+        len: 1,
+        instance: uart,
+    });
+    // device rtc
+    let rtc = Box::new(DeviceRTC::new());
+    cpu.bus.add_device(DeviceType {
+        start: RTC_ADDR,
+        len: 8,
+        instance: rtc,
+    });
+
+
+    // start sim
     cpu.cpu_state = CpuState::Running;
-
     let mut cycle = 0;
     loop {
         cpu.execute(1);
@@ -56,12 +86,10 @@ fn main() {
             break;
         }
     }
-    println!("total:{cycle}");
 
+    println!("total:{cycle}");
+    // dump signature
     args.signature
         .map(|x| cpu.dump_signature(&x))
         .unwrap_or_else(|| println!("no signature"));
-
-    // let a0_val = cpu.gpr.read_by_name("a0");
-    
 }
