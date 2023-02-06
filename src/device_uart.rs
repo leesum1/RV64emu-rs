@@ -11,7 +11,7 @@ impl DeviceUart {
 }
 
 impl DeviceBase for DeviceUart {
-    fn do_read(&mut self, addr: u64, len: usize) -> u64 {
+    fn do_read(&mut self, _addr: u64, _len: usize) -> u64 {
         panic!();
     }
 

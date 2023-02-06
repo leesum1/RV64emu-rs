@@ -1,7 +1,10 @@
 use crate::inst_base::*;
 
 
-// #[allow(unreachable_code)]
+
+
+
+#[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [
     Instruction {
         mask: MASK_LUI,
@@ -310,7 +313,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] <u sext(immediate)
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
 
             let wb_data = rs1 < f.imm as u64;
 
@@ -326,10 +329,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] ˆ sext(immediate)
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
 
             let wb_data = rs1 ^ f.imm as u64;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -341,10 +344,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] | sext(immediate)
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
 
             let wb_data = rs1 | f.imm as u64;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -356,10 +359,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] & sext(immediate)
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
 
             let wb_data = rs1 & f.imm as u64;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -371,11 +374,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //   x[rd] = x[rs1] << shamt
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
             let shamt = (f.imm & 0x3f) as u64;
 
             let wb_data = rs1 << shamt;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -388,11 +391,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] >>u shamt
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
             let shamt = (f.imm & 0x3f) as u64;
 
             let wb_data = rs1 >> shamt;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -405,7 +408,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             //  x[rd] = x[rs1] >>s shamt
             let f = parse_format_i(inst);
             let rs1 = cpu.gpr.read(f.rs1) as i64;
-            let shamt = (f.imm & 0x3f) as i64;
+            let shamt = f.imm & 0x3f;
 
             let wb_data = rs1 >> shamt;
             cpu.gpr.write(f.rd, wb_data as u64);
@@ -485,8 +488,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] <u x[rs2]
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
+            let rs2 = cpu.gpr.read(f.rs2);
 
             let wb_data = rs1 < rs2;
             cpu.gpr.write(f.rd, wb_data as u64);
@@ -501,11 +504,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] ˆ x[rs2]
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
+            let rs2 = cpu.gpr.read(f.rs2);
 
             let wb_data = rs1 ^ rs2;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -517,11 +520,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //  x[rd] = x[rs1] >>u x[rs2]
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
+            let rs2 = cpu.gpr.read(f.rs2);
 
             let wb_data = rs1.wrapping_shr(rs2 as u32);
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -550,11 +553,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //   x[rd] = x[rs1] | x[rs2]
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
+            let rs2 = cpu.gpr.read(f.rs2);
 
             let wb_data = rs1 | rs2;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -566,11 +569,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //   x[rd] = x[rs1] & x[rs2]
             let f = parse_format_r(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
+            let rs2 = cpu.gpr.read(f.rs2);
 
             let wb_data = rs1 & rs2;
-            cpu.gpr.write(f.rd, wb_data as u64);
+            cpu.gpr.write(f.rd, wb_data);
             
             Ok(())
         },
@@ -602,7 +605,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let mem_addr = rs1.wrapping_add(f.imm);
 
             let mem_data = cpu.bus.read(mem_addr as u64, 8);
-            cpu.gpr.write(f.rd, mem_data as u64);
+            cpu.gpr.write(f.rd, mem_data);
 
             Ok(())
         },
@@ -615,9 +618,9 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             //  M[x[rs1] + sext(offset)] = x[rs2][63:0]
             let f = parse_format_s(inst);
             let rs1 = cpu.gpr.read(f.rs1) as i64;
-            let rs2 = cpu.gpr.read(f.rs2) as u64;
+            let rs2 = cpu.gpr.read(f.rs2);
             let mem_addr = rs1.wrapping_add(f.imm);
-            cpu.bus.write(mem_addr as u64, rs2 as u64, 8);
+            cpu.bus.write(mem_addr as u64, rs2, 8);
 
             Ok(())
         },
@@ -644,7 +647,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             //   x[rd] = sext((x[rs1] << shamt)[31:0])
             let f = parse_format_i(inst);
-            let rs1 = cpu.gpr.read(f.rs1) as u64;
+            let rs1 = cpu.gpr.read(f.rs1);
             let shamt = (f.imm & 0x1f) as u64;
 
             let wb_data = rs1 << f.imm;
@@ -682,7 +685,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let shamt = (f.imm & 0x1f) as i32;
 
             let wb_data = rs1.wrapping_shr(shamt as u32);
-            cpu.gpr.write(f.rd, wb_data as i32 as u64);
+            cpu.gpr.write(f.rd, wb_data as i64 as u64);
             
             Ok(())
         },

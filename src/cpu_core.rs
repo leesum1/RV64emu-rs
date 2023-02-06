@@ -6,7 +6,7 @@ use crate::{bus::Bus, gpr::Gpr, inst_decode::InstDecode};
 pub enum CpuState {
     Running,
     Stop,
-    Abort,
+    // Abort,
 }
 
 pub struct CpuCore {
@@ -106,7 +106,7 @@ impl CpuCore {
 mod tests_cpu {
     use std::{fs::read_dir, path::Path};
 
-    use crate::{bus::DeviceType, dram::Dram};
+    use crate::{bus::DeviceType, device_dram::DeviceDram};
 
     use super::{CpuCore, CpuState};
 
@@ -114,7 +114,7 @@ mod tests_cpu {
         // let file_name =
         //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
         let mut cpu = CpuCore::new();
-        let mut dr = Box::new(Dram::new(128 * 1024 * 1024));
+        let mut dr = Box::new(DeviceDram::new(128 * 1024 * 1024));
         dr.load_binary(file_name);
 
         let dram_u = DeviceType {

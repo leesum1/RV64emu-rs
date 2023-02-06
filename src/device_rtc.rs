@@ -21,25 +21,17 @@ impl DeviceBase for DeviceRTC {
                 self.rtc_time as u32 as u64
             }
             4 => self.rtc_time >> 32,
-            _ => panic!("rtc addr err:{addr}"),
+            _ => panic!("RTC addr err:{addr}"),
         }
     }
 
-    fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
-        assert_eq!(len, 1);
-        assert_eq!(addr, 0);
-
-        let c = char::from_u32(data as u32).unwrap();
-
-        print!("{c}");
-        io::stdout().flush().unwrap();
-        c as u64
+    fn do_write(&mut self, _addr: u64, _data: u64, _len: usize) -> u64 {
+        panic!("RTC can not write")
     }
 }
 
 #[cfg(test)]
 mod test_rtc {
-    use std::{alloc::System, thread::sleep_ms};
 
     use crate::device_trait::DeviceBase;
 
@@ -62,6 +54,5 @@ mod test_rtc {
         let t = (high << 32) + low;
         assert_eq!(t, rtc.rtc_time);
         println!("{t}");
-        
     }
 }

@@ -1,8 +1,6 @@
-
-
 use crate::{
-    inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I,
-    inst_rv64m::INSTRUCTIONS_M, inst_rv64z::INSTRUCTIONS_Z,
+    inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I, inst_rv64m::INSTRUCTIONS_M,
+    inst_rv64z::INSTRUCTIONS_Z,
 };
 
 pub struct InstDecode {

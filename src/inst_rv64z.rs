@@ -1,5 +1,6 @@
 use crate::inst_base::*;
 
+#[allow(unused_variables)]
 pub const INSTRUCTIONS_Z: [Instruction; 3] = [
     Instruction {
         mask: MASK_EBREAK,

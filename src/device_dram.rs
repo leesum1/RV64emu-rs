@@ -2,16 +2,16 @@ use std::{fs, vec};
 
 use crate::device_trait::DeviceBase;
 
-pub struct Dram {
+pub struct DeviceDram {
     data: Vec<u8>,
     pub capacity: usize,
 }
 
-impl Dram {
+impl DeviceDram {
     pub fn new(size: usize) -> Self {
         let datavec: Vec<u8> = vec![0; size];
 
-        Dram {
+        DeviceDram {
             data: datavec,
             capacity: size,
         }
@@ -25,7 +25,7 @@ impl Dram {
     }
 }
 
-impl DeviceBase for Dram {
+impl DeviceBase for DeviceDram {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
         let mut data_bytes = 0_u64.to_le_bytes();
 
@@ -48,7 +48,7 @@ mod tests_dram {
 
     #[test]
     fn test_do_read() {
-        let mut dram = Dram::new(1024);
+        let mut dram = DeviceDram::new(1024);
         let data = 0xDEADBEEF;
         let data1 = 0xDEADBEEFDEADBEEF_u128;
         let len = 4;

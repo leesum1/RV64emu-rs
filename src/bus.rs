@@ -69,7 +69,7 @@ impl Bus {
 
 #[cfg(test)]
 mod tests_bus {
-    use crate::dram::Dram;
+    use crate::device_dram::DeviceDram;
 
     use super::{Bus, DeviceType};
 
@@ -78,7 +78,7 @@ mod tests_bus {
         let dram_u = DeviceType {
             start: 0x8000_0000,
             len: 1024,
-            instance: Box::new(Dram::new(1024)),
+            instance: Box::new(DeviceDram::new(1024)),
         };
 
         let mut bus_u = Bus::new();
