@@ -22,6 +22,7 @@ pub const VGACTL_ADDR: u64 = DEVICE_BASE + 0x0000100;
 pub trait DeviceBase {
     fn do_read(&mut self, addr: u64, len: usize) -> u64;
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64;
+    fn get_name(& self) -> &'static str;
     fn do_update(&mut self) {
         println!("do_update");
     }

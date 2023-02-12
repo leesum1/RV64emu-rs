@@ -25,6 +25,10 @@ impl DeviceBase for DeviceUart {
         io::stdout().flush().unwrap();
         c as u64
     }
+
+    fn get_name(& self) -> &'static str {
+        "UART"
+    }
 }
 
 #[cfg(test)]

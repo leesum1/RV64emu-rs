@@ -1,14 +1,16 @@
+
 use crate::device_trait::DeviceBase;
 
 pub struct DeviceType {
     pub start: u64,
     pub len: u64,
     pub instance: Box<dyn DeviceBase>,
+    pub name: &'static str,
 }
 
 pub struct Bus {
     // devices: Vec<(u64, u64, Rc<dyn DeviceBase>)>,
-    devices: Vec<DeviceType>,
+    pub devices: Vec<DeviceType>,
 }
 
 impl Bus {
@@ -67,6 +69,26 @@ impl Bus {
     }
 }
 
+impl std::fmt::Display for Bus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let x = self.devices.iter().map(|device| {
+            format_args!(
+                "name:{:15} Area:0X{:8X}-->0X{:8X},len:0X{:X}\n",
+                device.name,
+                device.start,
+                device.start + device.len,
+                device.len
+            )
+            .to_string()
+        });
+
+        f.write_str("--Device Tree MAP--\n").unwrap();
+        x.for_each(|device_str| f.write_str(&device_str).unwrap());
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests_bus {
     use crate::device_dram::DeviceDram;
@@ -79,6 +101,7 @@ mod tests_bus {
             start: 0x8000_0000,
             len: 1024,
             instance: Box::new(DeviceDram::new(1024)),
+            name: "DRAM",
         };
 
         let mut bus_u = Bus::new();

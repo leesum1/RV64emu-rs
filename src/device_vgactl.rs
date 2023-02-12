@@ -18,4 +18,8 @@ impl DeviceBase for DeviceVGACTL {
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         0
     }
+
+    fn get_name(& self) -> &'static str {
+        "VGA_CTL"
+    }
 }

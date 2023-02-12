@@ -1,7 +1,6 @@
 use std::slice::Windows;
 
 use sdl2::{
-    libc::SYS_set_thread_area,
     pixels::PixelFormatEnum,
     render::{Canvas, Texture, TextureCreator, WindowCanvas},
     surface::Surface,
@@ -22,11 +21,9 @@ pub struct DeviceVGA {
 }
 
 impl DeviceVGA {
-    pub fn new(window: Window) -> Self {
-        let canvas = window.into_canvas().build().unwrap();
-
+    pub fn new(canvas_w: WindowCanvas) -> Self {
         DeviceVGA {
-            vga_canvas: canvas,
+            vga_canvas: canvas_w,
             pix_buf: [0; VGA_BUF_SIZE],
             count: 0,
         }
@@ -49,30 +46,6 @@ impl DeviceVGA {
         self.vga_canvas.copy(&texture, None, None).unwrap();
         self.vga_canvas.present();
     }
-
-    pub fn init(&mut self) -> Result<(), String> {
-        let sdl_context = sdl2::init()?;
-        let video_subsystem = sdl_context.video()?;
-        let window = video_subsystem
-            .window("rust-sdl2 demo: Video", 800, 600)
-            .position_centered()
-            .build()
-            .map_err(|e| e.to_string())?;
-
-        let mut canvas = window
-            .into_canvas()
-            .accelerated()
-            .build()
-            .map_err(|e| e.to_string())?;
-
-        let texture_creator = canvas.texture_creator();
-
-        let x = texture_creator
-            .create_texture_streaming(PixelFormatEnum::ARGB8888, 400, 300)
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
-    }
 }
 
 impl DeviceBase for DeviceVGA {
@@ -87,11 +60,15 @@ impl DeviceBase for DeviceVGA {
         self.pix_buf[(addr as usize)..(addr as usize + len)].copy_from_slice(&data_bytes[..(len)]);
         self.count += 1;
 
-        if self.count == VGA_H * VGA_W {
+        if self.count == (VGA_H * VGA_W) / 4 {
             self.count = 0;
             self.updata_vga();
         }
         data
+    }
+
+    fn get_name(&self) -> &'static str {
+        "VGA_FB"
     }
 }
 
@@ -110,94 +87,6 @@ mod test_vga {
     use crate::device_trait::DeviceBase;
 
     use super::{DeviceVGA, VGA_BUF_SIZE};
-
-    #[test]
-    fn vga_write() {
-        let sdl_context = sdl2::init().unwrap();
-        let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem
-            .window("rust-sdl2 demo: Video", 800, 600)
-            .position_centered()
-            .build()
-            .map_err(|e| e.to_string())
-            .unwrap();
-
-        let mut test1 = DeviceVGA::new(window);
-
-        let event_system = sdl_context.event().expect("fail");
-
-        // Contrived, but definitely safe.
-        // Another way to get a 'static subsystem reference is through the use of a global,
-        // i.e. via `lazy_static`. This is also the *only* way to actually use a subsystem on another thread.
-        let static_event: &'static _ = Box::leak(Box::new(event_system));
-
-        // 创建消息通道，tx是生产者，rx是消费者
-        let (tx, rx) = mpsc::channel();
-
-        thread::spawn(move || {
-            // 在新线程中向主线程发送消息，send返回Result<T>类型，
-            // 这里简单使用unwrap，遇到错误时将抛出panic!
-            let _event_system = static_event;
-            let _sdl_context = _event_system.sdl();
-            let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-            loop {
-                for event in event_pump.poll_iter() {
-                    tx.send(event).unwrap();
-                    // match event {
-                    //     Event::Quit { .. }
-                    //     | Event::KeyDown {
-                    //         keycode: Some(Keycode::Escape),
-                    //         ..
-                    //     } => break 'running,
-                    //     // skip mouse motion intentionally because of the verbose it might cause.
-                    //     Event::MouseMotion { .. } => {}
-                    //     e => {
-                    //         println!("{:?}", e);
-                    //     }
-                    // }
-                }
-                // The rest of the game loop goes here...
-            }
-        });
-
-        loop {
-            for i in (0..VGA_BUF_SIZE).step_by(4) {
-                test1.do_write(i as u64, (i * 100) as u64, 4);
-            }
-            let received = rx.recv().unwrap();
-
-            match received {
-                // skip mouse motion intentionally because of the verbose it might cause.
-                Event::MouseMotion { .. } => {}
-                // e => {
-                //     println!("{:?}", e);
-                // }
-                Event::KeyUp {
-                    timestamp,
-                    window_id,
-                    keycode,
-                    scancode,
-                    keymod,
-                    repeat,
-                } => {
-
-                    
-                }
-                Event::KeyDown {
-                    timestamp,
-                    window_id,
-                    keycode,
-                    scancode,
-                    keymod,
-                    repeat,
-                } => {}
-
-                _ => todo!(),
-            }
-
-            test1.updata_vga();
-        }
-    }
 
     fn test2() {
         //https://github.com/Rust-SDL2/rust-sdl2/issues/1063

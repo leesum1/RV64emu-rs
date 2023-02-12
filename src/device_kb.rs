@@ -76,4 +76,8 @@ impl DeviceBase for DeviceKB {
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         panic!("deviceKB should not wrtie")
     }
+
+    fn get_name(& self) -> &'static str {
+        "KeyBorad_AM"
+    }
 }

@@ -27,7 +27,7 @@ use crate::{
     device_dram::DeviceDram,
     device_kb::{DeviceKB, DeviceKbItem},
     device_rtc::DeviceRTC,
-    device_trait::{FB_ADDR, KBD_ADDR, MEM_BASE, RTC_ADDR, SERIAL_PORT, VGACTL_ADDR},
+    device_trait::{DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, RTC_ADDR, SERIAL_PORT, VGACTL_ADDR},
     device_uart::DeviceUart,
     device_vga::DeviceVGA,
     device_vgactl::DeviceVGACTL,
@@ -64,26 +64,35 @@ fn main() {
     // device dram
     let mut mem = Box::new(DeviceDram::new(128 * 1024 * 1024));
     mem.load_binary(&args.img);
+    let device_name = mem.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem,
+        name: device_name,
     });
+
     // device uart
     let uart = Box::new(DeviceUart::new());
+    let device_name = uart.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart,
+        name: device_name,
     });
+
     // device rtc
     let rtc = Box::new(DeviceRTC::new());
+    let device_name = rtc.get_name();
+
     cpu.bus.add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
         instance: rtc,
+        name: device_name,
     });
 
     // device vga
@@ -96,22 +105,29 @@ fn main() {
         .map_err(|e| e.to_string())
         .unwrap();
 
-    let vga = Box::new(DeviceVGA::new(window));
+    let canvas = window.into_canvas().build().expect("canvas err");
+
+    let vga = Box::new(DeviceVGA::new(canvas));
+    let device_name = vga.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
         instance: vga,
+        name: device_name,
     });
 
     // device vgactl
     let vgactl = Box::new(DeviceVGACTL::new());
+    let device_name = vgactl.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
         instance: vgactl,
+        name: device_name,
     });
+
     // device kb
     let event_system = sdl_context.event().expect("fail");
     // Contrived, but definitely safe.
@@ -120,11 +136,21 @@ fn main() {
     let static_event: &'static _ = Box::leak(Box::new(event_system));
 
     // 创建消息通道，tx是生产者，rx是消费者
-    let (mut tx, mut rx) = ring_channel(NonZeroUsize::new(16).unwrap());
+    let (mut tx, rx) = ring_channel(NonZeroUsize::new(16).unwrap());
+
+    let device_kb = Box::new(DeviceKB::new(rx));
+    let device_name = device_kb.get_name();
+
+    cpu.bus.add_device(DeviceType {
+        start: KBD_ADDR,
+        len: 4,
+        instance: device_kb,
+        name: device_name,
+    });
+
+    println!("{0}", cpu.bus);
 
     thread::spawn(move || -> ! {
-        // 在新线程中向主线程发送消息，send返回Result<T>类型，
-        // 这里简单使用unwrap，遇到错误时将抛出panic!
         let _event_system = static_event;
         let _sdl_context = _event_system.sdl();
         let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
@@ -167,14 +193,6 @@ fn main() {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-    });
-
-    let device_kb = Box::new(DeviceKB::new(rx));
-
-    cpu.bus.add_device(DeviceType {
-        start: KBD_ADDR,
-        len: 4,
-        instance: device_kb,
     });
 
     // start sim

@@ -16,6 +16,8 @@ pub struct CpuCore {
     pub pc: u64,
     pub npc: u64,
     pub cpu_state: CpuState,
+    pub inst_count: u64,
+    pub inst_hit_count: u64,
 }
 
 impl CpuCore {
@@ -29,6 +31,8 @@ impl CpuCore {
             pc: 0x8000_0000,
             npc: 0x8000_0000,
             cpu_state: CpuState::Stop,
+            inst_count: 0,
+            inst_hit_count: 0,
         }
     }
 
@@ -40,11 +44,9 @@ impl CpuCore {
     }
 
     pub fn step(&mut self, inst: u32) {
-        let x = self.decode.step(inst);
-
-        match x {
+        let y = self.decode.step(inst);
+        match y {
             Some(i) => {
-                // println!("pc:{:X},{}",self.pc, i.name);
                 (i.operation)(self, inst, self.pc).unwrap();
             }
             None => panic!("inst err:{inst:X}"),
@@ -65,6 +67,11 @@ impl CpuCore {
 
     pub fn halt(&mut self) -> usize {
         let a0 = self.gpr.read_by_name("a0");
+
+        println!(
+            "i count:{},hit count:{}",
+            self.inst_count, self.inst_hit_count
+        );
         match a0 {
             0 => {
                 println!("GOOD TRAP");
@@ -121,6 +128,7 @@ mod tests_cpu {
             start: 0x8000_0000,
             len: dr.capacity as u64,
             instance: dr,
+            name: "DRAM",
         };
 
         cpu.bus.add_device(dram_u);

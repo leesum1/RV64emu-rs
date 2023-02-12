@@ -21,6 +21,8 @@ impl DeviceDram {
         let text = fs::read(file_name).unwrap();
 
         let text_size = text.len();
+
+        println!("load binary : {file_name}, size: {text_size}");
         self.data[0..text_size].copy_from_slice(&text[..text_size]);
     }
 }
@@ -39,6 +41,10 @@ impl DeviceBase for DeviceDram {
 
         self.data[(addr as usize)..(addr as usize + len)].copy_from_slice(&data_bytes[..(len)]);
         data
+    }
+
+    fn get_name(& self) -> &'static str {
+        "DRAM"
     }
 }
 

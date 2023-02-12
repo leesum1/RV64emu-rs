@@ -28,6 +28,10 @@ impl DeviceBase for DeviceRTC {
     fn do_write(&mut self, _addr: u64, _data: u64, _len: usize) -> u64 {
         panic!("RTC can not write")
     }
+
+    fn get_name(& self) -> &'static str {
+        "RTC"
+    }
 }
 
 #[cfg(test)]
