@@ -3,10 +3,10 @@ use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
 const INTERRUPT_BIT: u64 = 0x8000000000000000_u64;
 
 #[allow(dead_code)]
-#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq)]
 #[repr(u64)]
+#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, Clone, Copy)]
 pub enum TrapType {
-    InstructionAddressMisaligned(u64) = 0,
+    InstructionAddressMisaligned = 0,
     InstructionAccessFault = 1,
     IllegalInstruction = 2,
     Breakpoint = 3,

@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Write},
-    sync::mpsc::Receiver,
-};
+
 
 use ring_channel::RingReceiver;
 use sdl2::keyboard::Scancode;
@@ -73,7 +70,7 @@ impl DeviceBase for DeviceKB {
         self.get_am_key() as u64
     }
 
-    fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
+    fn do_write(&mut self, _addr: u64, _data: u64, _len: usize) -> u64 {
         panic!("deviceKB should not wrtie")
     }
 

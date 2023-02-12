@@ -1,150 +1,139 @@
+use std::collections::HashMap;
 
-use std::{fmt, str::FromStr};
+use crate::inst_base::{
+    get_field, PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MHARTID, CSR_MIE, CSR_MIP, CSR_MSCRATCH,
+    CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC,
+};
 
-use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
-
-#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq)]
-#[allow(non_camel_case_types)]
-pub enum GprName {
-    zero,
-    ra,
-    sp,
-    gp,
-    tp,
-    t0,
-    t1,
-    t2,
-    s0,
-    s1,
-    a0,
-    a1,
-    a2,
-    a3,
-    a4,
-    a5,
-    a6,
-    a7,
-    s2,
-    s3,
-    s4,
-    s5,
-    s6,
-    s7,
-    s8,
-    s9,
-    s10,
-    s11,
-    t3,
-    t4,
-    t5,
-    t6,
-}
-pub struct Gpr {
-    regs: [u64; 32],
+pub struct CsrRegs {
+    csr_map: HashMap<u64, Box<dyn CsrRW>>,
 }
 
-impl Gpr {
+// enum {
+//     mtvec, mie, mip, mtval,mepc, mstatus, mcause, MSCRATCH, mhartid
+//   };
+
+impl CsrRegs {
     pub fn new() -> Self {
-        Gpr { regs: [0; 32] }
-    }
+        let csr_list = vec![
+            BaseCSR::new(CSR_MTVEC.into(), 0),
+            BaseCSR::new(CSR_MTVAL.into(), 0),
+            BaseCSR::new(CSR_MCAUSE.into(), 0),
+            BaseCSR::new(CSR_MIP.into(), 0),
+            BaseCSR::new(CSR_MIE.into(), 0),
+            BaseCSR::new(CSR_MEPC.into(), 0),
+            BaseCSR::new(CSR_MSTATUS.into(), 0),
+            BaseCSR::new(CSR_MSCRATCH.into(), 0),
+            BaseCSR::new(CSR_MHARTID.into(), 0),
+        ];
 
-    pub fn read(&self, idx: u64) -> u64 {
-        assert!(idx < 32);
-        match idx {
-            0 => 0,
-            _ => self.regs[idx as usize],
+        let mut csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();
+        for csr in csr_list.into_iter() {
+            csr_map.insert(csr.addr, Box::new(csr));
         }
-    }
-    pub fn write(&mut self, idx: u64, data: u64) {
-        assert!(idx < 32);
-        match idx {
-            0 => (),
-            _ => self.regs[idx as usize] = data,
-        };
-    }
-    pub fn get_register_name(num: u64) -> &'static str {
-        assert!(num < 32);
-        // 数字转枚举
-        let name = GprName::from_repr(num as usize).expect("can not get_register_name");
-        name.into()
+        CsrRegs { csr_map }
     }
 
-    pub fn get_register_idx(reg_name: &str) -> GprName {
-        match GprName::from_str(reg_name) {
-            Ok(gpr_emu) => gpr_emu,
-            Err(_) => panic!(),
+    pub fn read(&self, addr: u64) -> u64 {
+        let t = self.csr_map.get(&addr);
+
+        match t {
+            Some(csr) => csr.read(),
+            None => todo!(),
         }
     }
 
-    pub fn read_by_name(&mut self,reg_name: &str) ->u64{
-        let idx = Gpr::get_register_idx(reg_name);
+    pub fn write(&mut self, addr: u64, val: u64) -> u64 {
+        let t = self.csr_map.get_mut(&addr);
 
-        self.read(idx as u64)
+        match t {
+            Some(csr) => csr.write(val),
+            None => todo!(),
+        }
     }
 }
 
-impl fmt::Display for Gpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut ret: fmt::Result = Ok(());
-        for i in 0..32 {
-            ret = f.write_fmt(format_args!(
-                "{}:{}\n",
-                Gpr::get_register_name(i),
-                self.read(i)
-            ))
+pub trait CsrRW {
+    fn read(&self) -> u64;
+    fn write(&mut self, val: u64) -> u64;
+}
+
+#[derive(Clone)]
+pub struct BaseCSR {
+    pub addr: u64,
+    pub val: u64,
+    pub privi_level: PrivilegeLevels,
+    pub read_only: bool,
+}
+
+impl BaseCSR {
+    pub fn new(addr: u64, val: u64) -> Self {
+        let priv_l = get_field(addr, 0x300);
+        let read_only = get_field(addr, 0xC00) == 3;
+
+        BaseCSR {
+            addr,
+            val,
+            privi_level: PrivilegeLevels::from_repr(priv_l as usize).unwrap(),
+            read_only,
         }
-        ret
+    }
+}
+
+impl CsrRW for BaseCSR {
+    fn read(&self) -> u64 {
+        // println!("read {:x},{:x}",self.val, self.addr);
+        self.val
+    }
+    fn write(&mut self, val: u64) -> u64 {
+        // println!("write {:x},{:x}",val, self.addr);
+        self.val = val;
+        val
     }
 }
 
 #[cfg(test)]
-mod test_gpr {
-    use std::str::FromStr;
+mod test_csr {
+    use crate::inst_base::{get_field, set_field, PrivilegeLevels, CSR_MTVEC, CSR_STVEC};
 
-    use crate::gpr::Gpr;
-    use crate::gpr::GprName;
-
-    #[test]
-    fn test1() {
-        // 枚举转换字符串
-        let test1 = GprName::zero.to_string();
-        assert_eq!(test1, "zero");
-    }
-    #[test]
-    fn test2() {
-        // 枚举转数字
-        let test2 = GprName::zero;
-        assert_eq!(test2 as u64, 0);
-    }
-    #[test]
-
-    fn test3() {
-        // 字符串转枚举
-        let reg_name_var = GprName::from_str("a0").expect("a0");
-        assert_eq!(reg_name_var, GprName::a0);
-
-        let reg_name_var = GprName::from_str("a1").expect("a1");
-        assert_eq!(reg_name_var, GprName::a1);
-    }
-
-    #[test]
-    fn test4() {
-        let mut gpr = Gpr::new();
-        gpr.write(1, 1);
-        gpr.write(0, 1);
-        gpr.write(10, 10);
-        let x10 = gpr.read(10);
-        let x0 = gpr.read(0);
-        let x1 = gpr.read(1);
-        assert_eq!(x0, 0);
-        assert_eq!(x1, 1);
-        assert_eq!(x10, 10);
-        println!("{gpr}");
-    }
+    use super::{BaseCSR, CsrRegs};
 
     #[test]
     fn test5() {
-        let x = Gpr::get_register_idx("a2");
-        assert_eq!(x, GprName::a2);
+        let reg = 0b1100_1010_1100_1010;
+        let mask = 0b0000_1101_0000_0000;
+        let result = get_field(reg, mask);
+        assert_eq!(result, 0b1000);
+        println!("{result:b}"); // 输出: 0b1010
+
+        let y = set_field(reg, 0xf0, 0b1001);
+
+        println!("{reg:b}");
+        println!("{y:b}");
+    }
+    #[test]
+    fn tset1() {
+        let x = BaseCSR::new(CSR_MTVEC.into(), 0);
+        println!("{}", x.privi_level);
+        assert_eq!(x.privi_level, PrivilegeLevels::Machine);
+        let x = BaseCSR::new(CSR_STVEC.into(), 0);
+        println!("{}", x.privi_level);
+        assert_eq!(x.privi_level, PrivilegeLevels::Supervisor);
+    }
+    #[test]
+    fn tset2() {
+        let mut csr_bus = CsrRegs::new();
+
+        csr_bus.write(CSR_MTVEC.into(), 100);
+        let x = csr_bus.read(CSR_MTVEC.into());
+        assert_eq!(x, 100);
+
+        csr_bus.write(CSR_MTVEC.into(), 123124);
+        let x = csr_bus.read(CSR_MTVEC.into());
+        assert_eq!(x, 123124);
+
+        csr_bus.read(11);
+
+        println!("{:?}", csr_bus.csr_map.len());
     }
 }

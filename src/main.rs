@@ -1,5 +1,6 @@
 mod bus;
 mod cpu_core;
+mod csr_regs;
 mod device_dram;
 mod device_kb;
 mod device_rtc;
@@ -15,7 +16,7 @@ mod inst_rv64m;
 mod inst_rv64z;
 mod traptype;
 
-use std::{num::NonZeroUsize, thread, time::Duration};
+use std::{num::NonZeroUsize, process, thread, time::Duration};
 
 use clap::Parser;
 use ring_channel::*;
@@ -158,7 +159,7 @@ fn main() {
             for event in event_pump.poll_iter() {
                 match event {
                     // skip mouse motion intentionally because of the verbose it might cause.
-                    Event::MouseMotion { .. } => {}
+                    Event::Quit { .. } => process::exit(1),
                     Event::KeyUp {
                         timestamp: _,
                         window_id: _,

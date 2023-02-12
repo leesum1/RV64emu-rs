@@ -1,6 +1,16 @@
 use std::{fs::File, io::Write};
 
-use crate::{bus::Bus, gpr::Gpr, inst_decode::InstDecode};
+use crate::{
+    bus::Bus,
+    csr_regs::CsrRegs,
+    gpr::Gpr,
+    inst_base::{
+        get_field, set_field, CSR_MCAUSE, CSR_MEPC, CSR_MSTATUS, CSR_MTVEC, MSTATUS_MIE,
+        MSTATUS_MPIE, MSTATUS_MPP,
+    },
+    inst_decode::InstDecode,
+    traptype::TrapType,
+};
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -11,13 +21,12 @@ pub enum CpuState {
 
 pub struct CpuCore {
     pub gpr: Gpr,
+    pub csr_regs: CsrRegs,
     pub bus: Bus,
     pub decode: InstDecode,
     pub pc: u64,
     pub npc: u64,
     pub cpu_state: CpuState,
-    pub inst_count: u64,
-    pub inst_hit_count: u64,
 }
 
 impl CpuCore {
@@ -31,8 +40,7 @@ impl CpuCore {
             pc: 0x8000_0000,
             npc: 0x8000_0000,
             cpu_state: CpuState::Stop,
-            inst_count: 0,
-            inst_hit_count: 0,
+            csr_regs: CsrRegs::new(),
         }
     }
 
@@ -47,7 +55,11 @@ impl CpuCore {
         let y = self.decode.step(inst);
         match y {
             Some(i) => {
-                (i.operation)(self, inst, self.pc).unwrap();
+                let trap_code = (i.operation)(self, inst, self.pc);
+
+                if let Err(e) = trap_code {
+                    self.handle_exceptions(e)
+                }
             }
             None => panic!("inst err:{inst:X}"),
         }
@@ -68,22 +80,30 @@ impl CpuCore {
     pub fn halt(&mut self) -> usize {
         let a0 = self.gpr.read_by_name("a0");
 
-        println!(
-            "i count:{},hit count:{}",
-            self.inst_count, self.inst_hit_count
-        );
-        match a0 {
-            0 => {
-                println!("GOOD TRAP");
-                self.cpu_state = CpuState::Stop;
-                0
-            }
-            _ => {
-                println!("BAD TRAP");
-                self.cpu_state = CpuState::Stop;
-                1
-            }
+        if let 0 = a0 {
+            println!("GOOD TRAP");
+        } else {
+            println!("BAD TRAP");
         }
+        self.cpu_state = CpuState::Stop;
+        a0 as usize
+    }
+
+    pub fn handle_exceptions(&mut self, trap_type: TrapType) {
+        let mstatus_val = self.csr_regs.read(CSR_MSTATUS.into());
+
+        let mie = get_field(mstatus_val, MSTATUS_MIE);
+        let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mie);
+        let mstatus_val = set_field(mstatus_val, MSTATUS_MPP, 0b11);
+        let mstatus_val = set_field(mstatus_val, MSTATUS_MIE, 0b0);
+
+        self.csr_regs.write(CSR_MSTATUS.into(), mstatus_val);
+        self.csr_regs.write(CSR_MEPC.into(), self.pc);
+        self.csr_regs.write(CSR_MCAUSE.into(), trap_type as u64);
+
+        let mtvec = self.csr_regs.read(CSR_MTVEC.into());
+
+        self.npc = mtvec;
     }
 
     pub fn dump_signature(&mut self, file_name: &str) {

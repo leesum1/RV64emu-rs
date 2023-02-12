@@ -1,11 +1,8 @@
-use std::slice::Windows;
+
 
 use sdl2::{
     pixels::PixelFormatEnum,
-    render::{Canvas, Texture, TextureCreator, WindowCanvas},
-    surface::Surface,
-    video::{Window, WindowContext},
-    Sdl, VideoSubsystem,
+    render::{WindowCanvas},
 };
 
 use crate::device_trait::DeviceBase;
@@ -76,22 +73,20 @@ impl DeviceBase for DeviceVGA {
 mod test_vga {
 
     use std::{
-        rc::Rc,
-        sync::{mpsc, Arc},
         thread,
     };
 
-    use chrono::Duration;
-    use sdl2::{event::Event, keyboard::Keycode};
+    
+    
 
-    use crate::device_trait::DeviceBase;
+    
 
-    use super::{DeviceVGA, VGA_BUF_SIZE};
+    
 
     fn test2() {
         //https://github.com/Rust-SDL2/rust-sdl2/issues/1063
         let sdl2 = sdl2::init().expect("failed to initialize SDL2");
-        let timer_system = sdl2.timer().expect("failed to initialize timer subsystem");
+        let _timer_system = sdl2.timer().expect("failed to initialize timer subsystem");
         let event_system = sdl2.event().expect("fail");
 
         // Contrived, but definitely safe.
@@ -105,7 +100,7 @@ mod test_vga {
 
             // ...we now have an Sdl context on two threads.
             let _smuggled_sdl = timer.sdl();
-            let evet_dmp = _smuggled_sdl.event_pump();
+            let _evet_dmp = _smuggled_sdl.event_pump();
         });
 
         _a.join();

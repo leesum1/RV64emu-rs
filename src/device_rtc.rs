@@ -1,6 +1,6 @@
 use crate::device_trait::DeviceBase;
 use chrono::prelude::*;
-use std::io::{self, Write};
+
 
 pub struct DeviceRTC {
     pub rtc_time: u64,

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 
 use crate::{
     inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I, inst_rv64m::INSTRUCTIONS_M,
