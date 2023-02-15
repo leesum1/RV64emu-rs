@@ -2,11 +2,12 @@ use std::{fs::File, io::Write};
 
 use crate::{
     bus::Bus,
-    csr_regs::CsrRegs,
+    clint::{Clint, DeviceClint},
+    csr_regs::{CsrRW, CsrRegs},
     gpr::Gpr,
     inst_base::{
-        get_field, set_field, CSR_MCAUSE, CSR_MEPC, CSR_MSTATUS, CSR_MTVEC, MSTATUS_MIE,
-        MSTATUS_MPIE, MSTATUS_MPP,
+        get_field, set_field, CSR_MCAUSE, CSR_MEPC, CSR_MIE, CSR_MIP, CSR_MSTATUS, CSR_MTVEC,
+        MASK_ALL, MIP_MTIP, MSTATUS_MIE, MSTATUS_MPIE, MSTATUS_MPP,
     },
     inst_decode::InstDecode,
     traptype::TrapType,
@@ -31,7 +32,16 @@ pub struct CpuCore {
 
 impl CpuCore {
     pub fn new() -> Self {
-        let bus_u = Bus::new();
+        // todo! improve me
+        let clint_u = Clint::new();
+        let device_clint = DeviceClint {
+            start: 0x2000000,
+            len: 0xBFFF,
+            instance: clint_u,
+            name: "Clint",
+        };
+
+        let bus_u = Bus::new(device_clint);
 
         CpuCore {
             gpr: Gpr::new(),
@@ -55,8 +65,8 @@ impl CpuCore {
         let y = self.decode.step(inst);
         match y {
             Some(i) => {
+                // println!("{:x},{}",self.pc,i.name);
                 let trap_code = (i.operation)(self, inst, self.pc);
-
                 if let Err(e) = trap_code {
                     self.handle_exceptions(e)
                 }
@@ -71,6 +81,18 @@ impl CpuCore {
                 CpuState::Running => {
                     let inst = self.inst_fetch();
                     self.step(inst);
+
+                    let mip_p: &mut Box<dyn CsrRW> =
+                        self.csr_regs.csr_map.get_mut(&(CSR_MIP as u64)).unwrap();
+
+                    let irq_clint = self.bus.clint.instance.is_interrupt();
+                    // println!("irq_clint:{irq_clint}");
+                    let x = mip_p.write_raw_mask(irq_clint as u64, MIP_MTIP);
+
+                    // println!("mip:{:x}",x);
+
+                    self.handle_interrupt();
+                    self.bus.update();
                 }
                 _ => break,
             };
@@ -90,20 +112,56 @@ impl CpuCore {
     }
 
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
-        let mstatus_val = self.csr_regs.read(CSR_MSTATUS.into());
+        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
 
-        let mie = get_field(mstatus_val, MSTATUS_MIE);
-        let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mie);
+        let mstatus_mie_bit = get_field(mstatus_val, MSTATUS_MIE);
+        let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mstatus_mie_bit);
         let mstatus_val = set_field(mstatus_val, MSTATUS_MPP, 0b11);
         let mstatus_val = set_field(mstatus_val, MSTATUS_MIE, 0b0);
 
-        self.csr_regs.write(CSR_MSTATUS.into(), mstatus_val);
-        self.csr_regs.write(CSR_MEPC.into(), self.pc);
-        self.csr_regs.write(CSR_MCAUSE.into(), trap_type as u64);
+        self.csr_regs
+            .write_raw_mask(CSR_MSTATUS.into(), mstatus_val, MASK_ALL);
+        self.csr_regs
+            .write_raw_mask(CSR_MEPC.into(), self.pc, MASK_ALL);
+        self.csr_regs
+            .write_raw_mask(CSR_MCAUSE.into(), trap_type as u64, MASK_ALL);
 
-        let mtvec = self.csr_regs.read(CSR_MTVEC.into());
+        let mtvec = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
 
         self.npc = mtvec;
+    }
+
+    pub fn handle_interrupt(&mut self) {
+        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
+        // println!("mstatus:{:x}", mstatus_val);
+        let mstatus_mie = get_field(mstatus_val, MSTATUS_MIE) == 1;
+
+        let mip_val = self.csr_regs.read_raw_mask(CSR_MIP.into(), MASK_ALL);
+        let mie_val = self.csr_regs.read_raw_mask(CSR_MIE.into(), MASK_ALL);
+        let mie_and_mip = mip_val & mie_val;
+
+        let machine_timer_interrupt = get_field(mie_and_mip, MIP_MTIP) == 1;
+
+        if machine_timer_interrupt & mstatus_mie {
+            // println!("IRQ:mstatus_pre:{mstatus_val:x}");
+
+            let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mstatus_mie as u64);
+            let mstatus_val = set_field(mstatus_val, MSTATUS_MPP, 0b11);
+            let mstatus_val = set_field(mstatus_val, MSTATUS_MIE, 0b0);
+
+            // println!("IRQ:mstatus_now:{mstatus_val:x}");
+            self.csr_regs
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus_val, MASK_ALL);
+            self.csr_regs
+                .write_raw_mask(CSR_MEPC.into(), self.npc, MASK_ALL);
+            self.csr_regs.write_raw_mask(
+                CSR_MCAUSE.into(),
+                TrapType::MachineTimerInterrupt as u64,
+                MASK_ALL,
+            );
+            let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+            self.npc = mtvec_val;
+        }
     }
 
     pub fn dump_signature(&mut self, file_name: &str) {

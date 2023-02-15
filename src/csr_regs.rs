@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use crate::inst_base::{
-    get_field, PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MHARTID, CSR_MIE, CSR_MIP, CSR_MSCRATCH,
-    CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC,
+    get_field, set_field, PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MHARTID, CSR_MIE, CSR_MIP,
+    CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC,
 };
 
 pub struct CsrRegs {
-    csr_map: HashMap<u64, Box<dyn CsrRW>>,
+    pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
 }
 
 // enum {
@@ -51,11 +51,31 @@ impl CsrRegs {
             None => todo!(),
         }
     }
+
+    pub fn read_raw_mask(&self, addr: u64, mask: u64) -> u64 {
+        let t = self.csr_map.get(&addr);
+
+        match t {
+            Some(csr) => csr.read_raw_mask(mask),
+            None => todo!(),
+        }
+    }
+
+    pub fn write_raw_mask(&mut self, addr: u64, val: u64, mask: u64) -> u64 {
+        let t = self.csr_map.get_mut(&addr);
+
+        match t {
+            Some(csr) => csr.write_raw_mask(val, mask),
+            None => todo!(),
+        }
+    }
 }
 
 pub trait CsrRW {
     fn read(&self) -> u64;
     fn write(&mut self, val: u64) -> u64;
+    fn write_raw_mask(&mut self, data: u64, mask: u64) -> u64;
+    fn read_raw_mask(&self, mask: u64) -> u64;
 }
 
 #[derive(Clone)]
@@ -89,6 +109,13 @@ impl CsrRW for BaseCSR {
         // println!("write {:x},{:x}",val, self.addr);
         self.val = val;
         val
+    }
+    fn write_raw_mask(&mut self, data: u64, mask: u64) -> u64 {
+        self.val = set_field(self.val, mask, data);
+        self.val
+    }
+    fn read_raw_mask(&self, mask: u64) -> u64 {
+        get_field(self.val, mask)
     }
 }
 

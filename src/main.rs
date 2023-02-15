@@ -1,4 +1,5 @@
 mod bus;
+mod clint;
 mod cpu_core;
 mod csr_regs;
 mod device_dram;
@@ -20,7 +21,10 @@ use std::{num::NonZeroUsize, process, thread, time::Duration};
 
 use clap::Parser;
 use ring_channel::*;
-use sdl2::event::Event;
+use sdl2::{
+    event::Event,
+    keyboard::{Keycode, Scancode},
+};
 
 use crate::{
     bus::DeviceType,
@@ -96,6 +100,18 @@ fn main() {
         name: device_name,
     });
 
+    // device vgactl
+    let (vgactl_tx, vgactl_rx) = ring_channel(NonZeroUsize::new(1).unwrap());
+
+    let vgactl = Box::new(DeviceVGACTL::new(vgactl_tx));
+    let device_name = vgactl.get_name();
+    cpu.bus.add_device(DeviceType {
+        start: VGACTL_ADDR,
+        len: 8,
+        instance: vgactl,
+        name: device_name,
+    });
+
     // device vga
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -106,26 +122,16 @@ fn main() {
         .map_err(|e| e.to_string())
         .unwrap();
 
-    let canvas = window.into_canvas().build().expect("canvas err");
+    let mut canvas = window.into_canvas().build().expect("canvas err");
+    canvas.set_scale(2.0, 2.0).unwrap();
 
-    let vga = Box::new(DeviceVGA::new(canvas));
+    let vga = Box::new(DeviceVGA::new(canvas, vgactl_rx));
     let device_name = vga.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
         instance: vga,
-        name: device_name,
-    });
-
-    // device vgactl
-    let vgactl = Box::new(DeviceVGACTL::new());
-    let device_name = vgactl.get_name();
-
-    cpu.bus.add_device(DeviceType {
-        start: VGACTL_ADDR,
-        len: 8,
-        instance: vgactl,
         name: device_name,
     });
 
@@ -136,21 +142,56 @@ fn main() {
     // i.e. via `lazy_static`. This is also the *only* way to actually use a subsystem on another thread.
     let static_event: &'static _ = Box::leak(Box::new(event_system));
 
-    // 创建消息通道，tx是生产者，rx是消费者
-    let (mut tx, rx) = ring_channel(NonZeroUsize::new(16).unwrap());
+    let (kb_am_tx, kb_am_rx): (RingSender<DeviceKbItem>, RingReceiver<DeviceKbItem>) =
+        ring_channel(NonZeroUsize::new(16).unwrap());
 
-    let device_kb = Box::new(DeviceKB::new(rx));
+    let (kb_sdl_tx, kb_sdl_rx): (
+        RingSender<sdl2::keyboard::Keycode>,
+        RingReceiver<sdl2::keyboard::Keycode>,
+    ) = ring_channel(NonZeroUsize::new(16).unwrap());
+
+    let device_kb = Box::new(DeviceKB::new(kb_am_rx, kb_sdl_rx));
     let device_name = device_kb.get_name();
 
     cpu.bus.add_device(DeviceType {
         start: KBD_ADDR,
-        len: 4,
+        len: 8,
         instance: device_kb,
         name: device_name,
     });
-
+    // show device address map
     println!("{0}", cpu.bus);
+    // create another thread to handle sdl events
+    handle_sdl_event(static_event, kb_am_tx, kb_sdl_tx);
 
+    // start sim
+    cpu.cpu_state = CpuState::Running;
+    let mut cycle: u128 = 0;
+    while cpu.cpu_state == CpuState::Running {
+        cpu.execute(1);
+        cycle += 1;
+    }
+
+    println!("total:{cycle}");
+    // dump signature for riscof
+    args.signature
+        .map(|x| cpu.dump_signature(&x))
+        .unwrap_or_else(|| println!("no signature"));
+}
+
+fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
+    tx.send(DeviceKbItem {
+        scancode: val,
+        is_keydown: keydown,
+    })
+    .expect("Key event send error");
+}
+
+fn handle_sdl_event(
+    static_event: &'static sdl2::EventSubsystem,
+    mut am_tx: RingSender<DeviceKbItem>,
+    mut sdl_tx: RingSender<Keycode>,
+) {
     thread::spawn(move || -> ! {
         let _event_system = static_event;
         let _sdl_context = _event_system.sdl();
@@ -158,35 +199,19 @@ fn main() {
         loop {
             for event in event_pump.poll_iter() {
                 match event {
-                    // skip mouse motion intentionally because of the verbose it might cause.
                     Event::Quit { .. } => process::exit(1),
                     Event::KeyUp {
-                        timestamp: _,
-                        window_id: _,
-                        keycode: _,
                         scancode: Some(val),
-                        keymod: _,
-                        repeat: _,
-                    } => {
-                        tx.send(DeviceKbItem {
-                            scancode: val,
-                            is_keydown: false,
-                        })
-                        .expect("KeyDown send err");
-                    }
+                        ..
+                    } => send_key_event(&mut am_tx, val, false),
+
                     Event::KeyDown {
-                        timestamp: _,
-                        window_id: _,
-                        keycode: _,
                         scancode: Some(val),
-                        keymod: _,
-                        repeat: _,
+                        keycode: Some(sdl_key_code),
+                        ..
                     } => {
-                        tx.send(DeviceKbItem {
-                            scancode: val,
-                            is_keydown: true,
-                        })
-                        .expect("KeyDown send err");
+                        send_key_event(&mut am_tx, val, true);
+                        sdl_tx.send(sdl_key_code).unwrap();
                     }
 
                     _ => (),
@@ -195,21 +220,4 @@ fn main() {
             std::thread::sleep(Duration::from_millis(100));
         }
     });
-
-    // start sim
-    cpu.cpu_state = CpuState::Running;
-    let mut cycle = 0;
-    loop {
-        cpu.execute(1);
-        cycle += 1;
-        if cpu.cpu_state != CpuState::Running {
-            break;
-        }
-    }
-
-    println!("total:{cycle}");
-    // dump signature
-    args.signature
-        .map(|x| cpu.dump_signature(&x))
-        .unwrap_or_else(|| println!("no signature"));
 }

@@ -1,9 +1,5 @@
-
-
-use sdl2::{
-    pixels::PixelFormatEnum,
-    render::{WindowCanvas},
-};
+use ring_channel::RingReceiver;
+use sdl2::{pixels::PixelFormatEnum, render::WindowCanvas};
 
 use crate::device_trait::DeviceBase;
 
@@ -14,15 +10,15 @@ const VGA_BUF_SIZE: usize = VGA_H * VGA_W * 4;
 pub struct DeviceVGA {
     pub vga_canvas: WindowCanvas,
     pub pix_buf: [u8; VGA_BUF_SIZE],
-    pub count: usize,
+    rx: RingReceiver<bool>,
 }
 
 impl DeviceVGA {
-    pub fn new(canvas_w: WindowCanvas) -> Self {
+    pub fn new(canvas_w: WindowCanvas, rx: RingReceiver<bool>) -> Self {
         DeviceVGA {
             vga_canvas: canvas_w,
             pix_buf: [0; VGA_BUF_SIZE],
-            count: 0,
+            rx,
         }
     }
 
@@ -55,13 +51,15 @@ impl DeviceBase for DeviceVGA {
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         let data_bytes = data.to_le_bytes();
         self.pix_buf[(addr as usize)..(addr as usize + len)].copy_from_slice(&data_bytes[..(len)]);
-        self.count += 1;
 
-        if self.count == (VGA_H * VGA_W) / 4 {
-            self.count = 0;
-            self.updata_vga();
-        }
         data
+    }
+
+    fn do_update(&mut self) {
+        let update_flag = self.rx.try_recv();
+        if update_flag.is_ok() {
+            self.updata_vga()
+        };
     }
 
     fn get_name(&self) -> &'static str {
@@ -72,16 +70,7 @@ impl DeviceBase for DeviceVGA {
 #[cfg(test)]
 mod test_vga {
 
-    use std::{
-        thread,
-    };
-
-    
-    
-
-    
-
-    
+    use std::thread;
 
     fn test2() {
         //https://github.com/Rust-SDL2/rust-sdl2/issues/1063

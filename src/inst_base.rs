@@ -1,5 +1,3 @@
-
-
 use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
 
 use crate::{cpu_core::CpuCore, traptype::TrapType};
@@ -163,7 +161,7 @@ pub const MATCH_CSRRW: u32 = 0x1073;
 pub const MASK_CSRRW: u32 = 0x707f;
 pub const MATCH_CSRRWI: u32 = 0x5073;
 pub const MASK_CSRRWI: u32 = 0x707f;
-pub const MATCH_MRET: u32 = 0x30200073;                                                                                                                                                          
+pub const MATCH_MRET: u32 = 0x30200073;
 pub const MASK_MRET: u32 = 0xffffffff;
 
 pub const CSR_FFLAGS: u16 = 0x1;
@@ -1060,13 +1058,17 @@ pub enum PrivilegeLevels {
     Supervisor = 1,
     Machine = 3,
 }
-#[inline]
+
+pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;
+
 pub fn get_field(reg: u64, mask: u64) -> u64 {
+    // (reg & mask) / (mask & !(mask << 1))
     let shift = mask.trailing_zeros();
     (reg & mask) >> shift
 }
-#[inline]
+
 pub fn set_field(reg: u64, mask: u64, val: u64) -> u64 {
+    // (reg & !mask) | ((val * (mask & !(mask << 1))) & mask)
     let shift = mask.trailing_zeros();
     (reg & !mask) | ((val << shift) & mask)
 }
