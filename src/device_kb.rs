@@ -1,7 +1,6 @@
 use ring_channel::RingReceiver;
 use sdl2::{
     keyboard::{Keycode, Scancode},
-    sys::SDL_KeyCode,
 };
 
 use crate::device_trait::DeviceBase;

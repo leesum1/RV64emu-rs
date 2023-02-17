@@ -4,6 +4,7 @@ mod cpu_core;
 mod csr_regs;
 mod device_dram;
 mod device_kb;
+mod device_mouse;
 mod device_rtc;
 mod device_trait;
 mod device_uart;
@@ -24,6 +25,7 @@ use ring_channel::*;
 use sdl2::{
     event::Event,
     keyboard::{Keycode, Scancode},
+    mouse::MouseButton,
 };
 
 use crate::{
@@ -31,8 +33,11 @@ use crate::{
     cpu_core::{CpuCore, CpuState},
     device_dram::DeviceDram,
     device_kb::{DeviceKB, DeviceKbItem},
+    device_mouse::{DeviceMouse, DeviceMouseItem},
     device_rtc::DeviceRTC,
-    device_trait::{DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, RTC_ADDR, SERIAL_PORT, VGACTL_ADDR},
+    device_trait::{
+        DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT, VGACTL_ADDR,
+    },
     device_uart::DeviceUart,
     device_vga::DeviceVGA,
     device_vgactl::DeviceVGACTL,
@@ -159,10 +164,22 @@ fn main() {
         instance: device_kb,
         name: device_name,
     });
+    // device mouse
+    let (mouse_sdl_tx, mouse_sdl_rx): (RingSender<DeviceMouseItem>, RingReceiver<DeviceMouseItem>) =
+        ring_channel(NonZeroUsize::new(1).unwrap());
+    let device_mouse = Box::new(DeviceMouse::new(mouse_sdl_rx));
+
+    cpu.bus.add_device(DeviceType {
+        start: MOUSE_ADDR,
+        len: 16,
+        instance: device_mouse,
+        name: "Mouse",
+    });
+
     // show device address map
     println!("{0}", cpu.bus);
     // create another thread to handle sdl events
-    handle_sdl_event(static_event, kb_am_tx, kb_sdl_tx);
+    handle_sdl_event(static_event, kb_am_tx, kb_sdl_tx, mouse_sdl_tx);
 
     // start sim
     cpu.cpu_state = CpuState::Running;
@@ -189,29 +206,44 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
 
 fn handle_sdl_event(
     static_event: &'static sdl2::EventSubsystem,
-    mut am_tx: RingSender<DeviceKbItem>,
-    mut sdl_tx: RingSender<Keycode>,
+    mut kb_am_tx: RingSender<DeviceKbItem>,
+    mut kb_sdl_tx: RingSender<Keycode>,
+    mut mouse_sdl_tx: RingSender<DeviceMouseItem>,
 ) {
     thread::spawn(move || -> ! {
         let _event_system = static_event;
         let _sdl_context = _event_system.sdl();
         let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
         loop {
+            let mouse_state = event_pump.mouse_state();
+            let mouse_left_pres = mouse_state
+                .pressed_mouse_buttons()
+                .any(|mouse_btn| mouse_btn == MouseButton::Left);
+
+            mouse_sdl_tx
+                .send(DeviceMouseItem {
+                    left_key: mouse_left_pres,
+                    right_key: false,
+                    x: (mouse_state.x() / 2) as u32,
+                    y: (mouse_state.y() / 2) as u32,
+                })
+                .expect("Mouse event send error");
+
             for event in event_pump.poll_iter() {
                 match event {
-                    Event::Quit { .. } => process::exit(1),
+                    Event::Quit { .. } => process::exit(0),
                     Event::KeyUp {
                         scancode: Some(val),
                         ..
-                    } => send_key_event(&mut am_tx, val, false),
+                    } => send_key_event(&mut kb_am_tx, val, false),
 
                     Event::KeyDown {
                         scancode: Some(val),
                         keycode: Some(sdl_key_code),
                         ..
                     } => {
-                        send_key_event(&mut am_tx, val, true);
-                        sdl_tx.send(sdl_key_code).unwrap();
+                        send_key_event(&mut kb_am_tx, val, true);
+                        kb_sdl_tx.send(sdl_key_code).unwrap();
                     }
 
                     _ => (),

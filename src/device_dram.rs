@@ -18,10 +18,15 @@ impl DeviceDram {
     }
 
     pub fn load_binary(&mut self, file_name: &str) {
-        let text = fs::read(file_name).unwrap();
+
+        let read_ret = fs::read(file_name);
+
+        let text = match read_ret {
+            Ok(buff) => buff,
+            Err(e) => panic!("can not read file:{e}"),
+        };
 
         let text_size = text.len();
-
         println!("load binary : {file_name}, size: {text_size}");
         self.data[0..text_size].copy_from_slice(&text[..text_size]);
     }
@@ -43,7 +48,7 @@ impl DeviceBase for DeviceDram {
         data
     }
 
-    fn get_name(& self) -> &'static str {
+    fn get_name(&self) -> &'static str {
         "DRAM"
     }
 }

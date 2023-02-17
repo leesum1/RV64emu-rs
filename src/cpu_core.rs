@@ -87,7 +87,7 @@ impl CpuCore {
 
                     let irq_clint = self.bus.clint.instance.is_interrupt();
                     // println!("irq_clint:{irq_clint}");
-                    let x = mip_p.write_raw_mask(irq_clint as u64, MIP_MTIP);
+                    mip_p.write_raw_mask(irq_clint as u64, MIP_MTIP);
 
                     // println!("mip:{:x}",x);
 
