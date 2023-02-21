@@ -17,15 +17,21 @@ mod inst_rv64i;
 mod inst_rv64m;
 mod inst_rv64z;
 mod traptype;
+mod cpu_icache;
 
-use std::{num::NonZeroUsize, process, thread, time::Duration};
+use std::{
+    num::NonZeroUsize,
+    process,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use clap::Parser;
 use ring_channel::*;
+use ringbuf::LocalRb;
 use sdl2::{
     event::Event,
     keyboard::{Keycode, Scancode},
-    mouse::MouseButton,
 };
 
 use crate::{
@@ -105,21 +111,15 @@ fn main() {
         name: device_name,
     });
 
-    // device vgactl
-    let (vgactl_tx, vgactl_rx) = ring_channel(NonZeroUsize::new(1).unwrap());
-
-    let vgactl = Box::new(DeviceVGACTL::new(vgactl_tx));
-    let device_name = vgactl.get_name();
-    cpu.bus.add_device(DeviceType {
-        start: VGACTL_ADDR,
-        len: 8,
-        instance: vgactl,
-        name: device_name,
-    });
-
-    // device vga
+    /*--------init sdl --------*/
+    // subsequnt devices are base on sdl2 api
+    // 1. device vga
+    // 2. device kb
+    // 3. device mouse
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    let event_system = sdl_context.event().expect("fail");
+
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
         .position_centered()
@@ -129,10 +129,25 @@ fn main() {
 
     let mut canvas = window.into_canvas().build().expect("canvas err");
     canvas.set_scale(2.0, 2.0).unwrap();
+    /*--------init sdl --------*/
 
-    let vga = Box::new(DeviceVGA::new(canvas, vgactl_rx));
+    // device vgactl
+
+    let (x_tx, x_rx) = LocalRb::<bool, Vec<_>>::new(256).split();
+
+    let vgactl = Box::new(DeviceVGACTL::new(x_tx));
+
+    let device_name = vgactl.get_name();
+    cpu.bus.add_device(DeviceType {
+        start: VGACTL_ADDR,
+        len: 8,
+        instance: vgactl,
+        name: device_name,
+    });
+
+    // device vga
+    let vga = Box::new(DeviceVGA::new(canvas, x_rx));
     let device_name = vga.get_name();
-
     cpu.bus.add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
@@ -141,12 +156,6 @@ fn main() {
     });
 
     // device kb
-    let event_system = sdl_context.event().expect("fail");
-    // Contrived, but definitely safe.
-    // Another way to get a 'static subsystem reference is through the use of a global,
-    // i.e. via `lazy_static`. This is also the *only* way to actually use a subsystem on another thread.
-    let static_event: &'static _ = Box::leak(Box::new(event_system));
-
     let (kb_am_tx, kb_am_rx): (RingSender<DeviceKbItem>, RingReceiver<DeviceKbItem>) =
         ring_channel(NonZeroUsize::new(16).unwrap());
 
@@ -178,22 +187,27 @@ fn main() {
 
     // show device address map
     println!("{0}", cpu.bus);
-    // create another thread to handle sdl events
-    handle_sdl_event(static_event, kb_am_tx, kb_sdl_tx, mouse_sdl_tx);
 
-    // start sim
-    cpu.cpu_state = CpuState::Running;
-    let mut cycle: u128 = 0;
-    while cpu.cpu_state == CpuState::Running {
-        cpu.execute(1);
-        cycle += 1;
-    }
+    // create another thread to simmulate the cpu_core
+    // while the main thread is used to handle sdl events
+    // which will be send to coresponding devices through ring_channel
+    let cpu_main = thread::spawn(move || {
+        // start sim
+        cpu.cpu_state = CpuState::Running;
+        let mut cycle: u128 = 0;
+        while cpu.cpu_state == CpuState::Running {
+            cpu.execute(1);
+            cycle += 1;
+        }
+        println!("total:{cycle}");
 
-    println!("total:{cycle}");
-    // dump signature for riscof
-    args.signature
-        .map(|x| cpu.dump_signature(&x))
-        .unwrap_or_else(|| println!("no signature"));
+        // dump signature for riscof
+        args.signature
+            .map(|x| cpu.dump_signature(&x))
+            .unwrap_or_else(|| println!("no signature"));
+    });
+    // the main thread to handle sdl events
+    handle_sdl_event(cpu_main, event_system, kb_am_tx, kb_sdl_tx, mouse_sdl_tx);
 }
 
 fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
@@ -205,51 +219,48 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
 }
 
 fn handle_sdl_event(
-    static_event: &'static sdl2::EventSubsystem,
+    cpu_handle: JoinHandle<()>,
+    static_event: sdl2::EventSubsystem,
     mut kb_am_tx: RingSender<DeviceKbItem>,
     mut kb_sdl_tx: RingSender<Keycode>,
     mut mouse_sdl_tx: RingSender<DeviceMouseItem>,
 ) {
-    thread::spawn(move || -> ! {
-        let _event_system = static_event;
-        let _sdl_context = _event_system.sdl();
-        let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-        loop {
-            let mouse_state = event_pump.mouse_state();
-            let mouse_left_pres = mouse_state
-                .pressed_mouse_buttons()
-                .any(|mouse_btn| mouse_btn == MouseButton::Left);
+    // thread::spawn(move || -> ! {
+    let _event_system = static_event;
+    let _sdl_context = _event_system.sdl();
+    let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
+    while !cpu_handle.is_finished() {
+        let mouse_state = event_pump.mouse_state();
 
-            mouse_sdl_tx
-                .send(DeviceMouseItem {
-                    left_key: mouse_left_pres,
-                    right_key: false,
-                    x: (mouse_state.x() / 2) as u32,
-                    y: (mouse_state.y() / 2) as u32,
-                })
-                .expect("Mouse event send error");
+        mouse_sdl_tx
+            .send(DeviceMouseItem {
+                x: (mouse_state.x() / 2) as u32,
+                y: (mouse_state.y() / 2) as u32,
+                mouse_btn_state: mouse_state.to_sdl_state(),
+            })
+            .expect("Mouse event send error");
 
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => process::exit(0),
-                    Event::KeyUp {
-                        scancode: Some(val),
-                        ..
-                    } => send_key_event(&mut kb_am_tx, val, false),
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => process::exit(0),
+                Event::KeyUp {
+                    scancode: Some(val),
+                    ..
+                } => send_key_event(&mut kb_am_tx, val, false),
 
-                    Event::KeyDown {
-                        scancode: Some(val),
-                        keycode: Some(sdl_key_code),
-                        ..
-                    } => {
-                        send_key_event(&mut kb_am_tx, val, true);
-                        kb_sdl_tx.send(sdl_key_code).unwrap();
-                    }
-
-                    _ => (),
+                Event::KeyDown {
+                    scancode: Some(val),
+                    keycode: Some(sdl_key_code),
+                    ..
+                } => {
+                    send_key_event(&mut kb_am_tx, val, true);
+                    kb_sdl_tx.send(sdl_key_code).unwrap();
                 }
+
+                _ => (),
             }
-            std::thread::sleep(Duration::from_millis(100));
         }
-    });
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // });
 }

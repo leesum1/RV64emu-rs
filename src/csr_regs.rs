@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+
+
+// use std::collections::HashMap;
+use hashbrown::HashMap; // faster hashmap
 
 use crate::inst_base::{
     get_field, set_field, PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MHARTID, CSR_MIE, CSR_MIP,
@@ -6,12 +9,12 @@ use crate::inst_base::{
 };
 
 pub struct CsrRegs {
-    pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
+    // pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
+
+    pub csr_vec: Vec<Box<dyn CsrRW>>,
 }
 
-// enum {
-//     mtvec, mie, mip, mtval,mepc, mstatus, mcause, MSCRATCH, mhartid
-//   };
+unsafe impl Send for CsrRegs {}
 
 impl CsrRegs {
     pub fn new() -> Self {
@@ -27,33 +30,46 @@ impl CsrRegs {
             BaseCSR::new(CSR_MHARTID.into(), 0),
         ];
 
-        let mut csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();
-        for csr in csr_list.into_iter() {
-            csr_map.insert(csr.addr, Box::new(csr));
+        let _csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();
+
+        let mut csr_vec: Vec<Box<dyn CsrRW>> = Vec::new();
+
+        for _i in 0..4096 {
+            csr_vec.push(Default::default());
         }
-        CsrRegs { csr_map }
+
+        for csr in csr_list.into_iter() {
+            csr_vec[csr.addr as usize] = Box::new(csr);
+            // csr_map.insert(csr.addr, Box::new(csr));
+        }
+
+        CsrRegs {  csr_vec }
     }
 
     pub fn read(&self, addr: u64) -> u64 {
-        let t = self.csr_map.get(&addr);
+        // let t = self.csr_map.get(&addr);
 
-        match t {
+        let x = self.csr_vec.get(addr as usize);
+
+        match x {
             Some(csr) => csr.read(),
             None => todo!(),
         }
     }
 
     pub fn write(&mut self, addr: u64, val: u64) -> u64 {
-        let t = self.csr_map.get_mut(&addr);
+        // let t = self.csr_map.get_mut(&addr);
+        let x = self.csr_vec.get_mut(addr as usize);
 
-        match t {
+        match x {
             Some(csr) => csr.write(val),
             None => todo!(),
         }
     }
 
     pub fn read_raw_mask(&self, addr: u64, mask: u64) -> u64 {
-        let t = self.csr_map.get(&addr);
+
+        let t = self.csr_vec.get(addr as usize);
 
         match t {
             Some(csr) => csr.read_raw_mask(mask),
@@ -62,12 +78,19 @@ impl CsrRegs {
     }
 
     pub fn write_raw_mask(&mut self, addr: u64, val: u64, mask: u64) -> u64 {
-        let t = self.csr_map.get_mut(&addr);
-
+        // let t = self.csr_map.get_mut(&addr);
+        let t = self.csr_vec.get_mut(addr as usize);
+        
         match t {
             Some(csr) => csr.write_raw_mask(val, mask),
             None => todo!(),
         }
+    }
+}
+
+impl Default for CsrRegs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -78,13 +101,15 @@ pub trait CsrRW {
     fn read_raw_mask(&self, mask: u64) -> u64;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct BaseCSR {
     pub addr: u64,
     pub val: u64,
     pub privi_level: PrivilegeLevels,
     pub read_only: bool,
 }
+
+unsafe impl Sync for BaseCSR {}
 
 impl BaseCSR {
     pub fn new(addr: u64, val: u64) -> Self {
@@ -116,6 +141,12 @@ impl CsrRW for BaseCSR {
     }
     fn read_raw_mask(&self, mask: u64) -> u64 {
         get_field(self.val, mask)
+    }
+}
+
+impl Default for Box<dyn CsrRW> {
+    fn default() -> Self {
+        Box::new(BaseCSR::new(0, 0))
     }
 }
 
@@ -161,6 +192,6 @@ mod test_csr {
 
         csr_bus.read(11);
 
-        println!("{:?}", csr_bus.csr_map.len());
+        // println!("{:?}", csr_bus.csr_map.len());
     }
 }

@@ -2,14 +2,12 @@ use ring_channel::RingReceiver;
 
 use crate::device_trait::DeviceBase;
 
-const LEFT_KEY_OFFSET: u64 = 0;
-const RIGHT_KEY_OFFSET: u64 = 1;
+const MOUSE_KEY_OFFSET: u64 = 0;
 const POSITION_X_OFFSET: u64 = 8;
 const POSITION_Y_OFFSET: u64 = 12;
 
 pub struct DeviceMouseItem {
-    pub left_key: bool,
-    pub right_key: bool,
+    pub mouse_btn_state: u32,
     pub x: u32,
     pub y: u32,
 }
@@ -17,8 +15,7 @@ pub struct DeviceMouseItem {
 impl DeviceMouseItem {
     fn new() -> Self {
         DeviceMouseItem {
-            left_key: false,
-            right_key: false,
+            mouse_btn_state: 0,
             x: 0,
             y: 0,
         }
@@ -45,9 +42,13 @@ impl DeviceMouse {
 
 impl DeviceBase for DeviceMouse {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
+
+        if let Ok(item) = self.rx_mouse.try_recv() {
+            self.mouse_state = item
+        }
+
         match (addr, len) {
-            (LEFT_KEY_OFFSET, 1) => self.mouse_state.left_key as u64,
-            (RIGHT_KEY_OFFSET, 1) => self.mouse_state.right_key as u64,
+            (MOUSE_KEY_OFFSET, _) => self.mouse_state.mouse_btn_state as u64,
             (POSITION_X_OFFSET, _) => self.mouse_state.x as u64,
             (POSITION_Y_OFFSET, _) => self.mouse_state.y as u64,
             (addr, len) => panic!("DeviceMouse: addr:{addr},len:{len}"),
@@ -59,9 +60,9 @@ impl DeviceBase for DeviceMouse {
     }
 
     fn do_update(&mut self) {
-        if let Ok(item) = self.rx_mouse.try_recv() {
-            self.mouse_state = item
-        }
+        // if let Ok(item) = self.rx_mouse.try_recv() {
+        //     self.mouse_state = item
+        // }
     }
 
     fn get_name(&self) -> &'static str {

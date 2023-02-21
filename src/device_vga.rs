@@ -1,4 +1,10 @@
-use ring_channel::RingReceiver;
+use std::{
+    mem::MaybeUninit,
+    rc::Rc,
+};
+
+
+use ringbuf::{Consumer, LocalRb, Rb};
 use sdl2::{pixels::PixelFormatEnum, render::WindowCanvas};
 
 use crate::device_trait::DeviceBase;
@@ -6,15 +12,16 @@ use crate::device_trait::DeviceBase;
 const VGA_H: usize = 300;
 const VGA_W: usize = 400;
 const VGA_BUF_SIZE: usize = VGA_H * VGA_W * 4;
+type VgactlRx = Consumer<bool, Rc<LocalRb<bool, Vec<MaybeUninit<bool>>>>>;
 
 pub struct DeviceVGA {
     pub vga_canvas: WindowCanvas,
     pub pix_buf: [u8; VGA_BUF_SIZE],
-    rx: RingReceiver<bool>,
+    rx: VgactlRx,
 }
 
 impl DeviceVGA {
-    pub fn new(canvas_w: WindowCanvas, rx: RingReceiver<bool>) -> Self {
+    pub fn new(canvas_w: WindowCanvas, rx: VgactlRx) -> Self {
         DeviceVGA {
             vga_canvas: canvas_w,
             pix_buf: [0; VGA_BUF_SIZE],
@@ -56,10 +63,9 @@ impl DeviceBase for DeviceVGA {
     }
 
     fn do_update(&mut self) {
-        let update_flag = self.rx.try_recv();
-        if update_flag.is_ok() {
-            self.updata_vga()
-        };
+        if self.rx.pop().is_some() {
+            self.updata_vga();
+        }
     }
 
     fn get_name(&self) -> &'static str {

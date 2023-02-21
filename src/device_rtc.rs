@@ -1,6 +1,7 @@
+
+
 use crate::device_trait::DeviceBase;
 use chrono::prelude::*;
-
 
 pub struct DeviceRTC {
     pub rtc_time: u64,
@@ -29,7 +30,7 @@ impl DeviceBase for DeviceRTC {
         panic!("RTC can not write")
     }
 
-    fn get_name(& self) -> &'static str {
+    fn get_name(&self) -> &'static str {
         "RTC"
     }
 }

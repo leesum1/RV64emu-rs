@@ -8,10 +8,10 @@ pub struct DeviceType {
 }
 
 pub struct Bus {
-    // devices: Vec<(u64, u64, Rc<dyn DeviceBase>)>,
     pub clint: DeviceClint,
     pub devices: Vec<DeviceType>,
 }
+unsafe impl Send for Bus {}
 
 impl Bus {
     pub fn new(clint: DeviceClint) -> Self {
@@ -21,21 +21,11 @@ impl Bus {
         }
     }
     fn check_area(start: u64, len: u64, addr: u64) -> bool {
-        (addr >= start) && (addr < start + len)
+        (addr >= start) && (addr < (start + len))
     }
 
     fn check_aligned(addr: u64, len: u64) {
-        let mask = match len {
-            1 => 0,
-            2 => 1,
-            4 => 3,
-            8 => 7,
-            _ => panic!(" addr len err:{len}"),
-        };
-        // let mask = (1u64 << (len.trailing_zeros())) - 1;
-        if (addr & mask) != 0 {
-            panic!("misaligned addr{addr:X}");
-        }
+        assert!(addr & (len - 1) == 0, "bus address not aligned");
     }
 
     pub fn add_device(&mut self, device: DeviceType) {
@@ -45,42 +35,54 @@ impl Bus {
     pub fn read(&mut self, addr: u64, len: usize) -> u64 {
         Bus::check_aligned(addr, len as u64);
 
-        // clint.
-        if Bus::check_area(self.clint.start, self.clint.len, addr) {
-            return self.clint.instance.do_read(addr - self.clint.start, len);
-        }
+        // special devices
+        // such as clint
+        let special_device = || -> u64 {
+            if Bus::check_area(self.clint.start, self.clint.len, addr) {
+                self.clint.instance.do_read(addr - self.clint.start, len)
+            } else {
+                panic!("can not find device,read addr{addr:X}");
+            }
+        };
 
-        self.devices
+        // general devices
+        // suce as uart mouse vga kb
+        let general_device = self
+            .devices
             .iter_mut()
             .find(|device| Bus::check_area(device.start, device.len, addr))
-            .map_or_else(
-                || {
-                    println!("can not find device,read addr{addr:X}");
-                    0
-                },
-                |device| device.instance.do_read(addr - device.start, len),
-            )
+            .map(|device| device.instance.do_read(addr - device.start, len));
+
+        // first find general devices
+        match general_device {
+            Some(val) => val,
+            None => special_device(),
+        }
     }
 
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         Bus::check_aligned(addr, len as u64);
 
-        // clint.
-        if Bus::check_area(self.clint.start, self.clint.len, addr) {
-            return self
-                .clint
-                .instance
-                .do_write(addr - self.clint.start, data, len);
-        }
+        let mut special_device = || -> u64 {
+            if Bus::check_area(self.clint.start, self.clint.len, addr) {
+                self.clint
+                    .instance
+                    .do_write(addr - self.clint.start, data, len)
+            } else {
+                panic!("can not find device,read addr{addr:X}");
+            }
+        };
 
-        self.devices
+        let general_device = self
+            .devices
             .iter_mut()
             .find(|device| Bus::check_area(device.start, device.len, addr))
-            .map(|device| device.instance.do_write(addr - device.start, data, len))
-            .unwrap_or_else(|| {
-                println!("can not find device,read addr{addr:X}");
-                0
-            })
+            .map(|device| device.instance.do_write(addr - device.start, data, len));
+
+        match general_device {
+            Some(val) => val,
+            None => special_device(),
+        }
     }
 
     pub fn update(&mut self) {
@@ -113,9 +115,6 @@ impl std::fmt::Display for Bus {
 
 #[cfg(test)]
 mod tests_bus {
-    
-
-    
 
     // #[test]
     // fn test1() {

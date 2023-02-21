@@ -3,6 +3,7 @@ use std::{fs::File, io::Write};
 use crate::{
     bus::Bus,
     clint::{Clint, DeviceClint},
+    cpu_icache::CpuIcache,
     csr_regs::{CsrRW, CsrRegs},
     gpr::Gpr,
     inst_base::{
@@ -28,6 +29,7 @@ pub struct CpuCore {
     pub pc: u64,
     pub npc: u64,
     pub cpu_state: CpuState,
+    pub cpu_icache: CpuIcache,
 }
 
 impl CpuCore {
@@ -51,19 +53,39 @@ impl CpuCore {
             npc: 0x8000_0000,
             cpu_state: CpuState::Stop,
             csr_regs: CsrRegs::new(),
+            cpu_icache: CpuIcache::new(),
         }
     }
 
     pub fn inst_fetch(&mut self) -> u32 {
         self.pc = self.npc;
         self.npc += 4;
-        let inst = self.bus.read(self.pc, 4);
-        inst as u32
+
+        // first lookup icache
+        let icache_data = self.cpu_icache.get_inst(self.pc);
+        // if icache hit return, else load inst from mem and push into icache
+        match icache_data {
+            Some(icache_inst) => icache_inst,
+            None => {
+                let inst = self.bus.read(self.pc, 4) as u32;
+                self.cpu_icache.insert_inst(self.pc, inst);
+                inst
+            }
+        }
     }
 
     pub fn step(&mut self, inst: u32) {
-        let y = self.decode.step(inst);
-        match y {
+        let fast_decode = self.decode.fast_path(inst);
+
+        let inst_op = if fast_decode.is_some() {
+            fast_decode
+        } else {
+            self.decode.slow_path(inst)
+        };
+
+        // let inst_op = self.decode.slow_path(inst);
+
+        match inst_op {
             Some(i) => {
                 // println!("{:x},{}",self.pc,i.name);
                 let trap_code = (i.operation)(self, inst, self.pc);
@@ -82,15 +104,16 @@ impl CpuCore {
                     let inst = self.inst_fetch();
                     self.step(inst);
 
-                    let mip_p: &mut Box<dyn CsrRW> =
-                        self.csr_regs.csr_map.get_mut(&(CSR_MIP as u64)).unwrap();
+                    // let mip_p: &mut Box<dyn CsrRW> =
+                    //     self.csr_regs.csr_map.get_mut(&(CSR_MIP as u64)).unwrap();
 
                     let irq_clint = self.bus.clint.instance.is_interrupt();
                     // println!("irq_clint:{irq_clint}");
-                    mip_p.write_raw_mask(irq_clint as u64, MIP_MTIP);
 
-                    // println!("mip:{:x}",x);
+                    self.csr_regs
+                        .write_raw_mask(CSR_MIP.into(), irq_clint as u64, MIP_MTIP);
 
+                    // // println!("mip:{:x}",x);
                     self.handle_interrupt();
                     self.bus.update();
                 }
@@ -169,11 +192,6 @@ impl CpuCore {
 
         let sig_start = self.gpr.read_by_name("a1");
         let sig_end = self.gpr.read_by_name("a2");
-
-        // for i in (sig_start..sig_end).step_by(4) {
-        //     let tmp_data = self.bus.read(i, 4);
-        //     file.write_fmt(format_args! {"{tmp_data:x}\n"});
-        // }
 
         fd.map_or_else(
             |err| println!("{err}"),

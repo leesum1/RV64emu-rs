@@ -910,6 +910,8 @@ pub const PTE_PPN_SHIFT: u64 = 10;
 
 // pub const PTE_TABLE(PTE) (((PTE) & (PTE_V | PTE_R | PTE_W | PTE_X)) == PTE_V)
 
+
+// #[derive(Clone, Copy)]
 pub struct Instruction {
     pub mask: u32,
     pub match_data: u32,
@@ -1052,7 +1054,7 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
 
 // #define PRV_HS (PRV_S + 1)
 
-#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, Clone)]
+#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, Clone,Copy)]
 pub enum PrivilegeLevels {
     User = 0,
     Supervisor = 1,

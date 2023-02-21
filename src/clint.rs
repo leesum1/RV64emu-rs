@@ -1,3 +1,5 @@
+
+
 const MTIMECMP_OFFSET: u64 = 0x4000;
 const MTIME_OFFSET: u64 = 0xBFF8;
 
@@ -40,7 +42,7 @@ impl Clint {
     }
 
     pub fn do_update(&mut self) {
-        self.mtime = self.mtime.wrapping_add(1);
+        self.mtime += 2; 
     }
 
     pub fn is_interrupt(&self) -> bool {

@@ -47,7 +47,11 @@ pub const INSTRUCTIONS_Z: [Instruction; 11] = [
         mask: MASK_FENCE_I,
         match_data: MATCH_FENCE_I,
         name: "FENCE_I",
-        operation: |cpu, inst, pc| Ok(()),
+        operation: |cpu, inst, pc| {
+
+            cpu.cpu_icache.clear_inst();
+            Ok(())
+        },
     },
     Instruction {
         mask: MASK_FENCE,

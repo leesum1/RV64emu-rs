@@ -23,7 +23,7 @@ impl DeviceDram {
 
         let text = match read_ret {
             Ok(buff) => buff,
-            Err(e) => panic!("can not read file:{e}"),
+            Err(e) => panic!("can not read file:{e},{file_name}"),
         };
 
         let text_size = text.len();
