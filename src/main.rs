@@ -16,10 +16,12 @@ mod inst_base;
 mod inst_decode;
 mod inst_rv64i;
 mod inst_rv64m;
+mod inst_rv64a;
 mod inst_rv64z;
 mod traptype;
 mod mmu;
 mod sv39;
+
 
 use std::{
     num::NonZeroUsize,

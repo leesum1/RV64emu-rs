@@ -2,7 +2,7 @@ use hashbrown::HashMap;
 
 use crate::{
     inst_base::Instruction, inst_rv64i::INSTRUCTIONS_I, inst_rv64m::INSTRUCTIONS_M,
-    inst_rv64z::INSTRUCTIONS_Z,
+    inst_rv64z::INSTRUCTIONS_Z, inst_rv64a::INSTRUCTIONS_A,
 };
 
 pub struct InstDecode {
@@ -15,6 +15,7 @@ impl InstDecode {
         let mut i_vec = Vec::new();
         i_vec.extend(&INSTRUCTIONS_I);
         i_vec.extend(&INSTRUCTIONS_M);
+        i_vec.extend(&INSTRUCTIONS_A);
         i_vec.extend(&INSTRUCTIONS_Z);
 
         InstDecode {

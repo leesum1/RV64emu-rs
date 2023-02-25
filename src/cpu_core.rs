@@ -11,6 +11,7 @@ use crate::{
         MASK_ALL, MIP_MTIP, MSTATUS_MIE, MSTATUS_MPIE, MSTATUS_MPP,
     },
     inst_decode::InstDecode,
+    inst_rv64a::LrScReservation,
     traptype::TrapType,
 };
 
@@ -28,6 +29,7 @@ pub struct CpuCore {
     pub decode: InstDecode,
     pub pc: u64,
     pub npc: u64,
+    pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
 }
@@ -51,6 +53,7 @@ impl CpuCore {
             bus: bus_u,
             pc: 0x8000_0000,
             npc: 0x8000_0000,
+            lr_sc_set: LrScReservation::new(),
             cpu_state: CpuState::Stop,
             csr_regs: CsrRegs::new(),
             cpu_icache: CpuIcache::new(),
