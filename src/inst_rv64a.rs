@@ -283,7 +283,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp.max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
-            cpu.gpr.write(f.rd, tmp as i32 as u32 as u64);
+            cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
         },
@@ -319,7 +319,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp.max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
-            cpu.gpr.write(f.rd, tmp as i32 as u32 as u64);
+            cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
         },
@@ -358,7 +358,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp & rs2_data;
             cpu.bus.write(rs1_data, amo_write as u64, 4);
-            cpu.gpr.write(f.rd, tmp as i32 as u32 as u64);
+            cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
         },
@@ -397,7 +397,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp.wrapping_add(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
-            cpu.gpr.write(f.rd, tmp as i32 as u32 as u64);
+            cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
         },
@@ -414,6 +414,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let tmp = cpu.bus.read(rs1_data, 8);
 
             let amo_write = tmp.wrapping_add(rs2_data);
+            // let amo_write = tmp + rs2_data;
+
             cpu.bus.write(rs1_data, amo_write as u64, 8);
             cpu.gpr.write(f.rd, tmp);
 

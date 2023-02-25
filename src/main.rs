@@ -14,21 +14,21 @@ mod device_vgactl;
 mod gpr;
 mod inst_base;
 mod inst_decode;
+mod inst_rv64a;
 mod inst_rv64i;
 mod inst_rv64m;
-mod inst_rv64a;
 mod inst_rv64z;
-mod traptype;
 mod mmu;
 mod sv39;
-
+mod traptype;
 
 use std::{
+    cell::Cell,
     num::NonZeroUsize,
     process,
-    rc::{Rc},
+    rc::Rc,
     thread::{self, JoinHandle},
-    time::Duration, cell::Cell,
+    time::Duration,
 };
 
 use clap::Parser;
@@ -269,4 +269,77 @@ fn handle_sdl_event(
         std::thread::sleep(Duration::from_millis(100));
     }
     // });
+}
+
+#[cfg(test)]
+mod isa_test {
+    use std::{env, fs, path::Path};
+
+    use crate::{
+        bus::DeviceType,
+        cpu_core::{CpuCore, CpuState},
+        device_dram::DeviceDram,
+        device_trait::{DeviceBase, MEM_BASE},
+    };
+
+    fn start_test(img: &str) -> bool {
+        let mut cpu = CpuCore::new();
+
+        // device dram
+        let mut mem = Box::new(DeviceDram::new(128 * 1024 * 1024));
+        mem.load_binary(img);
+        let device_name = mem.get_name();
+        cpu.bus.add_device(DeviceType {
+            start: MEM_BASE,
+            len: mem.capacity as u64,
+            instance: mem,
+            name: device_name,
+        });
+
+        cpu.cpu_state = CpuState::Running;
+        let mut cycle: u128 = 0;
+        while cpu.cpu_state == CpuState::Running {
+            cpu.execute(1);
+            cycle += 1;
+        }
+        println!("total:{cycle}");
+        let ret = cpu.gpr.read_by_name("a0");
+
+        ret == 0
+        // String::from(value)
+        // println!("{img},{ret}");
+    }
+    const TESTS_PATH: &str = "/home/leesum/workhome/ysyx/test/riscv-tests/build/bin";
+
+    struct TestRet {
+        pub name: String,
+        pub ret: bool,
+    }
+    #[test]
+    fn run_arch_tests() {
+        let test2_dir = Path::new(TESTS_PATH);
+        let mut tests_ret: Vec<TestRet> = Vec::new();
+        for entry in fs::read_dir(test2_dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+
+            if let Some(p) = path.to_str() {
+                let ret = start_test(p);
+                tests_ret.push(TestRet {
+                    name: String::from(file_name),
+                    ret,
+                });
+            }
+        }
+
+        tests_ret.iter().for_each(|x| {
+                println!("{},{}", x.name, x.ret);
+        });
+
+        tests_ret.iter().for_each(|x| {
+            assert!(x.ret);
+    });
+    }
 }
