@@ -97,7 +97,7 @@ impl std::fmt::Display for Bus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let x = self.devices.iter().map(|device| {
             format_args!(
-                "name:{:15} Area:0X{:8X}-->0X{:8X},len:0X{:X}\n",
+                "name:{:15} Area:0X{:08X}-->0X{:08X},len:0X{:08X}\n",
                 device.name,
                 device.start,
                 device.start + device.len,
@@ -106,7 +106,15 @@ impl std::fmt::Display for Bus {
             .to_string()
         });
 
-        f.write_str("--Device Tree MAP--\n").unwrap();
+        f.write_str("-------------Device Tree MAP-------------\n").unwrap();
+        f.write_fmt(format_args!(
+            "name:{:15} Area:0X{:08X}-->0X{:08X},len:0X{:08X}\n",
+            self.clint.name,
+            self.clint.start,
+            self.clint.start + self.clint.len,
+            self.clint.len
+        ))
+        .unwrap();
         x.for_each(|device_str| f.write_str(&device_str).unwrap());
 
         Ok(())

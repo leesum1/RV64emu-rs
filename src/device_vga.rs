@@ -1,10 +1,6 @@
-use std::{
-    mem::MaybeUninit,
-    rc::Rc,
-};
+use std::{cell::Cell, rc::Rc};
 
 
-use ringbuf::{Consumer, LocalRb, Rb};
 use sdl2::{pixels::PixelFormatEnum, render::WindowCanvas};
 
 use crate::device_trait::DeviceBase;
@@ -12,7 +8,8 @@ use crate::device_trait::DeviceBase;
 const VGA_H: usize = 300;
 const VGA_W: usize = 400;
 const VGA_BUF_SIZE: usize = VGA_H * VGA_W * 4;
-type VgactlRx = Consumer<bool, Rc<LocalRb<bool, Vec<MaybeUninit<bool>>>>>;
+// type VgactlRx = Consumer<bool, Rc<LocalRb<bool, Vec<MaybeUninit<bool>>>>>;
+type VgactlRx = Rc<Cell<bool>>;
 
 pub struct DeviceVGA {
     pub vga_canvas: WindowCanvas,
@@ -63,8 +60,13 @@ impl DeviceBase for DeviceVGA {
     }
 
     fn do_update(&mut self) {
-        if self.rx.pop().is_some() {
+        // if self.rx.pop().is_some() {
+        //     self.updata_vga();
+        // }
+
+        if self.rx.get() {
             self.updata_vga();
+            self.rx.set(false);
         }
     }
 

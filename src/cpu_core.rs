@@ -46,7 +46,7 @@ impl CpuCore {
         let bus_u = Bus::new(device_clint);
 
         CpuCore {
-            gpr: Gpr::new(),
+            gpr: (Gpr::new()),
             decode: InstDecode::new(),
             bus: bus_u,
             pc: 0x8000_0000,

@@ -1,6 +1,7 @@
 mod bus;
 mod clint;
 mod cpu_core;
+mod cpu_icache;
 mod csr_regs;
 mod device_dram;
 mod device_kb;
@@ -17,18 +18,20 @@ mod inst_rv64i;
 mod inst_rv64m;
 mod inst_rv64z;
 mod traptype;
-mod cpu_icache;
+mod mmu;
+mod sv39;
 
 use std::{
     num::NonZeroUsize,
     process,
+    rc::{Rc},
     thread::{self, JoinHandle},
-    time::Duration,
+    time::Duration, cell::Cell,
 };
 
 use clap::Parser;
 use ring_channel::*;
-use ringbuf::LocalRb;
+
 use sdl2::{
     event::Event,
     keyboard::{Keycode, Scancode},
@@ -133,9 +136,9 @@ fn main() {
 
     // device vgactl
 
-    let (x_tx, x_rx) = LocalRb::<bool, Vec<_>>::new(256).split();
+    let vgactl_msg = Rc::new(Cell::new(false));
 
-    let vgactl = Box::new(DeviceVGACTL::new(x_tx));
+    let vgactl = Box::new(DeviceVGACTL::new(vgactl_msg.clone()));
 
     let device_name = vgactl.get_name();
     cpu.bus.add_device(DeviceType {
@@ -146,7 +149,7 @@ fn main() {
     });
 
     // device vga
-    let vga = Box::new(DeviceVGA::new(canvas, x_rx));
+    let vga = Box::new(DeviceVGA::new(canvas, vgactl_msg));
     let device_name = vga.get_name();
     cpu.bus.add_device(DeviceType {
         start: FB_ADDR,
@@ -156,6 +159,7 @@ fn main() {
     });
 
     // device kb
+
     let (kb_am_tx, kb_am_rx): (RingSender<DeviceKbItem>, RingReceiver<DeviceKbItem>) =
         ring_channel(NonZeroUsize::new(16).unwrap());
 
