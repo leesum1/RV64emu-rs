@@ -21,5 +21,5 @@ bitfield-struct = "0.3.2"
 
 [profile.release]
 lto = true
-debug = true
+# debug = true
 # opt-level = 2

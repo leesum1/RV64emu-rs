@@ -7,11 +7,12 @@ use crate::{
     csr_regs::{CsrRW, CsrRegs},
     gpr::Gpr,
     inst_base::{
-        get_field, set_field, CSR_MCAUSE, CSR_MEPC, CSR_MIE, CSR_MIP, CSR_MSTATUS, CSR_MTVEC,
-        MASK_ALL, MIP_MTIP, MSTATUS_MIE, MSTATUS_MPIE, MSTATUS_MPP,
+        PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MIE, CSR_MIP, CSR_MSTATUS,
+        CSR_MTVEC, MASK_ALL, MIP_MTIP,
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
+    mcsr_regs::{Mie, Mip, Mstatus},
     traptype::TrapType,
 };
 
@@ -29,6 +30,7 @@ pub struct CpuCore {
     pub decode: InstDecode,
     pub pc: u64,
     pub npc: u64,
+    pub cur_priv: PrivilegeLevels,
     pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
@@ -46,7 +48,6 @@ impl CpuCore {
         };
 
         let bus_u = Bus::new(device_clint);
-
         CpuCore {
             gpr: (Gpr::new()),
             decode: InstDecode::new(),
@@ -57,6 +58,7 @@ impl CpuCore {
             cpu_state: CpuState::Stop,
             csr_regs: CsrRegs::new(),
             cpu_icache: CpuIcache::new(),
+            cur_priv: PrivilegeLevels::Machine,
         }
     }
 
@@ -75,6 +77,8 @@ impl CpuCore {
                 inst
             }
         }
+
+        // self.bus.read(self.pc, 4) as u32
     }
 
     pub fn step(&mut self, inst: u32) {
@@ -96,7 +100,7 @@ impl CpuCore {
                     self.handle_exceptions(e)
                 }
             }
-            None => panic!("inst err:{inst:X}"),
+            None => panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
         }
     }
 
@@ -106,9 +110,6 @@ impl CpuCore {
                 CpuState::Running => {
                     let inst = self.inst_fetch();
                     self.step(inst);
-
-                    // let mip_p: &mut Box<dyn CsrRW> =
-                    //     self.csr_regs.csr_map.get_mut(&(CSR_MIP as u64)).unwrap();
 
                     let irq_clint = self.bus.clint.instance.is_interrupt();
                     // println!("irq_clint:{irq_clint}");
@@ -140,13 +141,14 @@ impl CpuCore {
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
         let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
 
-        let mstatus_mie_bit = get_field(mstatus_val, MSTATUS_MIE);
-        let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mstatus_mie_bit);
-        let mstatus_val = set_field(mstatus_val, MSTATUS_MPP, 0b11);
-        let mstatus_val = set_field(mstatus_val, MSTATUS_MIE, 0b0);
+        let mut mstatus = Mstatus::from(mstatus_val);
+
+        mstatus.set_mpie(mstatus.mie());
+        mstatus.set_mie(false);
+        mstatus.set_mpp(self.cur_priv as u8);
 
         self.csr_regs
-            .write_raw_mask(CSR_MSTATUS.into(), mstatus_val, MASK_ALL);
+            .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
         self.csr_regs
             .write_raw_mask(CSR_MEPC.into(), self.pc, MASK_ALL);
         self.csr_regs
@@ -158,26 +160,22 @@ impl CpuCore {
     }
 
     pub fn handle_interrupt(&mut self) {
+        // read necessary csrs
         let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
-        // println!("mstatus:{:x}", mstatus_val);
-        let mstatus_mie = get_field(mstatus_val, MSTATUS_MIE) == 1;
-
+        let mut mstatus = Mstatus::from(mstatus_val);
         let mip_val = self.csr_regs.read_raw_mask(CSR_MIP.into(), MASK_ALL);
         let mie_val = self.csr_regs.read_raw_mask(CSR_MIE.into(), MASK_ALL);
-        let mie_and_mip = mip_val & mie_val;
+        let mip = Mip::from(mip_val);
+        let mie = Mie::from(mie_val);
 
-        let machine_timer_interrupt = get_field(mie_and_mip, MIP_MTIP) == 1;
+        // MachineTimerInterrupt
+        if mip.mtip() & mie.mtie() & mstatus.mie() {
+            mstatus.set_mpie(mstatus.mie());
+            mstatus.set_mpp(self.cur_priv as u8);
+            mstatus.set_mie(false);
 
-        if machine_timer_interrupt & mstatus_mie {
-            // println!("IRQ:mstatus_pre:{mstatus_val:x}");
-
-            let mstatus_val = set_field(mstatus_val, MSTATUS_MPIE, mstatus_mie as u64);
-            let mstatus_val = set_field(mstatus_val, MSTATUS_MPP, 0b11);
-            let mstatus_val = set_field(mstatus_val, MSTATUS_MIE, 0b0);
-
-            // println!("IRQ:mstatus_now:{mstatus_val:x}");
             self.csr_regs
-                .write_raw_mask(CSR_MSTATUS.into(), mstatus_val, MASK_ALL);
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
             self.csr_regs
                 .write_raw_mask(CSR_MEPC.into(), self.npc, MASK_ALL);
             self.csr_regs.write_raw_mask(

@@ -21,6 +21,7 @@ mod inst_rv64z;
 mod mmu;
 mod sv39;
 mod traptype;
+mod mcsr_regs;
 
 use std::{
     cell::Cell,
@@ -273,7 +274,7 @@ fn handle_sdl_event(
 
 #[cfg(test)]
 mod isa_test {
-    use std::{env, fs, path::Path};
+    use std::{fs, path::Path};
 
     use crate::{
         bus::DeviceType,
