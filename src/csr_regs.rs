@@ -1,7 +1,7 @@
 // use std::collections::HashMap;
 use hashbrown::HashMap; // faster hashmap
 
-use crate::{inst_base::*, mcsr_regs::Misa};
+use crate::{inst_base::*, csr_regs_define::Misa};
 
 pub struct CsrRegs {
     // pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
@@ -17,6 +17,7 @@ impl CsrRegs {
             .with_i(true)
             .with_m(true)
             .with_a(true)
+            .with_s(true)
             .with_mxl(2); // 64
         let csr_list = vec![
             BaseCSR::new(CSR_MTVEC.into(), 0),
@@ -160,6 +161,30 @@ impl CsrRegs {
             BaseCSR::new(CSR_MHPMEVENT29.into(), 0),
             BaseCSR::new(CSR_MHPMEVENT30.into(), 0),
             BaseCSR::new(CSR_MHPMEVENT31.into(), 0),
+            BaseCSR::new(CSR_SCOUNTEREN.into(), 0),
+            BaseCSR::new(CSR_SCOUNTEREN.into(), 0),
+            BaseCSR::new(CSR_SATP.into(), 0),
+            BaseCSR::new(CSR_MIDELEG.into(), 0),
+            BaseCSR::new(CSR_MEDELEG.into(), 0),
+            BaseCSR::new(CSR_STVEC.into(), 0),
+            BaseCSR::new(CSR_STVAL.into(), 0),
+            BaseCSR::new(CSR_SCAUSE.into(), 0),
+            BaseCSR::new(CSR_SIP.into(), 0),
+            BaseCSR::new(CSR_SIE.into(), 0),
+            BaseCSR::new(CSR_SEPC.into(), 0),
+            BaseCSR::new(CSR_SSTATUS.into(), 0),
+            BaseCSR::new(CSR_SSCRATCH.into(), 0),
+
+
+            
+
+
+
+
+
+
+
+
         ];
 
         let _csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();

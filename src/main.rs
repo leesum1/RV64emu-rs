@@ -21,7 +21,7 @@ mod inst_rv64z;
 mod mmu;
 mod sv39;
 mod traptype;
-mod mcsr_regs;
+mod csr_regs_define;
 
 use std::{
     cell::Cell,

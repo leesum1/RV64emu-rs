@@ -78,11 +78,11 @@ impl Mmu {
     pub fn va_translation_step2(&mut self) -> Result<(), TrapType> {
         let pte_size = self.get_ptesize();
 
-        let pte_addr = self.a + self.va.vpn(self.i as u8) * pte_size;
+        let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
 
         // todo! PMA or PMP check
         let pte_data = self.bus.read(pte_addr, pte_size as usize);
-        self.pte = Sv39PTE::new(pte_data);
+        self.pte = Sv39PTE::from(pte_data);
         Ok(())
     }
     // 3. If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings that are reserved for
@@ -143,9 +143,9 @@ impl Mmu {
     // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
     // exception corresponding to the original access type.
     pub fn va_translation_step6(&mut self) -> Result<u8, TrapType> {
-        let is_misalign_superpage = || -> bool {
+        let mut is_misalign_superpage = || -> bool {
             for i in 0..self.i {
-                if self.pte.ppn(i as u8) != 0 {
+                if self.pte.get_ppn_by_idx(i as u8) != 0 {
                     return true;
                 }
             }
@@ -189,14 +189,14 @@ impl Mmu {
 
         if self.i > 0 {
             for idx in 0..self.i as u8 {
-                let va_ppn = self.va.vpn(idx);
+                let va_ppn = self.va.get_ppn_by_idx(idx);
                 self.pa.set_ppn_by_idx(va_ppn, idx);
             }
         }
 
         for idx in self.i..self.level {
             let idx = idx as u8;
-            let pte_ppn = self.pte.ppn(idx);
+            let pte_ppn = self.pte.get_ppn_by_idx(idx);
             self.pa.set_ppn_by_idx(pte_ppn, idx);
         }
 

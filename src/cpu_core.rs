@@ -4,15 +4,15 @@ use crate::{
     bus::Bus,
     clint::{Clint, DeviceClint},
     cpu_icache::CpuIcache,
-    csr_regs::{CsrRW, CsrRegs},
+    csr_regs::CsrRegs,
+    csr_regs_define::{MieMip, Mip, Mstatus, Mtvec},
     gpr::Gpr,
     inst_base::{
-        PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MIE, CSR_MIP, CSR_MSTATUS,
+        PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP, CSR_MSTATUS,
         CSR_MTVEC, MASK_ALL, MIP_MTIP,
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
-    mcsr_regs::{Mie, Mip, Mstatus},
     traptype::TrapType,
 };
 
@@ -154,9 +154,9 @@ impl CpuCore {
         self.csr_regs
             .write_raw_mask(CSR_MCAUSE.into(), trap_type as u64, MASK_ALL);
 
-        let mtvec = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+        let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
 
-        self.npc = mtvec;
+        self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
     }
 
     pub fn handle_interrupt(&mut self) {
@@ -165,11 +165,21 @@ impl CpuCore {
         let mut mstatus = Mstatus::from(mstatus_val);
         let mip_val = self.csr_regs.read_raw_mask(CSR_MIP.into(), MASK_ALL);
         let mie_val = self.csr_regs.read_raw_mask(CSR_MIE.into(), MASK_ALL);
-        let mip = Mip::from(mip_val);
-        let mie = Mie::from(mie_val);
+        let mideleg_val = self.csr_regs.read_raw_mask(CSR_MIDELEG.into(), MASK_ALL);
 
-        // MachineTimerInterrupt
-        if mip.mtip() & mie.mtie() & mstatus.mie() {
+        let mideleg = Mip::from(mideleg_val);
+        let mip_mie = MieMip::from(mip_val & mie_val);
+
+        let m_a1 = mstatus.mie() & (self.cur_priv == PrivilegeLevels::Machine);
+        let m_a2 = self.cur_priv < PrivilegeLevels::Machine;
+
+        let int_to_m_enable = m_a1 | m_a2;
+        let int_to_m_peding = mip_val & mie_val & !mideleg_val;
+
+        // handing interupt in M mode
+        if int_to_m_enable && int_to_m_peding != 0 {
+            let cause = Mip::from(int_to_m_peding).get_priority_interupt();
+
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv as u8);
             mstatus.set_mie(false);
@@ -178,13 +188,12 @@ impl CpuCore {
                 .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
             self.csr_regs
                 .write_raw_mask(CSR_MEPC.into(), self.npc, MASK_ALL);
-            self.csr_regs.write_raw_mask(
-                CSR_MCAUSE.into(),
-                TrapType::MachineTimerInterrupt as u64,
-                MASK_ALL,
-            );
+            self.csr_regs
+                .write_raw_mask(CSR_MCAUSE.into(), cause as u64, MASK_ALL);
             let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
-            self.npc = mtvec_val;
+            // todo! improve me
+            self.npc = Mtvec::from(mtvec_val).get_trap_pc(TrapType::MachineTimerInterrupt);
+            self.cur_priv = PrivilegeLevels::Machine;
         }
     }
 

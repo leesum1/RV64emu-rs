@@ -66,6 +66,10 @@ pub const MATCH_BLTU: u32 = 0x6063;
 pub const MASK_BLTU: u32 = 0x707f;
 pub const MATCH_BNE: u32 = 0x1063;
 pub const MASK_BNE: u32 = 0x707f;
+pub const MATCH_SFENCE_VMA: u32 = 0x12000073;
+pub const MASK_SFENCE_VMA: u32 = 0xfe007fff;
+pub const MATCH_SRET: u32 = 0x10200073;
+pub const MASK_SRET: u32 = 0xffffffff;
 pub const MATCH_C_ADD: u32 = 0x9002;
 pub const MASK_C_ADD: u32 = 0xf003;
 pub const MATCH_C_ADDI: u32 = 0x1;
@@ -1197,7 +1201,9 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
 
 // #define PRV_HS (PRV_S + 1)
 
-#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, Clone, Copy)]
+#[derive(
+    EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, PartialOrd, Clone, Copy,
+)]
 pub enum PrivilegeLevels {
     User = 0,
     Supervisor = 1,

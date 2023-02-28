@@ -1,7 +1,7 @@
-use crate::{inst_base::*, mcsr_regs::Mstatus, traptype::TrapType};
+use crate::{inst_base::*, csr_regs_define::Mstatus, traptype::TrapType};
 
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_Z: [Instruction; 12] = [
+pub const INSTRUCTIONS_Z: [Instruction; 13] = [
     Instruction {
         mask: MASK_EBREAK,
         match_data: MATCH_EBREAK,
@@ -63,6 +63,14 @@ pub const INSTRUCTIONS_Z: [Instruction; 12] = [
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
             cpu.cpu_icache.clear_inst();
+            Ok(())
+        },
+    },
+    Instruction {
+        mask: MASK_SFENCE_VMA,
+        match_data: MATCH_SFENCE_VMA,
+        name: "SFENCE_VMA",
+        operation: |cpu, inst, pc| {
             Ok(())
         },
     },

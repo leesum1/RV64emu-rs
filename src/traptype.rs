@@ -30,3 +30,28 @@ pub enum TrapType {
     SupervisorExternalInterrupt = INTERRUPT_BIT + 9,
     MachineExternalInterrupt = INTERRUPT_BIT + 11,
 }
+
+impl TrapType {
+    pub fn is_interupt(&self) -> bool {
+        ((*self as u64) & INTERRUPT_BIT) != 0
+    }
+    pub fn get_irq_num(&self) -> u64 {
+        assert!(self.is_interupt());
+        (*self as u64) & (!INTERRUPT_BIT)
+    }
+}
+
+
+// #[test]
+// fn trap_type_test1(){
+//     let x = TrapType::MachineTimerInterrupt;
+//     assert!(x.is_interupt());
+//     assert_eq!(x.get_irq_num(),7);
+
+//     let x = TrapType::MachineExternalInterrupt;
+//     assert!(x.is_interupt());
+//     assert_eq!(x.get_irq_num(),11);
+
+//     let x = TrapType::StoreAddressMisaligned;
+//     assert!(!x.is_interupt());
+// }

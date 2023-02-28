@@ -21,25 +21,28 @@
 
 use bitfield_struct::bitfield;
 // Sv39 virtual address
+
+#[bitfield(u64)]
 pub struct Sv39Va {
-    val: u64,
+    #[bits(12)]
+    pub offset: u64,
+    #[bits(9)]
+    pub ppn0: u64,
+    #[bits(9)]
+    pub ppn1: u64,
+    #[bits(9)]
+    pub ppn2: u64,
+    #[bits(25)]
+    _pad: u64,
 }
 
 impl Sv39Va {
-    pub fn new(val: u64) -> Self {
-        Sv39Va { val }
-    }
-
-    pub fn offset(&self) -> u64 {
-        self.val & 0xfff
-    }
-
-    pub fn vpn(&self, level: u8) -> u64 {
-        match level {
-            0 => (self.val >> 12) & 0x1ff,
-            1 => (self.val >> 21) & 0x1ff,
-            2 => (self.val >> 30) & 0x1ff,
-            _ => panic!(),
+    pub fn get_ppn_by_idx(&mut self, idx: u8) -> u64 {
+        match idx {
+            0 => self.ppn0(),
+            1 => self.ppn1(),
+            2 => self.ppn2(),
+            _ => panic!("idx err:{idx}"),
         }
     }
 }
@@ -67,75 +70,43 @@ impl Sv39Pa {
         }
     }
 }
-
+#[bitfield(u64)]
 pub struct Sv39PTE {
-    val: u64,
+    pub v: bool,
+    pub r: bool,
+    pub w: bool,
+    pub x: bool,
+    pub u: bool,
+    pub g: bool,
+    pub a: bool,
+    pub d: bool,
+    #[bits(2)]
+    pub rsw: u8,
+    #[bits(9)]
+    pub ppn0: u64,
+    #[bits(9)]
+    pub ppn1: u64,
+    #[bits(26)]
+    pub ppn2: u64,
+    #[bits(7)]
+    pub reserved: u64,
+    #[bits(2)]
+    pub pbmt: u8,
+    pub n: bool,
 }
 
 impl Sv39PTE {
-    pub fn ppn(&self, level: u8) -> u64 {
-        match level {
-            0 => (self.val >> 10) & 0x1ff,
-            1 => (self.val >> 19) & 0x1ff,
-            2 => (self.val >> 28) & 0x3ffffff,
-            _ => panic!(),
-        }
-    }
-
     pub fn ppn_all(&self) -> u64 {
-        (self.val >> 10) & 0xfff_ffff_ffff
+        (self.0 >> 10) & 0xfff_ffff_ffff
     }
 
-    pub fn v(&self) -> bool {
-        (self.val & 0x1) != 0
-    }
-    pub fn r(&self) -> bool {
-        ((self.val >> 1) & 0x1) != 0
-    }
-    pub fn w(&self) -> bool {
-        ((self.val >> 2) & 0x1) != 0
-    }
-    pub fn x(&self) -> bool {
-        ((self.val >> 3) & 0x1) != 0
-    }
-    pub fn u(&self) -> bool {
-        ((self.val >> 4) & 0x1) != 0
-    }
-    pub fn g(&self) -> bool {
-        ((self.val >> 5) & 0x1) != 0
-    }
-    pub fn a(&self) -> bool {
-        ((self.val >> 6) & 0x1) != 0
-    }
-    pub fn d(&self) -> bool {
-        ((self.val >> 7) & 0x1) != 0
-    }
-    pub fn rsw(&self) -> u64 {
-        (self.val >> 8) & 0x3
-    }
-    pub fn pbmt(&self) -> u64 {
-        (self.val >> 61) & 0x3
-    }
-    pub fn n(&self) -> bool {
-        ((self.val >> 63) & 0x1) != 0
-    }
-}
-
-impl Sv39PTE {
-    pub fn new(val: u64) -> Self {
-        Sv39PTE { val }
-    }
-
-    pub fn offset(&self) -> u64 {
-        self.val & 0xfff
-    }
-
-    pub fn vpn(&self, level: u8) -> u64 {
-        match level {
-            0 => (self.val >> 12) & 0x1ff,
-            1 => (self.val >> 21) & 0x1ff,
-            2 => (self.val >> 30) & 0x3ffffff,
-            _ => panic!(),
+    pub fn get_ppn_by_idx(&mut self, idx: u8) -> u64 {
+        match idx {
+            0 => self.ppn0(),
+            1 => self.ppn1(),
+            2 => self.ppn2(),
+            _ => panic!("idx err:{idx}"),
         }
     }
 }
+
