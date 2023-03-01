@@ -39,8 +39,12 @@ impl TrapType {
         assert!(self.is_interupt());
         (*self as u64) & (!INTERRUPT_BIT)
     }
-}
 
+    pub fn get_exception_num(&self) -> u64 {
+        assert!(!self.is_interupt());
+        *self as u64
+    }
+}
 
 // #[test]
 // fn trap_type_test1(){

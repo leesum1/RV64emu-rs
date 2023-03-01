@@ -5,11 +5,11 @@ use crate::{
     clint::{Clint, DeviceClint},
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
-    csr_regs_define::{MieMip, Mip, Mstatus, Mtvec, Stvec},
+    csr_regs_define::{Medeleg, MieMip, Mip, Mstatus, Mtvec, Stvec},
     gpr::Gpr,
     inst_base::{
-        PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP, CSR_MSTATUS,
-        CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC, MASK_ALL, MIP_MTIP,
+        PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
+        CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC, MASK_ALL, MIP_MTIP,
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
@@ -140,23 +140,52 @@ impl CpuCore {
 
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
         let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
-
+        let medeleg_val = self.csr_regs.read_raw_mask(CSR_MEDELEG.into(), MASK_ALL);
+        let has_exception = (medeleg_val & (1_u64 << trap_type.get_exception_num())) != 0;
+        let trap_to_s_enable = self.cur_priv <= PrivilegeLevels::Supervisor;
         let mut mstatus = Mstatus::from(mstatus_val);
 
-        mstatus.set_mpie(mstatus.mie());
-        mstatus.set_mie(false);
-        mstatus.set_mpp(self.cur_priv as u8);
+        // exception to S mode
+        if has_exception & trap_to_s_enable {
+            let cause = trap_type as u64;
+            // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
+            mstatus.set_spp(!(self.cur_priv == PrivilegeLevels::User));
+            // When a trap is taken into supervisor mode, SPIE is set to SIE
+            mstatus.set_spie(mstatus.sie());
+            // and SIE is set to 0
+            mstatus.set_sie(false);
 
-        self.csr_regs
-            .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
-        self.csr_regs
-            .write_raw_mask(CSR_MEPC.into(), self.pc, MASK_ALL);
-        self.csr_regs
-            .write_raw_mask(CSR_MCAUSE.into(), trap_type as u64, MASK_ALL);
+            self.csr_regs
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
 
-        let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+            self.csr_regs
+                .write_raw_mask(CSR_SEPC.into(), self.pc, MASK_ALL);
 
-        self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
+            self.csr_regs
+                .write_raw_mask(CSR_SCAUSE.into(), cause, MASK_ALL);
+
+            let stvec_val = self.csr_regs.read_raw_mask(CSR_STVEC.into(), MASK_ALL);
+            self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
+            self.cur_priv = PrivilegeLevels::Supervisor;
+        }
+        // exception to M mode
+        else {
+            mstatus.set_mpie(mstatus.mie());
+            mstatus.set_mie(false);
+            mstatus.set_mpp(self.cur_priv as u8);
+            self.csr_regs
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
+            self.csr_regs
+                .write_raw_mask(CSR_MEPC.into(), self.pc, MASK_ALL);
+            self.csr_regs
+                .write_raw_mask(CSR_MCAUSE.into(), trap_type as u64, MASK_ALL);
+
+            let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+            self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
+            self.cur_priv = PrivilegeLevels::Machine;
+        }
+
+
     }
 
     pub fn handle_interrupt(&mut self) {

@@ -18,6 +18,7 @@ impl CsrRegs {
             .with_m(true)
             .with_a(true)
             .with_s(true)
+            .with_u(true)
             .with_mxl(2); // 64
         let csr_list = vec![
             BaseCSR::new(CSR_MTVEC.into(), 0),
