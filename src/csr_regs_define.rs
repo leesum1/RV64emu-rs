@@ -3,7 +3,10 @@ use std::u8;
 use bitfield_struct::bitfield;
 use strum_macros::FromRepr;
 
-use crate::traptype::{self, TrapType};
+use crate::{
+    inst_base::PrivilegeLevels,
+    traptype::{TrapType},
+};
 
 #[bitfield(u64)]
 pub struct Misa {
@@ -75,6 +78,20 @@ pub struct Mstatus {
     #[bits(25)]
     _wpri4: u32,
     pub sd: bool,
+}
+
+impl Mstatus {
+    // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise
+    // 0: user mode 1: s mode
+    pub fn get_spp_priv(&self) -> PrivilegeLevels {
+        match self.spp() {
+            true => PrivilegeLevels::Supervisor,
+            false => PrivilegeLevels::User,
+        }
+    }
+    pub fn get_mpp_priv(&self) -> PrivilegeLevels {
+        PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
+    }
 }
 
 pub type Stvec = Mtvec;

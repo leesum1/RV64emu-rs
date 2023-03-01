@@ -1,7 +1,7 @@
-use crate::{inst_base::*, csr_regs_define::Mstatus, traptype::TrapType};
+use crate::{csr_regs_define::Mstatus, inst_base::*, traptype::TrapType};
 
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_Z: [Instruction; 13] = [
+pub const INSTRUCTIONS_Z: [Instruction; 14] = [
     Instruction {
         mask: MASK_EBREAK,
         match_data: MATCH_EBREAK,
@@ -35,15 +35,26 @@ pub const INSTRUCTIONS_Z: [Instruction; 13] = [
             // An MRET or SRET instruction is used to return from a trap in M-mode or S-mode respectively.
             // When executing an xRET instruction, supposing xPP holds the value y, xIE is set to xPIE; the
             // privilege mode is changed to y; xPIE is set to 1; and xPP is set to the least-privileged supported
-            // mode (U if U-mode is implemented, else M). If xPP̸=M, x RET also sets MPRV=0.
+            // mode (U if U-mode is implemented, else M). If xPP̸=M, xRET also sets MPRV=0.
             let mstatus_val = cpu.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
             let mut mstatus = Mstatus::from(mstatus_val);
 
-            // todo! only support m mode
+            // supposing xPP holds the value y
+            let y = mstatus.get_mpp_priv();
+            // xIE is set to xPIE
             mstatus.set_mie(mstatus.mpie());
-            cpu.cur_priv = PrivilegeLevels::from_repr(mstatus.mpp().into()).unwrap();
+            // the privilege mode is changed to xPP
+            cpu.cur_priv = y;
+            // xPIE is set to 1;
             mstatus.set_mpie(true);
-            mstatus.set_mpp(PrivilegeLevels::Machine as u8);
+            // xPP is set to the least-privileged supported mode
+            // (U if U-mode is implemented, else M).
+            mstatus.set_mpp(PrivilegeLevels::User as u8);
+            // (If xPP̸=M, x RET also sets MPRV=0.) Clarify => (If y!=M, x RET also sets MPRV=0.)
+            // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
+            if y != PrivilegeLevels::Machine {
+                mstatus.set_mprv(false);
+            }
 
             // println!("MRET:mstatus_now:{mstatus_val:x}");
             cpu.csr_regs
@@ -53,6 +64,54 @@ pub const INSTRUCTIONS_Z: [Instruction; 13] = [
             let mepc_val = cpu.csr_regs.read_raw_mask(CSR_MEPC.into(), MASK_ALL);
             // println!("mret->{mepc:x}");
             cpu.npc = mepc_val;
+
+            Ok(())
+        },
+    },
+    Instruction {
+        mask: MASK_SRET,
+        match_data: MATCH_SRET,
+        name: "SRET",
+        operation: |cpu, inst, pc| {
+            //  SRET should also raise an illegal instruction exception when TSR=1 in mstatus
+            // An MRET or SRET instruction is used to return from a trap in M-mode or S-mode respectively.
+            // When executing an xRET instruction, supposing xPP holds the value y, xIE is set to xPIE; the
+            // privilege mode is changed to y; xPIE is set to 1; and xPP is set to the least-privileged supported
+            // mode (U if U-mode is implemented, else M). If xPP̸=M, x RET also sets MPRV=0.
+            //  xRET sets the pc to the value stored in the xepc register.
+            let mstatus_val = cpu.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
+            let mut mstatus = Mstatus::from(mstatus_val);
+
+            // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
+            if mstatus.tsr() {
+                return Err(TrapType::IllegalInstruction);
+            }
+
+            // supposing xPP holds the value y
+            let y = mstatus.get_spp_priv();
+            // xIE is set to xPIE
+            mstatus.set_sie(mstatus.spie());
+            // the privilege mode is changed to xPP
+            cpu.cur_priv = y;
+            // xPIE is set to 1;
+            mstatus.set_spie(true);
+            // xPP is set to the least-privileged supported mode
+            // (U if U-mode is implemented, else M). 0 : user mode
+            mstatus.set_spp(false);
+            // (If xPP̸=M, x RET also sets MPRV=0.) Clarify => (If y!=M, x RET also sets MPRV=0.)
+            // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
+            if y != PrivilegeLevels::Machine {
+                mstatus.set_mprv(false);
+            }
+
+            cpu.csr_regs
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
+            // println!("MRET:mstatus_now2:{mstatus_val:x}");
+
+            // xRET sets the pc to the value stored in the xepc register.
+            let sepc_val = cpu.csr_regs.read_raw_mask(CSR_SEPC.into(), MASK_ALL);
+            // println!("sret->{sepc:x}");
+            cpu.npc = sepc_val;
 
             Ok(())
         },
@@ -70,9 +129,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 13] = [
         mask: MASK_SFENCE_VMA,
         match_data: MATCH_SFENCE_VMA,
         name: "SFENCE_VMA",
-        operation: |cpu, inst, pc| {
-            Ok(())
-        },
+        operation: |cpu, inst, pc| Ok(()),
     },
     Instruction {
         mask: MASK_FENCE,

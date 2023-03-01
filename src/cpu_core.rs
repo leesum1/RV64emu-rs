@@ -5,11 +5,11 @@ use crate::{
     clint::{Clint, DeviceClint},
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
-    csr_regs_define::{MieMip, Mip, Mstatus, Mtvec},
+    csr_regs_define::{MieMip, Mip, Mstatus, Mtvec, Stvec},
     gpr::Gpr,
     inst_base::{
         PrivilegeLevels, CSR_MCAUSE, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP, CSR_MSTATUS,
-        CSR_MTVEC, MASK_ALL, MIP_MTIP,
+        CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC, MASK_ALL, MIP_MTIP,
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
@@ -161,29 +161,39 @@ impl CpuCore {
 
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
-        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
-        let mut mstatus = Mstatus::from(mstatus_val);
+
         let mip_val = self.csr_regs.read_raw_mask(CSR_MIP.into(), MASK_ALL);
         let mie_val = self.csr_regs.read_raw_mask(CSR_MIE.into(), MASK_ALL);
+
+        let mip_mie_val = mip_val & mie_val;
+        // no interupt allowed
+        if mip_mie_val == 0 {
+            return;
+        }
+
+        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
+        let mut mstatus = Mstatus::from(mstatus_val);
         let mideleg_val = self.csr_regs.read_raw_mask(CSR_MIDELEG.into(), MASK_ALL);
 
-        let mideleg = Mip::from(mideleg_val);
-        let mip_mie = MieMip::from(mip_val & mie_val);
+        let _mideleg = Mip::from(mideleg_val);
+        let _mip_mie = MieMip::from(mip_mie_val);
 
         let m_a1 = mstatus.mie() & (self.cur_priv == PrivilegeLevels::Machine);
         let m_a2 = self.cur_priv < PrivilegeLevels::Machine;
-
         let int_to_m_enable = m_a1 | m_a2;
-        let int_to_m_peding = mip_val & mie_val & !mideleg_val;
+        let int_to_m_peding = mip_mie_val & !mideleg_val;
+
+        let s_a1 = mstatus.sie() & (self.cur_priv == PrivilegeLevels::Supervisor);
+        let s_a2 = self.cur_priv < PrivilegeLevels::Supervisor;
+        let int_to_s_enable = s_a1 | s_a2;
+        let int_to_s_peding = mip_mie_val & mideleg_val;
 
         // handing interupt in M mode
         if int_to_m_enable && int_to_m_peding != 0 {
             let cause = Mip::from(int_to_m_peding).get_priority_interupt();
-
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv as u8);
             mstatus.set_mie(false);
-
             self.csr_regs
                 .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
             self.csr_regs
@@ -192,8 +202,35 @@ impl CpuCore {
                 .write_raw_mask(CSR_MCAUSE.into(), cause as u64, MASK_ALL);
             let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
             // todo! improve me
-            self.npc = Mtvec::from(mtvec_val).get_trap_pc(TrapType::MachineTimerInterrupt);
+            self.npc = Mtvec::from(mtvec_val).get_trap_pc(cause);
             self.cur_priv = PrivilegeLevels::Machine;
+        }
+        // handing interupt in S mode
+        // The sstatus register is a subset of the mstatus register.
+        // In a straightforward implementation, reading or writing any field in sstatus is equivalent to
+        // reading or writing the homonymous field in mstatus.
+        // so, we use mstatus instead of sstatus below
+        else if int_to_s_enable && int_to_s_peding != 0 {
+            let cause = Mip::from(int_to_s_peding).get_priority_interupt();
+            // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
+            mstatus.set_spp(!(self.cur_priv == PrivilegeLevels::User));
+            // When a trap is taken into supervisor mode, SPIE is set to SIE
+            mstatus.set_spie(mstatus.sie());
+            // and SIE is set to 0
+            mstatus.set_sie(false);
+
+            self.csr_regs
+                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
+
+            self.csr_regs
+                .write_raw_mask(CSR_SEPC.into(), self.npc, MASK_ALL);
+
+            self.csr_regs
+                .write_raw_mask(CSR_SCAUSE.into(), cause as u64, MASK_ALL);
+
+            let stvec_val = self.csr_regs.read_raw_mask(CSR_STVEC.into(), MASK_ALL);
+            self.npc = Stvec::from(stvec_val).get_trap_pc(cause);
+            self.cur_priv = PrivilegeLevels::Supervisor;
         }
     }
 
