@@ -1,12 +1,37 @@
+use std::iter::OnceWith;
+
 // use std::collections::HashMap;
 use hashbrown::HashMap; // faster hashmap
 
-use crate::{inst_base::*, csr_regs_define::Misa};
+use crate::{
+    csr_regs_define::{Mip, Misa, Mstatus, Sie, Sip, Sstatus},
+    inst_base::*,
+};
+
+pub struct SMask {
+    addr: u16,
+    redirect_addr: u16,
+    rmask: u64,
+    wmask: u64,
+}
+
+impl SMask {
+    pub fn new(addr: u16, redirect_addr: u16, rmask: u64, wmask: u64) -> Self {
+        SMask {
+            addr,
+            redirect_addr,
+            rmask,
+            wmask,
+        }
+    }
+}
 
 pub struct CsrRegs {
     // pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
+    pub csr_s_mask: Vec<SMask>,
     pub csr_vec: Vec<Box<dyn CsrRW>>,
     pub csr_flag: [bool; 4096],
+    pub csr_map: [u64; 4096],
 }
 
 unsafe impl Send for CsrRegs {}
@@ -20,6 +45,10 @@ impl CsrRegs {
             .with_s(true)
             .with_u(true)
             .with_mxl(2); // 64
+        let mstatus = Mstatus::new().with_uxl(misa.mxl()).with_sxl(misa.mxl());
+
+        // println!("{:x}", u64::from(mstatus));
+
         let csr_list = vec![
             BaseCSR::new(CSR_MTVEC.into(), 0),
             BaseCSR::new(CSR_MTVAL.into(), 0),
@@ -27,7 +56,7 @@ impl CsrRegs {
             BaseCSR::new(CSR_MIP.into(), 0),
             BaseCSR::new(CSR_MIE.into(), 0),
             BaseCSR::new(CSR_MEPC.into(), 0),
-            BaseCSR::new(CSR_MSTATUS.into(), 0),
+            BaseCSR::new(CSR_MSTATUS.into(), mstatus.into()),
             BaseCSR::new(CSR_MSCRATCH.into(), 0),
             BaseCSR::new(CSR_MHARTID.into(), 0),
             BaseCSR::new(CSR_MISA.into(), misa.into()),
@@ -175,17 +204,36 @@ impl CsrRegs {
             BaseCSR::new(CSR_SEPC.into(), 0),
             BaseCSR::new(CSR_SSTATUS.into(), 0),
             BaseCSR::new(CSR_SSCRATCH.into(), 0),
+        ];
 
+        let sstatus_mask: u64 = Sstatus::new()
+            .with_sie(true)
+            .with_spie(true)
+            .with_ube(true)
+            .with_spp(true)
+            .with_vs(0b11)
+            .with_fs(0b11)
+            .with_xs(0b11)
+            .with_sum(true)
+            .with_mxr(true)
+            .with_uxl(0b11)
+            .with_sd(true)
+            .into();
+        let sip_mask: u64 = Sip::new()
+            .with_ssip(true)
+            .with_stip(true)
+            .with_seip(true)
+            .into();
+        let sie_mask: u64 = Sie::new()
+            .with_ssie(true)
+            .with_stie(true)
+            .with_seie(true)
+            .into();
 
-            
-
-
-
-
-
-
-
-
+        let s_mask: Vec<SMask> = vec![
+            SMask::new(CSR_SSTATUS, CSR_MSTATUS, sstatus_mask, sstatus_mask),
+            SMask::new(CSR_SIP, CSR_MIP, sip_mask, sip_mask),
+            SMask::new(CSR_SIE, CSR_MIE, sie_mask, sie_mask),
         ];
 
         let _csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();
@@ -197,13 +245,21 @@ impl CsrRegs {
             csr_vec.push(Default::default());
         }
 
+        let mut csr_map = [0_u64; 4096];
+
         for csr in csr_list.into_iter() {
             csr_vec[csr.addr as usize] = Box::new(csr);
             csr_flag[csr.addr as usize] = true;
+            csr_map[csr.addr as usize] = csr.read();
             // csr_map.insert(csr.addr, Box::new(csr));
         }
 
-        CsrRegs { csr_vec, csr_flag }
+        CsrRegs {
+            csr_vec,
+            csr_flag,
+            csr_map,
+            csr_s_mask: s_mask,
+        }
     }
 
     pub fn check_csr(&self, addr: u64) -> bool {
@@ -218,11 +274,13 @@ impl CsrRegs {
             panic!("csr:{addr:X},can not find");
         };
 
-        let x = self.csr_vec.get(addr as usize);
+        // if addr == CSR_MSTATUS.into() || addr == CSR_SSTATUS.into() {
+        //     println!("read mstatus:{:x}", self.csr_map[CSR_MSTATUS as usize]);
+        // }
 
-        match x {
-            Some(csr) => csr.read(),
-            None => todo!(),
+        match self.read_s_csr(addr) {
+            Some(val) => val,
+            None => self.csr_map[addr as usize],
         }
     }
 
@@ -232,31 +290,81 @@ impl CsrRegs {
             panic!("csr:{addr:X},can not find");
         };
 
-        let x = self.csr_vec.get_mut(addr as usize);
+        // if addr == CSR_MSTATUS.into() || addr == CSR_SSTATUS.into() {
+        //     println!(
+        //         "write mstatus:{:x},next_val:{:x}",
+        //         self.csr_map[CSR_MSTATUS as usize], val
+        //     );
+        // }
 
-        match x {
-            Some(csr) => csr.write(val),
-            None => todo!(),
+        match self.write_s_csr(addr, val) {
+            Some(val) => {
+                // println!("waddr:{:x},val:{:x}", addr, val);
+                val
+            }
+            None => {
+                match addr as u16 {
+                    CSR_MSTATUS => {
+                        let mstatus = Mstatus::new().with_uxl(0b11).with_sxl(0b11);
+                        let mask = u64::from(mstatus);
+
+                        let pre_val = self.csr_map[CSR_MSTATUS as usize];
+                        let next_val = val | (mask & pre_val);
+
+                        self.csr_map[CSR_MSTATUS as usize] = next_val;
+                        // println!("MSTATUS:{:x}", next_val);
+                    }
+                    _ => self.csr_map[addr as usize] = val,
+                };
+                0
+            }
         }
+    }
+
+    pub fn read_s_csr(&self, addr: u64) -> Option<u64> {
+        self.csr_s_mask
+            .iter()
+            .find(|item| item.addr as u64 == addr)
+            .map(|x| {
+                let pre_val = self.csr_map[x.redirect_addr as usize];
+                // println!("read:{addr:x},{pre_val:x}");
+                self.csr_map[x.redirect_addr as usize] & x.rmask
+            })
+    }
+
+    pub fn write_s_csr(&mut self, addr: u64, val: u64) -> Option<u64> {
+        self.csr_s_mask
+            .iter_mut()
+            .find(|item| item.addr as u64 == addr)
+            .map(|x| {
+                let pre_val = self.csr_map[x.redirect_addr as usize];
+                // println!("addr:{:x},val:{:x}", addr, val);
+                // println!("pre:{:x}", pre_val);
+                let next_val = (pre_val & !x.wmask) | (val & x.wmask);
+                // println!("next:{:x}", next_val);
+                // println!("mask:{:x}", x.wmask);
+                self.csr_map[x.redirect_addr as usize] = next_val;
+                next_val
+            })
     }
 
     pub fn read_raw_mask(&self, addr: u64, mask: u64) -> u64 {
-        let t = self.csr_vec.get(addr as usize);
+        assert!(addr < 4096);
+        if !self.check_csr(addr) {
+            panic!("csr:{addr:X},can not find");
+        };
 
-        match t {
-            Some(csr) => csr.read_raw_mask(mask),
-            None => todo!(),
-        }
+        get_field(self.csr_map[addr as usize], mask)
     }
 
     pub fn write_raw_mask(&mut self, addr: u64, val: u64, mask: u64) -> u64 {
-        // let t = self.csr_map.get_mut(&addr);
-        let t = self.csr_vec.get_mut(addr as usize);
+        assert!(addr < 4096);
+        if !self.check_csr(addr) {
+            panic!("csr:{addr:X},can not find");
+        };
 
-        match t {
-            Some(csr) => csr.write_raw_mask(val, mask),
-            None => todo!(),
-        }
+        self.csr_map[addr as usize] = set_field(self.csr_map[addr as usize], mask, val);
+        self.csr_map[addr as usize]
     }
 }
 

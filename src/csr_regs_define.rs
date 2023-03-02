@@ -42,6 +42,8 @@ pub struct Misa {
     pub mxl: u8,
 }
 
+
+pub type Sstatus = Mstatus;
 #[bitfield(u64)]
 pub struct Mstatus {
     _wpri0: bool,
@@ -139,6 +141,10 @@ pub struct Mie {
     _pad6: u64,
 }
 
+
+pub type Sip = Mip;
+pub type Sie = Mie;
+
 #[bitfield(u64)]
 pub struct Mip {
     _pad0: bool,
@@ -173,7 +179,7 @@ impl Mip {
             return TrapType::SupervisorTimerInterrupt;
         }
 
-        panic!("no interupt:{:X}", self.0);
+        panic!("no interupt:{self:?}");
     }
 }
 

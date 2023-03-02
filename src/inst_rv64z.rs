@@ -62,7 +62,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("MRET:mstatus_now2:{mstatus_val:x}");
 
             let mepc_val = cpu.csr_regs.read_raw_mask(CSR_MEPC.into(), MASK_ALL);
-            // println!("mret->{mepc:x}");
+            // println!("mret->{mepc_val:x}");
             cpu.npc = mepc_val;
 
             Ok(())
@@ -110,7 +110,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
 
             // xRET sets the pc to the value stored in the xepc register.
             let sepc_val = cpu.csr_regs.read_raw_mask(CSR_SEPC.into(), MASK_ALL);
-            // println!("sret->{sepc:x}");
+            // println!("sret->{sepc_val:x}");
             cpu.npc = sepc_val;
 
             Ok(())

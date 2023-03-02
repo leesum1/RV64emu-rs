@@ -1219,13 +1219,13 @@ impl PrivilegeLevels {
 pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;
 
 pub fn get_field(reg: u64, mask: u64) -> u64 {
-    // (reg & mask) / (mask & !(mask << 1))
-    let shift = mask.trailing_zeros();
-    (reg & mask) >> shift
+    (reg & mask) / (mask & !(mask << 1))
+    // let shift = mask.trailing_zeros();
+    // (reg & mask) >> shift
 }
 
 pub fn set_field(reg: u64, mask: u64, val: u64) -> u64 {
-    // (reg & !mask) | ((val * (mask & !(mask << 1))) & mask)
-    let shift = mask.trailing_zeros();
-    (reg & !mask) | ((val << shift) & mask)
+    (reg & !mask) | ((val * (mask & !(mask << 1))) & mask)
+    // let shift = mask.trailing_zeros();
+    // (reg & !mask) | ((val << shift) & mask)
 }

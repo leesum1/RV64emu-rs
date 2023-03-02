@@ -94,7 +94,7 @@ impl CpuCore {
 
         match inst_op {
             Some(i) => {
-                // println!("{:x},{}",self.pc,i.name);
+                println!("{:x},{}",self.pc,i.name);
                 let trap_code = (i.operation)(self, inst, self.pc);
                 if let Err(e) = trap_code {
                     self.handle_exceptions(e)
@@ -204,8 +204,11 @@ impl CpuCore {
         let mut mstatus = Mstatus::from(mstatus_val);
         let mideleg_val = self.csr_regs.read_raw_mask(CSR_MIDELEG.into(), MASK_ALL);
 
-        let _mideleg = Mip::from(mideleg_val);
-        let _mip_mie = MieMip::from(mip_mie_val);
+        // let _mideleg = Mip::from(mideleg_val);
+        // let _mip_mie = MieMip::from(mip_mie_val);
+        // println!("{_mideleg:?}");
+        // println!("{_mip_mie:?},{:b}",u64::from(_mip_mie));
+
 
         let m_a1 = mstatus.mie() & (self.cur_priv == PrivilegeLevels::Machine);
         let m_a2 = self.cur_priv < PrivilegeLevels::Machine;

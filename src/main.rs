@@ -3,6 +3,7 @@ mod clint;
 mod cpu_core;
 mod cpu_icache;
 mod csr_regs;
+mod csr_regs_define;
 mod device_dram;
 mod device_kb;
 mod device_mouse;
@@ -21,7 +22,6 @@ mod inst_rv64z;
 mod mmu;
 mod sv39;
 mod traptype;
-mod csr_regs_define;
 
 use std::{
     cell::Cell,
@@ -336,11 +336,11 @@ mod isa_test {
         }
 
         tests_ret.iter().for_each(|x| {
-                println!("{},{}", x.name, x.ret);
+            println!("{},{}", x.name, x.ret);
         });
 
         tests_ret.iter().for_each(|x| {
             assert!(x.ret);
-    });
+        });
     }
 }
