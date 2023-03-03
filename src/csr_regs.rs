@@ -1,10 +1,10 @@
-use std::iter::OnceWith;
+
 
 // use std::collections::HashMap;
 use hashbrown::HashMap; // faster hashmap
 
 use crate::{
-    csr_regs_define::{Mip, Misa, Mstatus, Sie, Sip, Sstatus},
+    csr_regs_define::{Misa, Mstatus, Sie, Sip, Sstatus},
     inst_base::*,
 };
 
@@ -326,7 +326,7 @@ impl CsrRegs {
             .iter()
             .find(|item| item.addr as u64 == addr)
             .map(|x| {
-                let pre_val = self.csr_map[x.redirect_addr as usize];
+                let _pre_val = self.csr_map[x.redirect_addr as usize];
                 // println!("read:{addr:x},{pre_val:x}");
                 self.csr_map[x.redirect_addr as usize] & x.rmask
             })

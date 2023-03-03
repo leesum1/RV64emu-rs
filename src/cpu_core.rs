@@ -5,7 +5,7 @@ use crate::{
     clint::{Clint, DeviceClint},
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
-    csr_regs_define::{Medeleg, MieMip, Mip, Mstatus, Mtvec, Stvec},
+    csr_regs_define::{Mip, Mstatus, Mtvec, Stvec},
     gpr::Gpr,
     inst_base::{
         PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
@@ -13,7 +13,7 @@ use crate::{
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
-    traptype::TrapType,
+    traptype::TrapType, itrace::Itrace,
 };
 
 #[derive(PartialEq)]
@@ -34,6 +34,7 @@ pub struct CpuCore {
     pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
+    pub itrace:Itrace,
 }
 
 impl CpuCore {
@@ -59,6 +60,7 @@ impl CpuCore {
             csr_regs: CsrRegs::new(),
             cpu_icache: CpuIcache::new(),
             cur_priv: PrivilegeLevels::Machine,
+            itrace: Itrace::new(),
         }
     }
 
@@ -94,7 +96,7 @@ impl CpuCore {
 
         match inst_op {
             Some(i) => {
-                println!("{:x},{}",self.pc,i.name);
+                self.itrace.disassemble_bytes(self.pc, inst);
                 let trap_code = (i.operation)(self, inst, self.pc);
                 if let Err(e) = trap_code {
                     self.handle_exceptions(e)

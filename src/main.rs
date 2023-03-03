@@ -19,9 +19,11 @@ mod inst_rv64a;
 mod inst_rv64i;
 mod inst_rv64m;
 mod inst_rv64z;
+mod itrace;
 mod mmu;
 mod sv39;
 mod traptype;
+
 
 use std::{
     cell::Cell,

@@ -18,6 +18,7 @@ colored = "2"
 hashbrown = "0.13.2"
 ringbuf = "0.3.2"
 bitfield-struct = "0.3.2"
+llvm-sys = "150"
 
 [profile.release]
 # lto = true
