@@ -13,7 +13,8 @@ use crate::{
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
-    traptype::TrapType, itrace::Itrace,
+    itrace::Itrace,
+    traptype::TrapType,
 };
 
 #[derive(PartialEq)]
@@ -34,7 +35,8 @@ pub struct CpuCore {
     pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
-    pub itrace:Itrace,
+    pub itrace: Itrace,
+    pub debug_flag: bool,
 }
 
 impl CpuCore {
@@ -61,6 +63,7 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: PrivilegeLevels::Machine,
             itrace: Itrace::new(),
+            debug_flag: false,
         }
     }
 
@@ -96,7 +99,9 @@ impl CpuCore {
 
         match inst_op {
             Some(i) => {
-                self.itrace.disassemble_bytes(self.pc, inst);
+                if self.debug_flag {
+                    self.itrace.disassemble_bytes(self.pc, inst);
+                }
                 let trap_code = (i.operation)(self, inst, self.pc);
                 if let Err(e) = trap_code {
                     self.handle_exceptions(e)
@@ -186,8 +191,6 @@ impl CpuCore {
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
             self.cur_priv = PrivilegeLevels::Machine;
         }
-
-
     }
 
     pub fn handle_interrupt(&mut self) {
@@ -210,7 +213,6 @@ impl CpuCore {
         // let _mip_mie = MieMip::from(mip_mie_val);
         // println!("{_mideleg:?}");
         // println!("{_mip_mie:?},{:b}",u64::from(_mip_mie));
-
 
         let m_a1 = mstatus.mie() & (self.cur_priv == PrivilegeLevels::Machine);
         let m_a2 = self.cur_priv < PrivilegeLevels::Machine;
