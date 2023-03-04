@@ -81,7 +81,7 @@ impl Mmu {
         let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
 
         // todo! PMA or PMP check
-        let pte_data = self.bus.read(pte_addr, pte_size as usize);
+        let pte_data = self.bus.read(pte_addr, pte_size as usize).unwrap();
         self.pte = Sv39PTE::from(pte_data);
         Ok(())
     }

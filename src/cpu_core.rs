@@ -63,11 +63,11 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: PrivilegeLevels::Machine,
             itrace: Itrace::new(),
-            debug_flag: false,
+            debug_flag: true,
         }
     }
 
-    pub fn inst_fetch(&mut self) -> u32 {
+    pub fn inst_fetch(&mut self) -> Result<u32, TrapType> {
         self.pc = self.npc;
         self.npc += 4;
 
@@ -75,11 +75,10 @@ impl CpuCore {
         let icache_data = self.cpu_icache.get_inst(self.pc);
         // if icache hit return, else load inst from mem and push into icache
         match icache_data {
-            Some(icache_inst) => icache_inst,
+            Some(icache_inst) => Ok(icache_inst),
             None => {
-                let inst = self.bus.read(self.pc, 4) as u32;
-                self.cpu_icache.insert_inst(self.pc, inst);
-                inst
+                let inst_val = self.bus.read(self.pc, 4).unwrap();
+                Ok(inst_val as u32)
             }
         }
 
@@ -116,7 +115,14 @@ impl CpuCore {
             match self.cpu_state {
                 CpuState::Running => {
                     let inst = self.inst_fetch();
-                    self.step(inst);
+
+                    match inst {
+                        Ok(inst_val) => self.step(inst_val),
+                        Err(trap_type) => {
+                            self.handle_exceptions(trap_type);
+                            continue;
+                        }
+                    };
 
                     let irq_clint = self.bus.clint.instance.is_interrupt();
                     // println!("irq_clint:{irq_clint}");
@@ -280,7 +286,7 @@ impl CpuCore {
             |err| println!("{err}"),
             |mut file| {
                 for i in (sig_start..sig_end).step_by(4) {
-                    let tmp_data = self.bus.read(i, 4);
+                    let tmp_data = self.bus.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
                 }
             },

@@ -1,4 +1,7 @@
-use crate::{inst_base::*};
+use crate::{
+    inst_base::*,
+    traptype::{TrapType},
+};
 
 pub struct LrScReservation {
     pub(crate) val: u64,
@@ -31,7 +34,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
         operation: |cpu, inst, pc| {
             let f = parse_format_r(inst);
             let rs1_data = cpu.gpr.read(f.rs1);
-            let r_data = cpu.bus.read(rs1_data, 4) as i32 as i64;
+            let r_data = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data as i32 as i64,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
             cpu.lr_sc_set.set(rs1_data);
             cpu.gpr.write(f.rd, r_data as u64);
@@ -46,7 +52,11 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
         operation: |cpu, inst, pc| {
             let f = parse_format_r(inst);
             let rs1_data = cpu.gpr.read(f.rs1);
-            let r_data = cpu.bus.read(rs1_data, 8);
+            let r_data = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
+
             cpu.lr_sc_set.set(rs1_data);
             cpu.gpr.write(f.rd, r_data as u64);
 
@@ -103,7 +113,11 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 4);
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
+
             cpu.bus.write(rs1_data, rs2_data, 4);
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
@@ -119,7 +133,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.bus.write(rs1_data, rs2_data, 8);
             cpu.gpr.write(f.rd, tmp);
 
@@ -139,7 +156,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 4);
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.bus.write(rs1_data, tmp ^ rs2_data, 4);
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
@@ -155,7 +175,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.bus.write(rs1_data, tmp ^ rs2_data, 8);
             cpu.gpr.write(f.rd, tmp);
 
@@ -171,7 +194,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 4);
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.bus.write(rs1_data, tmp | rs2_data, 4);
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
@@ -187,7 +213,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.bus.write(rs1_data, tmp | rs2_data, 8);
             cpu.gpr.write(f.rd, tmp);
 
@@ -207,9 +236,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as u32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.min(rs2_data);
+            let amo_write = (tmp as u32).min(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -225,7 +257,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
             let amo_write = tmp.min(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 8);
@@ -243,9 +278,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as i32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.min(rs2_data);
+            let amo_write = (tmp as i32).min(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -261,9 +299,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i64;
 
-            let tmp = cpu.bus.read(rs1_data, 8) as i64;
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.min(rs2_data);
+            let amo_write = (tmp as i64).min(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 8);
             cpu.gpr.write(f.rd, tmp as u64);
 
@@ -279,9 +320,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as u32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.max(rs2_data);
+            let amo_write = (tmp as u32).max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -297,7 +341,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
             let amo_write = tmp.max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 8);
@@ -315,9 +362,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as i32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.max(rs2_data);
+            let amo_write = (tmp as i32).max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -333,9 +383,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i64;
 
-            let tmp = cpu.bus.read(rs1_data, 8) as i64;
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.max(rs2_data);
+            let amo_write = (tmp as i64).max(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 8);
             cpu.gpr.write(f.rd, tmp as u64);
 
@@ -354,9 +407,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as u32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp & rs2_data;
+            let amo_write = (tmp as u32) & rs2_data;
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -372,7 +428,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
             let amo_write = tmp & rs2_data;
             cpu.bus.write(rs1_data, amo_write as u64, 8);
@@ -393,9 +452,12 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
 
-            let tmp = cpu.bus.read(rs1_data, 4) as u32;
+            let tmp = match cpu.bus.read(rs1_data, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
-            let amo_write = tmp.wrapping_add(rs2_data);
+            let amo_write = (tmp as u32).wrapping_add(rs2_data);
             cpu.bus.write(rs1_data, amo_write as u64, 4);
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
@@ -411,7 +473,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            let tmp = cpu.bus.read(rs1_data, 8);
+            let tmp = match cpu.bus.read(rs1_data, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
 
             let amo_write = tmp.wrapping_add(rs2_data);
             // let amo_write = tmp + rs2_data;

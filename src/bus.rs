@@ -24,22 +24,25 @@ impl Bus {
         (addr >= start) && (addr < (start + len))
     }
 
-    fn check_aligned(addr: u64, len: u64) {
-        assert!(addr & (len - 1) == 0, "bus address not aligned");
+    pub fn check_aligned(addr: u64, len: u64) -> bool {
+        // assert!(addr & (len - 1) == 0, "bus address not aligned");
+        addr & (len - 1) == 0
     }
 
     pub fn add_device(&mut self, device: DeviceType) {
         self.devices.push(device);
     }
 
-    pub fn read(&mut self, addr: u64, len: usize) -> u64 {
-        Bus::check_aligned(addr, len as u64);
+    pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
+        if !Bus::check_aligned(addr, len as u64) {
+            return Err(());
+        }
 
         // special devices
         // such as clint
-        let special_device = || -> u64 {
+        let special_device = || -> Result<u64, ()> {
             if Bus::check_area(self.clint.start, self.clint.len, addr) {
-                self.clint.instance.do_read(addr - self.clint.start, len)
+                Ok(self.clint.instance.do_read(addr - self.clint.start, len))
             } else {
                 panic!("can not find device,read addr{addr:X}");
             }
@@ -55,7 +58,7 @@ impl Bus {
 
         // first find general devices
         match general_device {
-            Some(val) => val,
+            Some(val) => Ok(val),
             None => special_device(),
         }
     }
@@ -106,7 +109,8 @@ impl std::fmt::Display for Bus {
             .to_string()
         });
 
-        f.write_str("-------------Device Tree MAP-------------\n").unwrap();
+        f.write_str("-------------Device Tree MAP-------------\n")
+            .unwrap();
         f.write_fmt(format_args!(
             "name:{:15} Area:0X{:08X}-->0X{:08X},len:0X{:08X}\n",
             self.clint.name,

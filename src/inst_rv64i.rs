@@ -1,8 +1,4 @@
-use crate::inst_base::*;
-
-
-
-
+use crate::{bus::Bus, inst_base::*, traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [
@@ -34,8 +30,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             let f = parse_format_j(inst);
             let wdata = pc.wrapping_add(4);
-            
-            cpu.npc = pc.wrapping_add(f.imm);
+
+            let next_pc = pc.wrapping_add(f.imm);
+            if !Bus::check_aligned(next_pc, 4) {
+                return Err(TrapType::InstructionAddressMisaligned);
+            };
+            cpu.npc = next_pc;
             cpu.gpr.write(f.rd, wdata);
             Ok(())
         },
@@ -47,8 +47,16 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         operation: |cpu, inst, pc| {
             // t =pc+4; pc=(x[rs1]+sext(offset))&∼1; x[rd]=t
             let f = parse_format_i(inst);
+            let rs1_data = cpu.gpr.read(f.rs1);
             let wdata = pc.wrapping_add(4);
-            cpu.npc = (cpu.gpr.read(f.rs1).wrapping_add(f.imm as u64))&!1_u64;
+
+            let next_pc = (rs1_data.wrapping_add(f.imm as u64)) & !1_u64;
+
+            if !Bus::check_aligned(next_pc, 4) {
+                return Err(TrapType::InstructionAddressMisaligned);
+            };
+
+            cpu.npc = next_pc;
             cpu.gpr.write(f.rd, wdata);
             Ok(())
         },
@@ -63,8 +71,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
 
-            if rs1 == rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 == rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    println!("BEQ");
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
             }
             Ok(())
         },
@@ -79,8 +92,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
 
-            if rs1 != rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 != rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
+
             }
             Ok(())
         },
@@ -95,8 +113,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as i64;
 
-            if rs1 < rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 < rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
+
             }
             Ok(())
         },
@@ -111,8 +134,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as i64;
 
-            if rs1 >= rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 >= rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
+
             }
             Ok(())
         },
@@ -127,8 +155,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
 
-            if rs1 < rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 < rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
+
             }
             Ok(())
         },
@@ -142,8 +175,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let f = parse_format_b(inst);
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
-            if rs1 >= rs2{
-                cpu.npc = pc.wrapping_add(f.imm);
+            if rs1 >= rs2 {
+                let next_pc = pc.wrapping_add(f.imm);
+                if !Bus::check_aligned(next_pc, 4) {
+                    return Err(TrapType::InstructionAddressMisaligned);
+                }
+                cpu.npc = next_pc;
+
             }
 
             Ok(())
@@ -160,7 +198,11 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 1);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 1) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
+
             cpu.gpr.write(f.rd, mem_data as i8 as i64 as u64);
 
             Ok(())
@@ -176,15 +218,18 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 2);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 2) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data as i16 as i64 as u64);
 
             Ok(())
         },
     },
     Instruction {
-        mask: MASK_LW ,
-        match_data: MATCH_LW ,
+        mask: MASK_LW,
+        match_data: MATCH_LW,
         name: "LW ",
         operation: |cpu, inst, pc| {
             // x[rd] = sext(M[x[rs1] + sext(offset)][31:0])
@@ -192,15 +237,18 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 4);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data as i32 as i64 as u64);
 
             Ok(())
         },
     },
     Instruction {
-        mask: MASK_LBU ,
-        match_data: MATCH_LBU ,
+        mask: MASK_LBU,
+        match_data: MATCH_LBU,
         name: "LBU ",
         operation: |cpu, inst, pc| {
             // x[rd] = M[x[rs1] + sext(offset)][7:0]
@@ -208,7 +256,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 1);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 1) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data as u8 as u64);
 
             Ok(())
@@ -224,7 +275,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 2);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 2) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data as u16 as u64);
 
             Ok(())
@@ -240,7 +294,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as u8;
             let mem_addr = rs1.wrapping_add(f.imm);
-            
+
             cpu.bus.write(mem_addr as u64, rs2 as u64, 1);
 
             Ok(())
@@ -288,7 +342,6 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SLTI,
         match_data: MATCH_SLTI,
@@ -301,11 +354,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let wb_data = rs1 < f.imm;
 
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
-    
     Instruction {
         mask: MASK_SLTIU,
         match_data: MATCH_SLTIU,
@@ -318,7 +370,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let wb_data = rs1 < f.imm as u64;
 
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -333,7 +385,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 ^ f.imm as u64;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -348,7 +400,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 | f.imm as u64;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -363,7 +415,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 & f.imm as u64;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -379,11 +431,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 << shamt;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SRLI,
         match_data: MATCH_SRLI,
@@ -396,7 +447,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 >> shamt;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -412,7 +463,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 >> shamt;
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -428,7 +479,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_add(rs2);
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -444,7 +495,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_sub(rs2);
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -461,7 +512,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             // let wb_data = rs1 << rs2;
             let wb_data = rs1.wrapping_shl(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -477,7 +528,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 < rs2;
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -493,7 +544,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 < rs2;
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -509,7 +560,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 ^ rs2;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -525,11 +576,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_shr(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SRA,
         match_data: MATCH_SRA,
@@ -542,7 +592,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_shr(rs2 as u32);
             cpu.gpr.write(f.rd, wb_data as u64);
-            
+
             Ok(())
         },
     },
@@ -558,7 +608,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 | rs2;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
@@ -574,13 +624,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 & rs2;
             cpu.gpr.write(f.rd, wb_data);
-            
+
             Ok(())
         },
     },
     Instruction {
-        mask: MASK_LWU ,
-        match_data: MATCH_LWU ,
+        mask: MASK_LWU,
+        match_data: MATCH_LWU,
         name: "LWU",
         operation: |cpu, inst, pc| {
             // x[rd] = M[x[rs1] + sext(offset)][31:0]
@@ -588,15 +638,18 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 4);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 4) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data as u32 as u64);
 
             Ok(())
         },
     },
     Instruction {
-        mask: MASK_LD ,
-        match_data: MATCH_LD ,
+        mask: MASK_LD,
+        match_data: MATCH_LD,
         name: "LD",
         operation: |cpu, inst, pc| {
             // x[rd] = M[x[rs1] + sext(offset)][63:0]
@@ -604,15 +657,18 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = cpu.bus.read(mem_addr as u64, 8);
+            let mem_data = match cpu.bus.read(mem_addr as u64, 8) {
+                Ok(data) => data,
+                Err(_) => return Err(TrapType::LoadAddressMisaligned),
+            };
             cpu.gpr.write(f.rd, mem_data);
 
             Ok(())
         },
     },
     Instruction {
-        mask: MASK_SD ,
-        match_data: MATCH_SD ,
+        mask: MASK_SD,
+        match_data: MATCH_SD,
         name: "SD",
         operation: |cpu, inst, pc| {
             //  M[x[rs1] + sext(offset)] = x[rs2][63:0]
@@ -626,8 +682,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
         },
     },
     Instruction {
-        mask: MASK_ADDIW ,
-        match_data: MATCH_ADDIW ,
+        mask: MASK_ADDIW,
+        match_data: MATCH_ADDIW,
         name: "ADDIW",
         operation: |cpu, inst, pc| {
             //  x[rd] = sext((x[rs1] + sext(immediate))[31:0])
@@ -639,7 +695,6 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SLLIW,
         match_data: MATCH_SLLIW,
@@ -652,11 +707,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 << f.imm;
             cpu.gpr.write(f.rd, wb_data as i32 as u64);
-            
+
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SRLIW,
         match_data: MATCH_SRLIW,
@@ -669,11 +723,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 >> f.imm;
             cpu.gpr.write(f.rd, wb_data as i32 as u64);
-            
+
             Ok(())
         },
     },
-
     Instruction {
         mask: MASK_SRAIW,
         match_data: MATCH_SRAIW,
@@ -686,7 +739,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_shr(shamt as u32);
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
@@ -702,7 +755,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_add(rs2) as i32;
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
@@ -718,7 +771,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1.wrapping_sub(rs2) as i32;
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
@@ -734,7 +787,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = (rs1 << rs2) as i32;
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
@@ -750,7 +803,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = (rs1 >> rs2) as i32;
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
@@ -766,19 +819,17 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let wb_data = rs1 >> rs2;
             cpu.gpr.write(f.rd, wb_data as i64 as u64);
-            
+
             Ok(())
         },
     },
 ];
 #[cfg(test)]
-mod test_rv64i { 
+mod test_rv64i {
 
     #[test]
     fn tset1() {
-        let x = 1<2;
-        println!("x:{}",x as u64);
+        let x = 1 < 2;
+        println!("x:{}", x as u64);
     }
-
-
 }
