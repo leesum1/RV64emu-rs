@@ -1,7 +1,4 @@
-use crate::{
-    inst_base::*,
-    traptype::{TrapType},
-};
+use crate::{inst_base::*, traptype::TrapType};
 
 pub struct LrScReservation {
     pub(crate) val: u64,

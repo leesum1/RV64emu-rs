@@ -204,6 +204,14 @@ impl CsrRegs {
             BaseCSR::new(CSR_SEPC.into(), 0),
             BaseCSR::new(CSR_SSTATUS.into(), 0),
             BaseCSR::new(CSR_SSCRATCH.into(), 0),
+            BaseCSR::new(CSR_CYCLE.into(), 0),
+            BaseCSR::new(CSR_MIMPID.into(), 0),
+            BaseCSR::new(CSR_MARCHID.into(), 0),
+            BaseCSR::new(CSR_MVENDORID.into(), 0),
+
+
+
+
         ];
 
         let sstatus_mask: u64 = Sstatus::new()
@@ -234,6 +242,9 @@ impl CsrRegs {
             SMask::new(CSR_SSTATUS, CSR_MSTATUS, sstatus_mask, sstatus_mask),
             SMask::new(CSR_SIP, CSR_MIP, sip_mask, sip_mask),
             SMask::new(CSR_SIE, CSR_MIE, sie_mask, sie_mask),
+            // misa is read only,can not modify
+            SMask::new(CSR_MISA, CSR_MISA, MASK_ALL, !MASK_ALL),
+
         ];
 
         let _csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();

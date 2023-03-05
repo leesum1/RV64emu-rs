@@ -106,7 +106,7 @@ impl CpuCore {
                     self.handle_exceptions(e)
                 }
             }
-            None => panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
+            None => self.handle_exceptions(TrapType::IllegalInstruction), //panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
         }
     }
 

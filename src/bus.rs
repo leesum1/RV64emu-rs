@@ -63,8 +63,10 @@ impl Bus {
         }
     }
 
-    pub fn write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
-        Bus::check_aligned(addr, len as u64);
+    pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, ()> {
+        if !Bus::check_aligned(addr, len as u64) {
+            return Err(());
+        }
 
         let mut special_device = || -> u64 {
             if Bus::check_area(self.clint.start, self.clint.len, addr) {
@@ -83,8 +85,8 @@ impl Bus {
             .map(|device| device.instance.do_write(addr - device.start, data, len));
 
         match general_device {
-            Some(val) => val,
-            None => special_device(),
+            Some(val) => Ok(val),
+            None => Ok(special_device()),
         }
     }
 
