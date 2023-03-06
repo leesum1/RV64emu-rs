@@ -1210,6 +1210,24 @@ pub enum PrivilegeLevels {
     Machine = 3,
 }
 
+#[derive(PartialEq)]
+pub enum AccessType {
+    Load,
+    Store,
+    Fetch,
+}
+
+impl AccessType {
+    pub fn throw_exception(&self) -> TrapType {
+        match self {
+            AccessType::Load => TrapType::LoadPageFault,
+            AccessType::Store => TrapType::StorePageFault,
+            AccessType::Fetch => TrapType::InstructionPageFault,
+        }
+    }
+}
+
+
 impl PrivilegeLevels {
     pub fn check_priv(&self, another_priv: PrivilegeLevels) -> bool {
         (another_priv as u64) >= (*self as u64)

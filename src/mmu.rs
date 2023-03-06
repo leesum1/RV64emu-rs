@@ -1,7 +1,7 @@
 use crate::{
     bus::Bus,
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
-    traptype::TrapType,
+    traptype::TrapType, inst_base::AccessType,
 };
 
 struct Stap {
@@ -23,22 +23,8 @@ impl Stap {
         (self.val >> 60) & 0xf
     }
 }
-#[derive(PartialEq)]
-enum AccessType {
-    Load,
-    Store,
-    Execute,
-}
 
-impl AccessType {
-    fn throw_exception(&self) -> TrapType {
-        match self {
-            AccessType::Load => TrapType::LoadPageFault,
-            AccessType::Store => TrapType::StorePageFault,
-            AccessType::Execute => TrapType::InstructionPageFault,
-        }
-    }
-}
+
 
 struct Mmu {
     pub bus: Bus,
@@ -131,7 +117,7 @@ impl Mmu {
                     return Err(self.access_type.throw_exception());
                 }
             }
-            AccessType::Execute => {
+            AccessType::Fetch => {
                 if !self.pte.x() {
                     return Err(self.access_type.throw_exception());
                 }

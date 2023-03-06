@@ -9,7 +9,7 @@ use crate::{
     gpr::Gpr,
     inst_base::{
         PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
-        CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC, MASK_ALL, MIP_MTIP,
+        CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
     },
     inst_decode::InstDecode,
     inst_rv64a::LrScReservation,
@@ -63,7 +63,7 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: PrivilegeLevels::Machine,
             itrace: Itrace::new(),
-            debug_flag: true,
+            debug_flag: false,
         }
     }
 
@@ -106,7 +106,7 @@ impl CpuCore {
                     self.handle_exceptions(e)
                 }
             }
-            None => self.handle_exceptions(TrapType::IllegalInstruction), //panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
+            None => panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
         }
     }
 
@@ -124,19 +124,21 @@ impl CpuCore {
                         }
                     };
 
-                    let irq_clint = self.bus.clint.instance.is_interrupt();
-                    // println!("irq_clint:{irq_clint}");
-
-                    self.csr_regs
-                        .write_raw_mask(CSR_MIP.into(), irq_clint as u64, MIP_MTIP);
-
-                    // // println!("mip:{:x}",x);
+                    self.check_pending_int();
                     self.handle_interrupt();
                     self.bus.update();
                 }
                 _ => break,
             };
         }
+    }
+    fn check_pending_int(&mut self) {
+        let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
+        let mut mip = Mip::from(mip_val);
+
+        let irq_clint = self.bus.clint.instance.is_interrupt();
+        mip.set_mtip(irq_clint);
+        self.csr_regs.write_raw(CSR_MIP.into(), mip.into());
     }
 
     pub fn halt(&mut self) -> usize {
@@ -152,8 +154,8 @@ impl CpuCore {
     }
 
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
-        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
-        let medeleg_val = self.csr_regs.read_raw_mask(CSR_MEDELEG.into(), MASK_ALL);
+        let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
+        let medeleg_val = self.csr_regs.read_raw(CSR_MEDELEG.into());
         let has_exception = (medeleg_val & (1_u64 << trap_type.get_exception_num())) != 0;
         let trap_to_s_enable = self.cur_priv <= PrivilegeLevels::Supervisor;
         let mut mstatus = Mstatus::from(mstatus_val);
@@ -168,16 +170,13 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            self.csr_regs
-                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
+            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
 
-            self.csr_regs
-                .write_raw_mask(CSR_SEPC.into(), self.pc, MASK_ALL);
+            self.csr_regs.write_raw(CSR_SEPC.into(), self.pc);
 
-            self.csr_regs
-                .write_raw_mask(CSR_SCAUSE.into(), cause, MASK_ALL);
+            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
 
-            let stvec_val = self.csr_regs.read_raw_mask(CSR_STVEC.into(), MASK_ALL);
+            let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
             self.cur_priv = PrivilegeLevels::Supervisor;
         }
@@ -186,14 +185,11 @@ impl CpuCore {
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mie(false);
             mstatus.set_mpp(self.cur_priv as u8);
-            self.csr_regs
-                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
-            self.csr_regs
-                .write_raw_mask(CSR_MEPC.into(), self.pc, MASK_ALL);
-            self.csr_regs
-                .write_raw_mask(CSR_MCAUSE.into(), trap_type as u64, MASK_ALL);
+            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
+            self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type as u64);
 
-            let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+            let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
             self.cur_priv = PrivilegeLevels::Machine;
         }
@@ -202,8 +198,8 @@ impl CpuCore {
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
 
-        let mip_val = self.csr_regs.read_raw_mask(CSR_MIP.into(), MASK_ALL);
-        let mie_val = self.csr_regs.read_raw_mask(CSR_MIE.into(), MASK_ALL);
+        let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
+        let mie_val = self.csr_regs.read_raw(CSR_MIE.into());
 
         let mip_mie_val = mip_val & mie_val;
         // no interupt allowed
@@ -211,9 +207,9 @@ impl CpuCore {
             return;
         }
 
-        let mstatus_val = self.csr_regs.read_raw_mask(CSR_MSTATUS.into(), MASK_ALL);
+        let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
         let mut mstatus = Mstatus::from(mstatus_val);
-        let mideleg_val = self.csr_regs.read_raw_mask(CSR_MIDELEG.into(), MASK_ALL);
+        let mideleg_val = self.csr_regs.read_raw(CSR_MIDELEG.into());
 
         // let _mideleg = Mip::from(mideleg_val);
         // let _mip_mie = MieMip::from(mip_mie_val);
@@ -236,13 +232,10 @@ impl CpuCore {
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv as u8);
             mstatus.set_mie(false);
-            self.csr_regs
-                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
-            self.csr_regs
-                .write_raw_mask(CSR_MEPC.into(), self.npc, MASK_ALL);
-            self.csr_regs
-                .write_raw_mask(CSR_MCAUSE.into(), cause as u64, MASK_ALL);
-            let mtvec_val = self.csr_regs.read_raw_mask(CSR_MTVEC.into(), MASK_ALL);
+            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            self.csr_regs.write_raw(CSR_MEPC.into(), self.npc);
+            self.csr_regs.write_raw(CSR_MCAUSE.into(), cause as u64);
+            let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             // todo! improve me
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(cause);
             self.cur_priv = PrivilegeLevels::Machine;
@@ -261,21 +254,18 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            self.csr_regs
-                .write_raw_mask(CSR_MSTATUS.into(), mstatus.into(), MASK_ALL);
+            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
 
-            self.csr_regs
-                .write_raw_mask(CSR_SEPC.into(), self.npc, MASK_ALL);
+            self.csr_regs.write_raw(CSR_SEPC.into(), self.npc);
 
-            self.csr_regs
-                .write_raw_mask(CSR_SCAUSE.into(), cause as u64, MASK_ALL);
+            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause as u64);
 
-            let stvec_val = self.csr_regs.read_raw_mask(CSR_STVEC.into(), MASK_ALL);
+            let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(cause);
             self.cur_priv = PrivilegeLevels::Supervisor;
         }
     }
-
+    // for riscof
     pub fn dump_signature(&mut self, file_name: &str) {
         let fd = File::create(file_name);
 

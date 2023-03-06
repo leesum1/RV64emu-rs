@@ -1,35 +1,33 @@
-
-
 // use std::collections::HashMap;
-use hashbrown::HashMap; // faster hashmap
+// faster hashmap
 
 use crate::{
-    csr_regs_define::{Misa, Mstatus, Sie, Sip, Sstatus},
+    csr_regs_define::{CsrAddr, Misa, Mstatus, Sie, Sip, Sstatus},
     inst_base::*,
+    traptype::TrapType,
 };
 
-pub struct SMask {
-    addr: u16,
+pub struct CsrMask {
+    csr_address: u16,
     redirect_addr: u16,
-    rmask: u64,
-    wmask: u64,
+    read_mask: u64,
+    write_mask: u64,
 }
 
-impl SMask {
-    pub fn new(addr: u16, redirect_addr: u16, rmask: u64, wmask: u64) -> Self {
-        SMask {
-            addr,
+impl CsrMask {
+    pub fn new(csr_address: u16, redirect_addr: u16, read_mask: u64, write_mask: u64) -> Self {
+        CsrMask {
+            csr_address,
             redirect_addr,
-            rmask,
-            wmask,
+            read_mask,
+            write_mask,
         }
     }
 }
 
 pub struct CsrRegs {
     // pub csr_map: HashMap<u64, Box<dyn CsrRW>>,
-    pub csr_s_mask: Vec<SMask>,
-    pub csr_vec: Vec<Box<dyn CsrRW>>,
+    pub csr_mask: Vec<CsrMask>,
     pub csr_flag: [bool; 4096],
     pub csr_map: [u64; 4096],
 }
@@ -208,10 +206,6 @@ impl CsrRegs {
             BaseCSR::new(CSR_MIMPID.into(), 0),
             BaseCSR::new(CSR_MARCHID.into(), 0),
             BaseCSR::new(CSR_MVENDORID.into(), 0),
-
-
-
-
         ];
 
         let sstatus_mask: u64 = Sstatus::new()
@@ -238,120 +232,94 @@ impl CsrRegs {
             .with_seie(true)
             .into();
 
-        let s_mask: Vec<SMask> = vec![
-            SMask::new(CSR_SSTATUS, CSR_MSTATUS, sstatus_mask, sstatus_mask),
-            SMask::new(CSR_SIP, CSR_MIP, sip_mask, sip_mask),
-            SMask::new(CSR_SIE, CSR_MIE, sie_mask, sie_mask),
-            // misa is read only,can not modify
-            SMask::new(CSR_MISA, CSR_MISA, MASK_ALL, !MASK_ALL),
+        // todo! add more
+        let mstatus_mask: u64 = Mstatus::new().with_uxl(0b11).with_sxl(0b11).into();
 
+        let csr_mask: Vec<CsrMask> = vec![
+            CsrMask::new(CSR_SSTATUS, CSR_MSTATUS, sstatus_mask, sstatus_mask),
+            CsrMask::new(CSR_SIP, CSR_MIP, sip_mask, sip_mask),
+            CsrMask::new(CSR_SIE, CSR_MIE, sie_mask, sie_mask),
+            // misa is read only,can not modify
+            CsrMask::new(CSR_MISA, CSR_MISA, MASK_ALL, !MASK_ALL),
+            CsrMask::new(CSR_MSTATUS, CSR_MSTATUS, MASK_ALL, !mstatus_mask),
         ];
 
-        let _csr_map = HashMap::<u64, Box<dyn CsrRW>>::new();
-
-        let mut csr_vec: Vec<Box<dyn CsrRW>> = Vec::new();
+        // is csr register exist ?
         let mut csr_flag = [false; 4096];
-
-        for _i in 0..4096 {
-            csr_vec.push(Default::default());
-        }
-
         let mut csr_map = [0_u64; 4096];
 
         for csr in csr_list.into_iter() {
-            csr_vec[csr.addr as usize] = Box::new(csr);
             csr_flag[csr.addr as usize] = true;
             csr_map[csr.addr as usize] = csr.read();
-            // csr_map.insert(csr.addr, Box::new(csr));
         }
 
         CsrRegs {
-            csr_vec,
             csr_flag,
             csr_map,
-            csr_s_mask: s_mask,
+            csr_mask,
         }
     }
 
-    pub fn check_csr(&self, addr: u64) -> bool {
-        self.csr_flag[addr as usize]
+    // CSR address (csr[11:8]) are used to encode the read and
+    // write accessibility of the CSRs according to privilege level as shown in Table 2.1. The top two bits
+    // (csr[11:10]) indicate whether the register is read/write (00, 01, or 10) or read-only (11). The next
+    // two bits (csr[9:8]) encode the lowest privilege level that can access the CSR.
+
+    // Attempts to access a non-existent CSR raise an illegal instruction exception. Attempts to access a
+    // CSR without appropriate privilege level or to write a read-only register also raise illegal instruction
+    // exceptions. A read/write register might also contain some bits that are read-only, in which case
+    // writes to the read-only bits are ignored.
+    fn check_csr(&self, addr: u64, privi: PrivilegeLevels, access_type: AccessType) -> bool {
+        let csr_exist = self.csr_flag[addr as usize];
+
+        let csr_addr = CsrAddr::from(addr);
+        csr_addr.check_privilege(privi, access_type) & csr_exist
     }
 
-    pub fn read(&self, addr: u64) -> u64 {
-        // let t = self.csr_map.get(&addr);
+    pub fn read(&self, addr: u64, privi: PrivilegeLevels) -> Result<u64, TrapType> {
         assert!(addr < 4096);
 
-        if !self.check_csr(addr) {
-            panic!("csr:{addr:X},can not find");
+        if !self.check_csr(addr, privi, AccessType::Load) {
+            return Err(TrapType::IllegalInstruction);
         };
 
-        // if addr == CSR_MSTATUS.into() || addr == CSR_SSTATUS.into() {
-        //     println!("read mstatus:{:x}", self.csr_map[CSR_MSTATUS as usize]);
-        // }
-
-        match self.read_s_csr(addr) {
-            Some(val) => val,
-            None => self.csr_map[addr as usize],
+        match self.read_csr_mask(addr) {
+            Some(val) => Ok(val),
+            None => Ok(self.csr_map[addr as usize]),
         }
     }
 
-    pub fn write(&mut self, addr: u64, val: u64) -> u64 {
+    pub fn write(&mut self, addr: u64, val: u64, privi: PrivilegeLevels) -> Result<u64, TrapType> {
         assert!(addr < 4096);
-        if !self.check_csr(addr) {
-            panic!("csr:{addr:X},can not find");
+        if !self.check_csr(addr, privi, AccessType::Store) {
+            return Err(TrapType::IllegalInstruction);
         };
 
-        // if addr == CSR_MSTATUS.into() || addr == CSR_SSTATUS.into() {
-        //     println!(
-        //         "write mstatus:{:x},next_val:{:x}",
-        //         self.csr_map[CSR_MSTATUS as usize], val
-        //     );
-        // }
-
-        match self.write_s_csr(addr, val) {
-            Some(val) => {
-                // println!("waddr:{:x},val:{:x}", addr, val);
-                val
-            }
+        match self.write_csr_mask(addr, val) {
+            Some(val) => Ok(val),
             None => {
-                match addr as u16 {
-                    CSR_MSTATUS => {
-                        let mstatus = Mstatus::new().with_uxl(0b11).with_sxl(0b11);
-                        let mask = u64::from(mstatus);
-
-                        let pre_val = self.csr_map[CSR_MSTATUS as usize];
-                        let next_val = val | (mask & pre_val);
-
-                        self.csr_map[CSR_MSTATUS as usize] = next_val;
-                        // println!("MSTATUS:{:x}", next_val);
-                    }
-                    _ => self.csr_map[addr as usize] = val,
-                };
-                0
+                self.csr_map[addr as usize] = val;
+                Ok(val)
             }
         }
     }
 
-    pub fn read_s_csr(&self, addr: u64) -> Option<u64> {
-        self.csr_s_mask
+    fn read_csr_mask(&self, addr: u64) -> Option<u64> {
+        self.csr_mask
             .iter()
-            .find(|item| item.addr as u64 == addr)
-            .map(|x| {
-                let _pre_val = self.csr_map[x.redirect_addr as usize];
-                // println!("read:{addr:x},{pre_val:x}");
-                self.csr_map[x.redirect_addr as usize] & x.rmask
-            })
+            .find(|item| item.csr_address as u64 == addr)
+            .map(|x| self.csr_map[x.redirect_addr as usize] & x.read_mask)
     }
 
-    pub fn write_s_csr(&mut self, addr: u64, val: u64) -> Option<u64> {
-        self.csr_s_mask
+    fn write_csr_mask(&mut self, addr: u64, val: u64) -> Option<u64> {
+        self.csr_mask
             .iter_mut()
-            .find(|item| item.addr as u64 == addr)
+            .find(|item| item.csr_address as u64 == addr)
             .map(|x| {
                 let pre_val = self.csr_map[x.redirect_addr as usize];
                 // println!("addr:{:x},val:{:x}", addr, val);
                 // println!("pre:{:x}", pre_val);
-                let next_val = (pre_val & !x.wmask) | (val & x.wmask);
+                let next_val = (pre_val & !x.write_mask) | (val & x.write_mask);
                 // println!("next:{:x}", next_val);
                 // println!("mask:{:x}", x.wmask);
                 self.csr_map[x.redirect_addr as usize] = next_val;
@@ -359,37 +327,17 @@ impl CsrRegs {
             })
     }
 
-    pub fn read_raw_mask(&self, addr: u64, mask: u64) -> u64 {
-        assert!(addr < 4096);
-        if !self.check_csr(addr) {
-            panic!("csr:{addr:X},can not find");
-        };
-
-        get_field(self.csr_map[addr as usize], mask)
+    // no privilege check
+    pub fn read_raw(&self, csr_addr: u64) -> u64 {
+        assert!(csr_addr < 4096);
+        self.csr_map[csr_addr as usize]
     }
-
-    pub fn write_raw_mask(&mut self, addr: u64, val: u64, mask: u64) -> u64 {
-        assert!(addr < 4096);
-        if !self.check_csr(addr) {
-            panic!("csr:{addr:X},can not find");
-        };
-
-        self.csr_map[addr as usize] = set_field(self.csr_map[addr as usize], mask, val);
-        self.csr_map[addr as usize]
+    // no privilege check
+    pub fn write_raw(&mut self, csr_addr: u64, val: u64) -> u64 {
+        assert!(csr_addr < 4096);
+        self.csr_map[csr_addr as usize] = val;
+        val
     }
-}
-
-impl Default for CsrRegs {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub trait CsrRW {
-    fn read(&self) -> u64;
-    fn write(&mut self, val: u64) -> u64;
-    fn write_raw_mask(&mut self, data: u64, mask: u64) -> u64;
-    fn read_raw_mask(&self, mask: u64) -> u64;
 }
 
 #[derive(Clone, Copy)]
@@ -399,8 +347,6 @@ pub struct BaseCSR {
     pub privi_level: PrivilegeLevels,
     pub read_only: bool,
 }
-
-unsafe impl Sync for BaseCSR {}
 
 impl BaseCSR {
     pub fn new(addr: u64, val: u64) -> Self {
@@ -414,75 +360,10 @@ impl BaseCSR {
             read_only,
         }
     }
-}
-
-impl CsrRW for BaseCSR {
-    fn read(&self) -> u64 {
-        // println!("read {:x},{:x}",self.val, self.addr);
+    pub fn read(&self) -> u64 {
         self.val
-    }
-    fn write(&mut self, val: u64) -> u64 {
-        // println!("write {:x},{:x}",val, self.addr);
-        self.val = val;
-        val
-    }
-    fn write_raw_mask(&mut self, data: u64, mask: u64) -> u64 {
-        self.val = set_field(self.val, mask, data);
-        self.val
-    }
-    fn read_raw_mask(&self, mask: u64) -> u64 {
-        get_field(self.val, mask)
-    }
-}
-
-impl Default for Box<dyn CsrRW> {
-    fn default() -> Self {
-        Box::new(BaseCSR::new(0, 0))
     }
 }
 
 #[cfg(test)]
-mod test_csr {
-    use crate::inst_base::{get_field, set_field, PrivilegeLevels, CSR_MTVEC, CSR_STVEC};
-
-    use super::{BaseCSR, CsrRegs};
-
-    #[test]
-    fn test5() {
-        let reg = 0b1100_1010_1100_1010;
-        let mask = 0b0000_1101_0000_0000;
-        let result = get_field(reg, mask);
-        assert_eq!(result, 0b1000);
-        println!("{result:b}"); // 输出: 0b1010
-
-        let y = set_field(reg, 0xf0, 0b1001);
-
-        println!("{reg:b}");
-        println!("{y:b}");
-    }
-    #[test]
-    fn tset1() {
-        let x = BaseCSR::new(CSR_MTVEC.into(), 0);
-        println!("{}", x.privi_level);
-        assert_eq!(x.privi_level, PrivilegeLevels::Machine);
-        let x = BaseCSR::new(CSR_STVEC.into(), 0);
-        println!("{}", x.privi_level);
-        assert_eq!(x.privi_level, PrivilegeLevels::Supervisor);
-    }
-    #[test]
-    fn tset2() {
-        let mut csr_bus = CsrRegs::new();
-
-        csr_bus.write(CSR_MTVEC.into(), 100);
-        let x = csr_bus.read(CSR_MTVEC.into());
-        assert_eq!(x, 100);
-
-        csr_bus.write(CSR_MTVEC.into(), 123124);
-        let x = csr_bus.read(CSR_MTVEC.into());
-        assert_eq!(x, 123124);
-
-        csr_bus.read(11);
-
-        // println!("{:?}", csr_bus.csr_map.len());
-    }
-}
+mod test_csr {}

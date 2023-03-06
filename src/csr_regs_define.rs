@@ -4,9 +4,41 @@ use bitfield_struct::bitfield;
 use strum_macros::FromRepr;
 
 use crate::{
-    inst_base::PrivilegeLevels,
-    traptype::{TrapType},
+    inst_base::{AccessType, PrivilegeLevels},
+    traptype::TrapType,
 };
+
+#[bitfield(u64)]
+pub struct CsrAddr {
+    #[bits(8)]
+    addr: u8,
+    #[bits(2)]
+    privilege: u8,
+    #[bits(2)]
+    read_write: u8,
+    #[bits(52)]
+    _pad: u64,
+}
+// Attempts to access a non-existent CSR raise an illegal instruction exception. Attempts to access a
+// CSR without appropriate privilege level or to write a read-only register also raise illegal instruction
+// exceptions. A read/write register might also contain some bits that are read-only, in which case
+// writes to the read-only bits are ignored.
+impl CsrAddr {
+    pub fn check_privilege(&self, privi: PrivilegeLevels, access_type: AccessType) -> bool {
+        let privi_check = (privi as u8) >= self.privilege();
+        // println!("privi:{:?},{}", privi, privi_check);
+        match access_type {
+            AccessType::Store => self.not_read_only() && privi_check,
+            _ => privi_check,
+        }
+    }
+
+    fn not_read_only(&self) -> bool {
+        let read_only = self.read_write() == 0b11;
+        // println!("readonly:{}", read_only);
+        !read_only // not read only
+    }
+}
 
 #[bitfield(u64)]
 pub struct Misa {
@@ -41,7 +73,6 @@ pub struct Misa {
     #[bits(2)]
     pub mxl: u8,
 }
-
 
 pub type Sstatus = Mstatus;
 #[bitfield(u64)]
@@ -140,7 +171,6 @@ pub struct Mie {
     #[bits(52)]
     _pad6: u64,
 }
-
 
 pub type Sip = Mip;
 pub type Sie = Mie;
