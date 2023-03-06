@@ -155,11 +155,10 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRC:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
-            }
+            };
             cpu.gpr.write(f.rd, t);
 
             Ok(())
@@ -186,9 +185,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRS_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
             }
 
@@ -217,9 +215,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRW_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
             }
             cpu.gpr.write(f.rd, t);
@@ -248,9 +245,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRCI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
             }
             cpu.gpr.write(f.rd, t);
@@ -277,9 +273,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRSI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
             }
             cpu.gpr.write(f.rd, t);
@@ -307,9 +302,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("CSRRWI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
-                match csr_ret {
-                    Ok(_) => (),
-                    Err(trap_type) => return Err(trap_type),
+                if let Err(trap_type) = csr_ret {
+                    return Err(trap_type);
                 };
             }
             cpu.gpr.write(f.rd, t);

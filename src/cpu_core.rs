@@ -21,7 +21,7 @@ use crate::{
 pub enum CpuState {
     Running,
     Stop,
-    // Abort,
+    Abort,
 }
 
 pub struct CpuCore {
@@ -63,7 +63,7 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: PrivilegeLevels::Machine,
             itrace: Itrace::new(),
-            debug_flag: false,
+            debug_flag: true,
         }
     }
 
@@ -282,6 +282,21 @@ impl CpuCore {
             },
         )
     }
+    // for riscv-tests
+    // It seems in riscv-tests ends with end code
+    // written to a certain physical memory address
+    // (0x80001000 in mose test cases) so checking
+    // the data in the address and terminating the test
+    // if non-zero data is written.
+    // End code 1 seems to mean pass.
+    pub fn check_to_host(&mut self) {
+        let data = self.bus.read(0x8000_1000, 4).unwrap();
+        match data {
+            0 => (),
+            1 => self.cpu_state = CpuState::Stop,
+            2_u64..=u64::MAX => self.cpu_state = CpuState::Abort,
+        };
+    }
 }
 
 #[cfg(test)]
@@ -314,6 +329,7 @@ mod tests_cpu {
         loop {
             cpu.execute(1);
             cycle += 1;
+            cpu.check_to_host();
             if cpu.cpu_state != CpuState::Running {
                 break;
             }

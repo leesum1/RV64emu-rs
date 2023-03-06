@@ -1,28 +1,8 @@
 use crate::{
     bus::Bus,
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
-    traptype::TrapType, inst_base::AccessType,
+    traptype::TrapType, inst_base::AccessType, csr_regs_define::{Stap, StapMode},
 };
-
-struct Stap {
-    val: u64,
-}
-
-impl Stap {
-    pub fn new(val: u64) -> Self {
-        Stap { val }
-    }
-
-    pub fn ppn(&self) -> u64 {
-        self.val & 0xfff_ffff_ffff
-    }
-    pub fn asid(&self) -> u64 {
-        (self.val >> 44) & 0xffff
-    }
-    pub fn mode(&self) -> u64 {
-        (self.val >> 60) & 0xf
-    }
-}
 
 
 
@@ -48,8 +28,8 @@ impl Mmu {
 
     // todo! check privilege mode
     pub fn va_translation_step1(&mut self, stap: u64) -> Result<u8, TrapType> {
-        let stap_val = Stap::new(stap);
-        assert_eq!(stap_val.mode(), 8); // todo!  sv39 mode only
+        let stap_val = Stap::from(stap);
+        assert_eq!(stap_val.mode(), StapMode::Sv39); // todo!  sv39 mode only
         self.pagesize = 2 ^ 12; // 4096
         self.level = 3;
         self.i = self.level - 1;

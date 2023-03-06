@@ -212,7 +212,7 @@ impl Mip {
         panic!("no interupt:{self:?}");
     }
 }
-
+pub type Scause = Mcause;
 #[bitfield(u64)]
 pub struct Mcause {
     #[bits(63)]
@@ -242,4 +242,142 @@ pub struct Medeleg {
     pub store_page_fault: bool,
     #[bits(48)]
     pub _reserved2: u64,
+}
+
+pub type Mcountinhibit = Mcounteren;
+#[bitfield(u64)]
+pub struct Mcounteren {
+    pub cy: bool,
+    pub tm: bool,
+    pub ir: bool,
+    #[bits(29)]
+    hmp3_31: u32,
+    _pad: u32,
+}
+
+impl Mcounteren {
+    pub fn hmp(&self, idx: usize) -> bool {
+        assert!(idx >= 3);
+        let idx_offset = idx - 3;
+        ((self.hmp3_31() >> idx_offset) & 0b1) == 1
+    }
+    // todo! set val true or false
+    pub fn set_hmp(&mut self, idx: usize) {
+        assert!(idx >= 3);
+        let idx_offset = idx - 3;
+        let pre_hmp_n = self.hmp3_31();
+        let next_hmp_n = pre_hmp_n | (1 << idx_offset);
+        self.set_hmp3_31(next_hmp_n);
+    }
+}
+
+#[bitfield(u64)]
+pub struct Menvcfg {
+    pub fiom: bool,
+    #[bits(3)]
+    _wpri0: u8,
+    #[bits(2)]
+    pub cbie: u8,
+    pub cbcfe: bool,
+    pub cbze: bool,
+    #[bits(54)]
+    _wpri1: u64,
+    pub pbmte: bool,
+    pub stce: bool,
+}
+
+#[bitfield(u64)]
+pub struct Mseccfg {
+    pub mml: bool,
+    pub mmwp: bool,
+    pub rlb: bool,
+    #[bits(5)]
+    _wpri0: u8,
+    pub useed: bool,
+    pub sseed: bool,
+    #[bits(54)]
+    _wpri0: u64,
+}
+
+// implement `From<u64>` and `Into<u64>` for `CustomEnum`!
+// impl From<u8> for PMPcfgIn {
+//     fn from(value: u8) -> Self {
+//         PMPcfgIn::from(value)
+//     }
+// }
+
+// impl Into<u8> for PMPcfgIn {
+//     fn into(self) -> u8 {
+//         self.0
+//     }
+// }
+
+#[bitfield(u8)]
+pub struct PMPcfgIn {
+    pub r: bool,
+    pub w: bool,
+    pub x: bool,
+    #[bits(2)]
+    pub a: u8,
+    #[bits(2)]
+    _pad: u8,
+    pub l: bool,
+}
+
+#[bitfield(u64)]
+pub struct PMPcfg {
+    pub pmp0cfg: u8,
+    pub pmp1cfg: u8,
+    pub pmp2cfg: u8,
+    pub pmp3cfg: u8,
+    pub pmp4cfg: u8,
+    pub pmp5cfg: u8,
+    pub pmp6cfg: u8,
+    pub pmp7cfg: u8,
+}
+
+#[bitfield(u64)]
+pub struct PMPaddr {
+    #[bits(54)]
+    pub address_55_2: u64,
+    #[bits(10)]
+    _pad: u32,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum StapMode {
+    Bare = 0,
+    Sv39 = 8,
+    Sv48 = 9,
+    Sv57 = 10,
+    Sv64 = 11,
+}
+
+impl From<u64> for StapMode {
+    fn from(value: u64) -> Self {
+        match value {
+            0 => StapMode::Bare,
+            8 => StapMode::Sv39,
+            9 => StapMode::Sv48,
+            10 => StapMode::Sv57,
+            11 => StapMode::Sv64,
+            val => panic!("StapMode:{val}"),
+        }
+    }
+}
+
+impl From<StapMode> for u64 {
+    fn from(val: StapMode) -> Self {
+        val as u64
+    }
+}
+
+#[bitfield(u64)]
+pub struct Stap {
+    #[bits(44)]
+    pub ppn: u64,
+    #[bits(16)]
+    pub asid: u64,
+    #[bits(4)]
+    pub mode: StapMode,
 }

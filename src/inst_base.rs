@@ -1,3 +1,4 @@
+#![allow(unused)]
 use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
 
 use crate::{cpu_core::CpuCore, traptype::TrapType};
@@ -70,6 +71,7 @@ pub const MATCH_SFENCE_VMA: u32 = 0x12000073;
 pub const MASK_SFENCE_VMA: u32 = 0xfe007fff;
 pub const MATCH_SRET: u32 = 0x10200073;
 pub const MASK_SRET: u32 = 0xffffffff;
+
 pub const MATCH_C_ADD: u32 = 0x9002;
 pub const MASK_C_ADD: u32 = 0xf003;
 pub const MATCH_C_ADDI: u32 = 0x1;
@@ -1226,7 +1228,6 @@ impl AccessType {
         }
     }
 }
-
 
 impl PrivilegeLevels {
     pub fn check_priv(&self, another_priv: PrivilegeLevels) -> bool {
