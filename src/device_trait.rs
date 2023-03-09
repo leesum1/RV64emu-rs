@@ -11,6 +11,8 @@
 // #define FB_ADDR         (MMIO_BASE   + 0x1000000)
 // #define AUDIO_SBUF_ADDR (MMIO_BASE   + 0x1200000)
 
+pub const SIFIVE_UART_BASE: u64 = 0xc0000000;
+
 pub const MEM_BASE: u64 = 0x80000000;
 pub const DEVICE_BASE: u64 = 0xa0000000;
 pub const SERIAL_PORT: u64 = DEVICE_BASE + 0x00003f8;

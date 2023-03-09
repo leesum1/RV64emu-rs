@@ -299,19 +299,6 @@ pub struct Mseccfg {
     _wpri0: u64,
 }
 
-// implement `From<u64>` and `Into<u64>` for `CustomEnum`!
-// impl From<u8> for PMPcfgIn {
-//     fn from(value: u8) -> Self {
-//         PMPcfgIn::from(value)
-//     }
-// }
-
-// impl Into<u8> for PMPcfgIn {
-//     fn into(self) -> u8 {
-//         self.0
-//     }
-// }
-
 #[bitfield(u8)]
 pub struct PMPcfgIn {
     pub r: bool,
@@ -324,16 +311,36 @@ pub struct PMPcfgIn {
     pub l: bool,
 }
 
+impl From<u64> for PMPcfgIn {
+    fn from(value: u64) -> Self {
+        PMPcfgIn::from(value as u8)
+    }
+}
+
+impl From<PMPcfgIn> for u64 {
+    fn from(val: PMPcfgIn) -> Self {
+        val.0 as u64
+    }
+}
+
 #[bitfield(u64)]
 pub struct PMPcfg {
-    pub pmp0cfg: u8,
-    pub pmp1cfg: u8,
-    pub pmp2cfg: u8,
-    pub pmp3cfg: u8,
-    pub pmp4cfg: u8,
-    pub pmp5cfg: u8,
-    pub pmp6cfg: u8,
-    pub pmp7cfg: u8,
+    #[bits(8)]
+    pub pmp0cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp1cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp2cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp3cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp4cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp5cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp6cfg: PMPcfgIn,
+    #[bits(8)]
+    pub pmp7cfg: PMPcfgIn,
 }
 
 #[bitfield(u64)]

@@ -55,7 +55,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             cpu.lr_sc_set.set(rs1_data);
-            cpu.gpr.write(f.rd, r_data as u64);
+            cpu.gpr.write(f.rd, r_data);
 
             Ok(())
         },
@@ -71,7 +71,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs2_data = cpu.gpr.read(f.rs2);
 
             if cpu.lr_sc_set.check_and_clear(rs1_data) {
-                cpu.bus.write(rs1_data, rs2_data, 4);
+                match cpu.bus.write(rs1_data, rs2_data, 4) {
+                    Ok(_) => {}
+                    Err(_) => return Err(TrapType::StoreAddressMisaligned),
+                }
                 cpu.gpr.write(f.rd, 0);
             } else {
                 cpu.gpr.write(f.rd, 1);
@@ -90,7 +93,11 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs2_data = cpu.gpr.read(f.rs2);
 
             if cpu.lr_sc_set.check_and_clear(rs1_data) {
-                cpu.bus.write(rs1_data, rs2_data, 8);
+                // todo!
+                match cpu.bus.write(rs1_data, rs2_data, 8) {
+                    Ok(_) => {}
+                    Err(_) => return Err(TrapType::StoreAddressMisaligned),
+                };
                 cpu.gpr.write(f.rd, 0);
             } else {
                 cpu.gpr.write(f.rd, 1);
@@ -115,7 +122,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
 
-            cpu.bus.write(rs1_data, rs2_data, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, rs2_data, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
             Ok(())
@@ -134,7 +142,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Ok(data) => data,
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
-            cpu.bus.write(rs1_data, rs2_data, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, rs2_data, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -157,7 +166,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Ok(data) => data,
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
-            cpu.bus.write(rs1_data, tmp ^ rs2_data, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, tmp ^ rs2_data, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
             Ok(())
@@ -176,7 +186,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Ok(data) => data,
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
-            cpu.bus.write(rs1_data, tmp ^ rs2_data, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, tmp ^ rs2_data, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -195,7 +206,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Ok(data) => data,
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
-            cpu.bus.write(rs1_data, tmp | rs2_data, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, tmp | rs2_data, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
             Ok(())
@@ -214,7 +226,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Ok(data) => data,
                 Err(_) => return Err(TrapType::LoadAddressMisaligned),
             };
-            cpu.bus.write(rs1_data, tmp | rs2_data, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, tmp | rs2_data, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -239,7 +252,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as u32).min(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -260,7 +274,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = tmp.min(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -281,7 +296,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as i32).min(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -302,8 +318,9 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as i64).min(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
-            cpu.gpr.write(f.rd, tmp as u64);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 8).unwrap();
+            cpu.gpr.write(f.rd, tmp);
 
             Ok(())
         },
@@ -323,7 +340,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as u32).max(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -344,7 +362,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = tmp.max(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -365,7 +384,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as i32).max(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -386,8 +406,9 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as i64).max(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
-            cpu.gpr.write(f.rd, tmp as u64);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 8).unwrap();
+            cpu.gpr.write(f.rd, tmp);
 
             Ok(())
         },
@@ -410,7 +431,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as u32) & rs2_data;
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -431,7 +453,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = tmp & rs2_data;
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -455,7 +478,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = (tmp as u32).wrapping_add(rs2_data);
-            cpu.bus.write(rs1_data, amo_write as u64, 4);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write as u64, 4).unwrap();
             cpu.gpr.write(f.rd, tmp as i32 as i64 as u64);
 
             Ok(())
@@ -476,9 +500,9 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             let amo_write = tmp.wrapping_add(rs2_data);
-            // let amo_write = tmp + rs2_data;
 
-            cpu.bus.write(rs1_data, amo_write as u64, 8);
+            // no err happenes here
+            cpu.bus.write(rs1_data, amo_write, 8).unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())

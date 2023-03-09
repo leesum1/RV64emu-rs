@@ -834,7 +834,7 @@ pub const DCSR_CAUSE: u64 = 7 << 6;
 pub const DCSR_DEBUGINT: u64 = 1 << 5;
 pub const DCSR_HALT: u64 = 1 << 3;
 pub const DCSR_STEP: u64 = 1 << 2;
-pub const DCSR_PRV: u64 = 3 << 0;
+pub const DCSR_PRV: u64 = 3;
 
 pub const DCSR_CAUSE_NONE: u64 = 0;
 pub const DCSR_CAUSE_SWBP: u64 = 1;

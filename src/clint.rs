@@ -1,7 +1,6 @@
-
-
 const MTIMECMP_OFFSET: u64 = 0x4000;
 const MTIME_OFFSET: u64 = 0xBFF8;
+const MSIP_OFFSET: u64 = 0x0;
 
 pub struct DeviceClint {
     pub start: u64,
@@ -23,26 +22,24 @@ impl Clint {
         }
     }
     pub fn do_read(&self, addr: u64, len: usize) -> u64 {
-        assert_eq!(len, 8);
-
-        match addr {
-            MTIME_OFFSET => self.mtime,
-            MTIMECMP_OFFSET => self.mtimecmp,
-            offset => panic!("Read Clint offset:{offset} err!"),
+        match (addr, len) {
+            (MSIP_OFFSET, 4) => 0,
+            (MTIME_OFFSET, 8) => self.mtime,
+            (MTIMECMP_OFFSET, 8) => self.mtimecmp,
+            (offset, _len) => panic!("Read Clint offset:{offset} err!"),
         }
     }
     pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
-        assert_eq!(len, 8);
-        match addr {
-            MTIME_OFFSET => self.mtime = data,
-            MTIMECMP_OFFSET => self.mtimecmp = data,
-            offset => panic!("Write Clint offset:{offset} err!"),
+        match (addr, len) {
+            (MTIME_OFFSET, 8) => self.mtime = data,
+            (MTIMECMP_OFFSET, 8) => self.mtimecmp = data,
+            (offset, _len) => panic!("Write Clint offset:{offset} err!"),
         };
         data
     }
 
     pub fn do_update(&mut self) {
-        self.mtime += 2; 
+        self.mtime += 2;
     }
 
     pub fn is_interrupt(&self) -> bool {

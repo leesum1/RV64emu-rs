@@ -1,10 +1,10 @@
 use crate::{
     bus::Bus,
+    csr_regs_define::{Stap, StapMode},
+    inst_base::AccessType,
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
-    traptype::TrapType, inst_base::AccessType, csr_regs_define::{Stap, StapMode},
+    traptype::TrapType,
 };
-
-
 
 struct Mmu {
     pub bus: Bus,

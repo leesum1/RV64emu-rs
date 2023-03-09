@@ -8,6 +8,7 @@ mod device_dram;
 mod device_kb;
 mod device_mouse;
 mod device_rtc;
+mod device_sifive_uart;
 mod device_trait;
 mod device_uart;
 mod device_vga;
@@ -30,10 +31,11 @@ use std::{
     process,
     rc::Rc,
     thread::{self, JoinHandle},
-    time::Duration,
+    time::Duration, io::{self, Read},
 };
 
 use clap::Parser;
+
 use ring_channel::*;
 
 use sdl2::{
@@ -48,8 +50,10 @@ use crate::{
     device_kb::{DeviceKB, DeviceKbItem},
     device_mouse::{DeviceMouse, DeviceMouseItem},
     device_rtc::DeviceRTC,
+    device_sifive_uart::DeviceSifiveUart,
     device_trait::{
-        DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT, VGACTL_ADDR,
+        DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT,
+        SIFIVE_UART_BASE, VGACTL_ADDR,
     },
     device_uart::DeviceUart,
     device_vga::DeviceVGA,
@@ -193,8 +197,31 @@ fn main() {
         name: "Mouse",
     });
 
+    // device sifive_uart
+    let (mut sifive_uart_tx, sifive_uart_rx): (RingSender<i32>, RingReceiver<i32>) =
+        ring_channel(NonZeroUsize::new(64).unwrap());
+
+    let device_sifive_uart = Box::new(DeviceSifiveUart::new(sifive_uart_rx));
+
+    cpu.bus.add_device(DeviceType {
+        start: SIFIVE_UART_BASE,
+        len: 0x1000,
+        instance: device_sifive_uart,
+        name: "Sifive_Uart",
+    });
     // show device address map
     println!("{0}", cpu.bus);
+
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock().bytes();
+        loop {
+            let x = handle.next();
+            if let Some(Ok(ch)) = x {
+                sifive_uart_tx.send(ch as i32).unwrap();
+            }
+        }
+    });
 
     // create another thread to simmulate the cpu_core
     // while the main thread is used to handle sdl events
@@ -326,7 +353,7 @@ mod isa_test {
             "rv64mi-p-breakpoint.bin",
             "rv64mi-p-zicntr.bin",
             "rv64mi-p-sbreak.bin",
-            "rv64si-p-sbreak.bin",            
+            "rv64si-p-sbreak.bin",
         ];
         let test2_dir = Path::new(TESTS_PATH);
         let mut tests_ret: Vec<TestRet> = Vec::new();
@@ -352,9 +379,9 @@ mod isa_test {
             .filter(|item| item.ret)
             .for_each(|x| println!("{:40}{}", x.name, x.ret));
         tests_ret
-        .iter()
-        .filter(|item| !item.ret)
-        .for_each(|x| println!("{:40}{}", x.name, x.ret));
+            .iter()
+            .filter(|item| !item.ret)
+            .for_each(|x| println!("{:40}{}", x.name, x.ret));
 
         // tests_ret.iter().for_each(|x| {
         //     assert!(x.ret);

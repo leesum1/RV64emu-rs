@@ -78,6 +78,7 @@ impl CpuCore {
             Some(icache_inst) => Ok(icache_inst),
             None => {
                 let inst_val = self.bus.read(self.pc, 4).unwrap();
+                self.cpu_icache.insert_inst(self.pc, inst_val as u32);
                 Ok(inst_val as u32)
             }
         }
