@@ -1,4 +1,4 @@
-use crate::{csr_regs_define::Mstatus, inst_base::*, traptype::TrapType};
+use crate::{csr_regs_define::Mstatus, inst::inst_base::*, traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_Z: [Instruction; 14] = [
@@ -7,7 +7,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         match_data: MATCH_EBREAK,
         name: "EBREAK",
         operation: |cpu, inst, pc| {
-            cpu.halt();
+            // cpu.halt();
             Ok(())
         },
     },

@@ -3,7 +3,7 @@ use sdl2::{
     keyboard::{Keycode, Scancode},
 };
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 // int keymap[256] = { 0,0,0,0,43,60,58,45,31,46,47,48,36,49,50,51,62,61,37,38,
 //     29,32,44,33,35,59,30,57,34,56,15,16,17,18,19,20,21,22,23,

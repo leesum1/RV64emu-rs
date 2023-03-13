@@ -3,7 +3,7 @@ use std::{cell::Cell, rc::Rc};
 
 use sdl2::{pixels::PixelFormatEnum, render::WindowCanvas};
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 const VGA_H: usize = 300;
 const VGA_W: usize = 400;

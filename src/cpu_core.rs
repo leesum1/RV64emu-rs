@@ -2,17 +2,17 @@ use std::{fs::File, io::Write};
 
 use crate::{
     bus::Bus,
-    clint::{Clint, DeviceClint},
+    sifive_clint::{Clint, DeviceClint},
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
     csr_regs_define::{Mip, Mstatus, Mtvec, Stvec},
     gpr::Gpr,
-    inst_base::{
+    inst::inst_base::{
         PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
         CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
     },
     inst_decode::InstDecode,
-    inst_rv64a::LrScReservation,
+    inst::inst_rv64a::LrScReservation,
     itrace::Itrace,
     traptype::TrapType,
 };
@@ -304,7 +304,7 @@ impl CpuCore {
 mod tests_cpu {
     use std::{fs::read_dir, path::Path};
 
-    use crate::{bus::DeviceType, device_dram::DeviceDram};
+    use crate::{bus::DeviceType, device::device_dram::DeviceDram};
 
     use super::{CpuCore, CpuState};
 

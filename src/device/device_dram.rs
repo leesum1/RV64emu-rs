@@ -1,6 +1,6 @@
 use std::{fs, vec};
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 pub struct DeviceDram {
     data: Vec<u8>,

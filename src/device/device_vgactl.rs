@@ -5,7 +5,7 @@ use std::{
 
 
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 // type VgaCtlSender = Producer<bool, Rc<LocalRb<bool, Vec<MaybeUninit<bool>>>>>;
 type VgaCtlSender = Rc<Cell<bool>>;

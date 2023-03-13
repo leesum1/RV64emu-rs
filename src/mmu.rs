@@ -1,7 +1,7 @@
 use crate::{
     bus::Bus,
     csr_regs_define::{Stap, StapMode},
-    inst_base::AccessType,
+    inst::inst_base::AccessType,
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
     traptype::TrapType,
 };

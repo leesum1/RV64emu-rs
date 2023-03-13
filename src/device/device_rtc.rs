@@ -1,6 +1,6 @@
 
 
-use crate::device_trait::DeviceBase;
+use super::device_trait::DeviceBase;
 use chrono::prelude::*;
 
 pub struct DeviceRTC {
@@ -38,7 +38,7 @@ impl DeviceBase for DeviceRTC {
 #[cfg(test)]
 mod test_rtc {
 
-    use crate::device_trait::DeviceBase;
+    use crate::device::device_trait::DeviceBase;
 
     use super::DeviceRTC;
 

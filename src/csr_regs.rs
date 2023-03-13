@@ -3,7 +3,7 @@
 
 use crate::{
     csr_regs_define::{CsrAddr, Misa, Mstatus, Sie, Sip, Sstatus},
-    inst_base::*,
+    inst::inst_base::*,
     traptype::TrapType,
 };
 

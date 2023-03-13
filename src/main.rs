@@ -1,37 +1,26 @@
 mod bus;
-mod clint;
 mod cpu_core;
 mod cpu_icache;
 mod csr_regs;
 mod csr_regs_define;
-mod device_dram;
-mod device_kb;
-mod device_mouse;
-mod device_rtc;
-mod device_sifive_uart;
-mod device_trait;
-mod device_uart;
-mod device_vga;
-mod device_vgactl;
+mod device;
 mod gpr;
-mod inst_base;
+mod inst;
 mod inst_decode;
-mod inst_rv64a;
-mod inst_rv64i;
-mod inst_rv64m;
-mod inst_rv64z;
 mod itrace;
 mod mmu;
+mod sifive_clint;
 mod sv39;
 mod traptype;
 
 use std::{
     cell::Cell,
+    io::{self, Read},
     num::NonZeroUsize,
     process,
     rc::Rc,
     thread::{self, JoinHandle},
-    time::Duration, io::{self, Read},
+    time::Duration,
 };
 
 use clap::Parser;
@@ -46,18 +35,21 @@ use sdl2::{
 use crate::{
     bus::DeviceType,
     cpu_core::{CpuCore, CpuState},
-    device_dram::DeviceDram,
-    device_kb::{DeviceKB, DeviceKbItem},
-    device_mouse::{DeviceMouse, DeviceMouseItem},
-    device_rtc::DeviceRTC,
-    device_sifive_uart::DeviceSifiveUart,
-    device_trait::{
-        DeviceBase, FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT,
-        SIFIVE_UART_BASE, VGACTL_ADDR,
+    device::{
+        device_dram::DeviceDram,
+        device_kb::{DeviceKB, DeviceKbItem},
+        device_mouse::{DeviceMouse, DeviceMouseItem},
+        device_rtc::DeviceRTC,
+        device_sifive_uart::DeviceSifiveUart,
+        device_trait::DeviceBase,
+        device_trait::{
+            FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE,
+            VGACTL_ADDR,
+        },
+        device_uart::DeviceUart,
+        device_vga::DeviceVGA,
+        device_vgactl::DeviceVGACTL,
     },
-    device_uart::DeviceUart,
-    device_vga::DeviceVGA,
-    device_vgactl::DeviceVGACTL,
 };
 // /* 各个设备地址 */
 // #define MEM_BASE 0x80000000
@@ -307,8 +299,8 @@ mod isa_test {
     use crate::{
         bus::DeviceType,
         cpu_core::{CpuCore, CpuState},
-        device_dram::DeviceDram,
-        device_trait::{DeviceBase, MEM_BASE},
+        device::device_dram::DeviceDram,
+        device::device_trait::{DeviceBase, MEM_BASE},
     };
 
     fn start_test(img: &str) -> bool {

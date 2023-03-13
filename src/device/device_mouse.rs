@@ -1,6 +1,8 @@
 use ring_channel::RingReceiver;
 
-use crate::device_trait::DeviceBase;
+use device_trait::DeviceBase;
+
+use super::device_trait;
 
 const MOUSE_KEY_OFFSET: u64 = 0;
 const POSITION_X_OFFSET: u64 = 8;

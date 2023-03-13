@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 pub struct DeviceUart {}
 
@@ -33,7 +33,7 @@ impl DeviceBase for DeviceUart {
 
 #[cfg(test)]
 mod test_gpr {
-    use crate::device_trait::DeviceBase;
+    use crate::device::device_trait::DeviceBase;
 
     use super::DeviceUart;
 

@@ -4,7 +4,7 @@ use bitfield_struct::bitfield;
 use strum_macros::FromRepr;
 
 use crate::{
-    inst_base::{AccessType, PrivilegeLevels},
+    inst::inst_base::{AccessType, PrivilegeLevels},
     traptype::TrapType,
 };
 

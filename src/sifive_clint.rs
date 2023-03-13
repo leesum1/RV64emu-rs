@@ -31,6 +31,7 @@ impl Clint {
     }
     pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         match (addr, len) {
+            (MSIP_OFFSET, 4) => {},
             (MTIME_OFFSET, 8) => self.mtime = data,
             (MTIMECMP_OFFSET, 8) => self.mtimecmp = data,
             (offset, _len) => panic!("Write Clint offset:{offset} err!"),

@@ -1,4 +1,4 @@
-use crate::{clint::DeviceClint, device_trait::DeviceBase};
+use crate::{device::device_trait::DeviceBase, sifive_clint::DeviceClint};
 
 pub struct DeviceType {
     pub start: u64,

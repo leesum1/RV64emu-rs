@@ -1,0 +1,96 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <0x2>;
+	#size-cells = <0x2>;
+	compatible = "riscv-virtio";
+	model = "riscv-virtio,qemu";
+
+	chosen {
+		// bootargs = "root=/dev/vda rw ttyS0";
+		stdout-path = "/uart@c0000000";
+	};
+
+	uart@c0000000 {
+		// interrupts = <0xa>;
+		// interrupt-parent = <0x3>;
+		clock-frequency = <0x384000>;
+		current-speed = <115200>;
+		reg = <0x0 0xc0000000 0x0 0x1000>;
+		compatible = "sifive,uart0";
+	};
+
+	// L28: serial@10010000 {
+	// 	compatible = "sifive,uart0";
+	// 	interrupt-parent = <&L4>;
+	// 	interrupts = <4>;
+	// 	reg = <0x0 0x10010000 0x0 0x1000>;
+	// 	reg-names = "control";
+	// 	clocks = <&tlclk>;
+	// };
+
+	// virtio_mmio@10001000 {
+	// 	interrupts = <0x1>;
+	// 	interrupt-parent = <0x3>;
+	// 	reg = <0x0 0x10001000 0x0 0x1000>;
+	// 	compatible = "virtio,mmio";
+	// };
+
+	cpus {
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+		timebase-frequency = <0x989680>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+			};
+		};
+
+		cpu0:cpu@0 {
+			device_type = "cpu";
+			reg = <0x0>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64ima";
+			mmu-type = "riscv,none";
+        	L10: interrupt-controller {                                                                    
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+            };
+
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x8000000>;
+	};
+
+	soc {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		compatible = "simple-bus";
+		ranges;
+
+		// interrupt-controller@c000000 {
+		// 	phandle = <0x3>;
+		// 	riscv,ndev = <0x35>;
+		// 	reg = <0x0 0xc000000 0x0 0x4000000>;
+		// 	interrupts-extended = <0x2 0xb 0x2 0x9>;
+		// 	interrupt-controller;
+		// 	compatible = "riscv,plic0";
+		// 	#interrupt-cells = <0x1>;
+		// 	#address-cells = <0x0>;
+		// };
+
+		clint@2000000 {
+			interrupts-extended = <&L10 0x3 &L10 0x7>;
+			reg = <0x0 0x2000000 0x0 0x10000>;
+			compatible = "riscv,clint0";
+		};
+	};
+};

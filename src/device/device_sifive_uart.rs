@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use ring_channel::RingReceiver;
 
-use crate::device_trait::DeviceBase;
+use crate::device::device_trait::DeviceBase;
 
 const TXDATA: usize = 0x00;
 const RXDATA: usize = 0x04;
@@ -82,15 +82,3 @@ impl DeviceBase for DeviceSifiveUart {
     fn do_update(&mut self) {}
 }
 
-// #[test]
-
-// fn term_test1() {
-//     let term = Term::stdout();
-
-//     loop {
-//         if let Ok(val) = term.read_char() {
-//             print!("{val}");
-//             io::stdout().flush();
-//         }
-//     }
-// }
