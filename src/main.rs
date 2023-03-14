@@ -85,7 +85,7 @@ fn main() {
     mem.load_binary(&args.img);
     let device_name = mem.get_name();
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem,
@@ -96,7 +96,7 @@ fn main() {
     let uart = Box::new(DeviceUart::new());
     let device_name = uart.get_name();
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart,
@@ -107,7 +107,7 @@ fn main() {
     let rtc = Box::new(DeviceRTC::new());
     let device_name = rtc.get_name();
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
         instance: rtc,
@@ -141,7 +141,7 @@ fn main() {
     let vgactl = Box::new(DeviceVGACTL::new(vgactl_msg.clone()));
 
     let device_name = vgactl.get_name();
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
         instance: vgactl,
@@ -151,7 +151,7 @@ fn main() {
     // device vga
     let vga = Box::new(DeviceVGA::new(canvas, vgactl_msg));
     let device_name = vga.get_name();
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
         instance: vga,
@@ -171,7 +171,7 @@ fn main() {
     let device_kb = Box::new(DeviceKB::new(kb_am_rx, kb_sdl_rx));
     let device_name = device_kb.get_name();
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
         instance: device_kb,
@@ -182,7 +182,7 @@ fn main() {
         ring_channel(NonZeroUsize::new(1).unwrap());
     let device_mouse = Box::new(DeviceMouse::new(mouse_sdl_rx));
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: MOUSE_ADDR,
         len: 16,
         instance: device_mouse,
@@ -195,14 +195,14 @@ fn main() {
 
     let device_sifive_uart = Box::new(DeviceSifiveUart::new(sifive_uart_rx));
 
-    cpu.bus.add_device(DeviceType {
+    cpu.mmu.bus.add_device(DeviceType {
         start: SIFIVE_UART_BASE,
         len: 0x1000,
         instance: device_sifive_uart,
         name: "Sifive_Uart",
     });
     // show device address map
-    println!("{0}", cpu.bus);
+    println!("{0}", cpu.mmu.bus);
 
     thread::spawn(move || {
         let stdin = io::stdin();
@@ -310,7 +310,7 @@ mod isa_test {
         let mut mem = Box::new(DeviceDram::new(128 * 1024 * 1024));
         mem.load_binary(img);
         let device_name = mem.get_name();
-        cpu.bus.add_device(DeviceType {
+        cpu.mmu.bus.add_device(DeviceType {
             start: MEM_BASE,
             len: mem.capacity as u64,
             instance: mem,

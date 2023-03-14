@@ -8,7 +8,7 @@
 
 	chosen {
 		// bootargs = "root=/dev/vda rw ttyS0";
-		stdout-path = "/uart@c0000000";
+		stdout-path = "/uart@c0000000"; // chose a system console
 	};
 
 	uart@c0000000 {
@@ -40,7 +40,7 @@
 		#address-cells = <0x1>;
 		#size-cells = <0x0>;
 		timebase-frequency = <0x989680>;
-
+		// todo! I can't understand !
 		cpu-map {
 			cluster0 {
 				core0 {
@@ -55,7 +55,11 @@
 			status = "okay";
 			compatible = "riscv";
 			riscv,isa = "rv64ima";
-			mmu-type = "riscv,none";
+			mmu-type = "riscv,none"; // sv39
+			// a hart is also an interrupt-controller
+			// some interrupt will directly connect to a hart
+			// such as soft irq and time irq and ext irq
+			//
         	L10: interrupt-controller {                                                                    
 				#interrupt-cells = <1>;
 				compatible = "riscv,cpu-intc";
@@ -88,6 +92,9 @@
 		// };
 
 		clint@2000000 {
+			// connect to cpu0
+			// 0x3: soft irq
+			// 0x7: mtime irq
 			interrupts-extended = <&L10 0x3 &L10 0x7>;
 			reg = <0x0 0x2000000 0x0 0x10000>;
 			compatible = "riscv,clint0";

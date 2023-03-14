@@ -15,7 +15,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         mask: MASK_ECALL,
         match_data: MATCH_ECALL,
         name: "ECALL",
-        operation: |cpu, inst, pc| match cpu.cur_priv {
+        operation: |cpu, inst, pc| match cpu.cur_priv.get() {
             PrivilegeLevels::User => Err(TrapType::EnvironmentCallFromUMode),
             PrivilegeLevels::Supervisor => Err(TrapType::EnvironmentCallFromSMode),
             PrivilegeLevels::Machine => Err(TrapType::EnvironmentCallFromMMode),
@@ -44,7 +44,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // xIE is set to xPIE
             mstatus.set_mie(mstatus.mpie());
             // the privilege mode is changed to xPP
-            cpu.cur_priv = y;
+            cpu.cur_priv.set(y);
             // xPIE is set to 1;
             mstatus.set_mpie(true);
             // xPP is set to the least-privileged supported mode
@@ -91,7 +91,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // xIE is set to xPIE
             mstatus.set_sie(mstatus.spie());
             // the privilege mode is changed to xPP
-            cpu.cur_priv = y;
+            cpu.cur_priv.set(y);
             // xPIE is set to 1;
             mstatus.set_spie(true);
             // xPP is set to the least-privileged supported mode
@@ -142,7 +142,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         operation: |cpu, inst, pc| {
             // t = CSRs[csr]; CSRs[csr] = t &∼x[rs1]; x[rd] = t
             let f = parse_format_csr(inst);
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -154,7 +154,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let csr_wb_data = t & !rs1_data;
             // println!("CSRRC:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };
@@ -171,7 +171,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         operation: |cpu, inst, pc| {
             // t = CSRs[csr]; CSRs[csr] = t | x[rs1]; x[rd] = t
             let f = parse_format_csr(inst);
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -184,7 +184,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // println!("rs1_data:{rs1_data:x}");
             // println!("CSRRS_now:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };
@@ -203,7 +203,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // t = CSRs[csr]; CSRs[csr] = x[rs1]; x[rd] = t
             let f = parse_format_csr(inst);
 
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -214,7 +214,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let csr_wb_data = rs1_data;
             // println!("CSRRW_now:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };
@@ -231,7 +231,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         operation: |cpu, inst, pc| {
             // t = CSRs[csr]; CSRs[csr] = t &∼zimm; x[rd] =
             let f = parse_format_csr(inst);
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -244,7 +244,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let csr_wb_data = t & !zimm;
             // println!("CSRRCI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };
@@ -261,7 +261,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         operation: |cpu, inst, pc| {
             // t = CSRs[csr]; CSRs[csr] = t | zimm; x[rd] = t
             let f = parse_format_csr(inst);
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -272,7 +272,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let csr_wb_data = t | zimm;
             // println!("CSRRSI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };
@@ -290,7 +290,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // x[rd] = CSRs[csr]; CSRs[csr] = zimm
             let f = parse_format_csr(inst);
 
-            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv);
+            let csr_ret = cpu.csr_regs.read(f.csr, cpu.cur_priv.get());
 
             let t = match csr_ret {
                 Ok(val) => val,
@@ -301,7 +301,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let csr_wb_data = zimm;
             // println!("CSRRWI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
-                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv);
+                let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
                     return Err(trap_type);
                 };

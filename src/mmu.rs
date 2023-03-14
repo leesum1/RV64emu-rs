@@ -1,25 +1,57 @@
+use std::cell::Cell;
+
 use crate::{
     bus::Bus,
-    csr_regs_define::{Stap, StapMode},
-    inst::inst_base::AccessType,
+    csr_regs_define::{Mstatus, Stap, StapMode},
+    inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
+    sifive_clint::{Clint, DeviceClint},
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
     traptype::TrapType,
 };
 
-struct Mmu {
+pub struct Mmu {
     pub bus: Bus,
     pub access_type: AccessType,
-    pub i: i8,
-    pub level: i8,
-    pub pagesize: u64,
-    pub a: u64,
-    pub va: Sv39Va,
-    pub pa: Sv39Pa,
-    pub pte: Sv39PTE,
+    mstatus: Mstatus,
+    stap: Stap,
+    cur_priv: Cell<PrivilegeLevels>,
+    i: i8,
+    level: i8,
+    pagesize: u64,
+    a: u64,
+    va: Sv39Va,
+    pa: Sv39Pa,
+    pte: Sv39PTE,
 }
 
 impl Mmu {
-    pub fn get_ptesize(&self) -> u64 {
+    pub fn new(privilege: Cell<PrivilegeLevels>) -> Self {
+        let clint_u = Clint::new();
+        let device_clint = DeviceClint {
+            start: 0x2000000,
+            len: 0xBFFF,
+            instance: clint_u,
+            name: "Clint",
+        };
+
+        let bus_u = Bus::new(device_clint);
+        Mmu {
+            bus: bus_u,
+            access_type: AccessType::Load,
+            mstatus: 0.into(),
+            stap: 0.into(),
+            i: 0,
+            level: 0,
+            pagesize: 0,
+            a: 0,
+            va: 0.into(),
+            pa: 0.into(),
+            pte: 0.into(),
+            cur_priv: privilege,
+        }
+    }
+
+    fn get_ptesize(&self) -> u64 {
         8 // todo! sv39 mode only
     }
     // 1. Let a be satp.ppn × PAGESIZE, and let i = LEVELS − 1. (For Sv32, PAGESIZE=2^12 and
@@ -27,13 +59,13 @@ impl Mmu {
     // S-mode or U-mode.
 
     // todo! check privilege mode
-    pub fn va_translation_step1(&mut self, stap: u64) -> Result<u8, TrapType> {
-        let stap_val = Stap::from(stap);
-        assert_eq!(stap_val.mode(), StapMode::Sv39); // todo!  sv39 mode only
+    fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
+        assert_eq!(self.stap.mode(), StapMode::Sv39); // todo!  sv39 mode only
+        assert_ne!(self.cur_priv.get(), PrivilegeLevels::Machine); // check privilege mode
         self.pagesize = 2 ^ 12; // 4096
         self.level = 3;
         self.i = self.level - 1;
-        self.a = stap_val.ppn() * self.pagesize;
+        self.a = self.stap.ppn() * self.pagesize;
         Ok(2)
     }
     // 2. Let pte be the value of the PTE at address a+va.vpn[i]×PTESIZE. (For Sv32, PTESIZE=4.)
@@ -41,7 +73,7 @@ impl Mmu {
     // to the original access type.
 
     // todo! PMA or PMP check
-    pub fn va_translation_step2(&mut self) -> Result<(), TrapType> {
+    fn va_translation_step2(&mut self) -> Result<(), TrapType> {
         let pte_size = self.get_ptesize();
 
         let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
@@ -54,7 +86,7 @@ impl Mmu {
     // 3. If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings that are reserved for
     // future standard use are set within pte, stop and raise a page-fault exception corresponding
     // to the original access type.
-    pub fn va_translation_step3(&self) -> Result<(), TrapType> {
+    fn va_translation_step3(&self) -> Result<(), TrapType> {
         if !self.pte.v() || (!self.pte.r() && self.pte.w()) {
             Err(self.access_type.throw_exception())
         } else {
@@ -66,7 +98,7 @@ impl Mmu {
     // pointer to the next level of the page table. Let i = i − 1. If i < 0, stop and raise a page-fault
     // exception corresponding to the original access type. Otherwise, let a = pte.ppn × PAGESIZE
     // and go to step 2.
-    pub fn va_translation_step4(&mut self) -> Result<u8, TrapType> {
+    fn va_translation_step4(&mut self) -> Result<u8, TrapType> {
         if self.pte.r() && self.pte.x() {
             return Ok(5); // go to step 5
         }
@@ -85,30 +117,42 @@ impl Mmu {
     // corresponding to the original access type.
 
     // todo!
-    pub fn va_translation_step5(&mut self) -> Result<u8, TrapType> {
+    fn va_translation_step5(&mut self) -> Result<u8, TrapType> {
+        // When SUM=0, S-mode memory accesses to pages that are
+        // accessible by U-mode (U=1 in Figure 4.18) will fault.
+        // When SUM=1, these accesses are permitted.
+        let sum_bit_check = || -> bool {
+            if self.cur_priv.get() != PrivilegeLevels::Supervisor {
+                return true;
+            }
+            // in S-mode
+
+            self.mstatus.sum() || !self.pte.u()
+        };
+
         match self.access_type {
-            AccessType::Load => {
-                if !self.pte.r() {
-                    return Err(self.access_type.throw_exception());
-                }
+            AccessType::Fetch if !self.pte.x() => {
+                return Err(self.access_type.throw_exception());
             }
-            AccessType::Store => {
-                if !self.pte.w() {
-                    return Err(self.access_type.throw_exception());
-                }
+            // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
+            // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
+            // MXR has no effect when page-based virtual memory is not in effect.
+            AccessType::Load
+                if !(self.pte.r() || self.pte.x() & self.mstatus.mxr()) || !sum_bit_check() =>
+            {
+                return Err(self.access_type.throw_exception());
             }
-            AccessType::Fetch => {
-                if !self.pte.x() {
-                    return Err(self.access_type.throw_exception());
-                }
+            AccessType::Store | AccessType::Amo if !self.pte.w() || !sum_bit_check() => {
+                return Err(self.access_type.throw_exception());
             }
+            _ => {}
         }
 
         Ok(6)
     }
     // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
     // exception corresponding to the original access type.
-    pub fn va_translation_step6(&mut self) -> Result<u8, TrapType> {
+    fn va_translation_step6(&mut self) -> Result<u8, TrapType> {
         let mut is_misalign_superpage = || -> bool {
             for i in 0..self.i {
                 if self.pte.get_ppn_by_idx(i as u8) != 0 {
@@ -134,9 +178,12 @@ impl Mmu {
     //       set pte.d to 1.
     //       – If the comparison fails, return to step 2
 
-    pub fn va_translation_step7(&mut self) -> Result<u8, TrapType> {
+    fn va_translation_step7(&mut self) -> Result<u8, TrapType> {
         // choese to raise a exception
-        if !self.pte.a() || ((!self.pte.d()) && (self.access_type == AccessType::Store)) {
+        if !self.pte.a()
+            || ((!self.pte.d())
+                && (self.access_type == AccessType::Store || self.access_type == AccessType::Amo))
+        {
             Err(self.access_type.throw_exception())
         } else {
             Ok(8)
@@ -148,7 +195,7 @@ impl Mmu {
     //      + If i > 0, then this is a superpage translation and pa.ppn[i − 1 : 0] = va.vpn[i − 1 : 0].
     //      + pa.ppn[LEVELS − 1 : i] = pte.ppn[LEVELS − 1 : i].
 
-    pub fn va_translation_step8(&mut self) -> Result<u8, TrapType> {
+    fn va_translation_step8(&mut self) -> Result<u8, TrapType> {
         let pgoff = self.va.offset();
 
         self.pa.set_offset(pgoff);
@@ -169,8 +216,8 @@ impl Mmu {
         Ok(1)
     }
 
-    pub fn page_table_walk(&mut self, _va: u64, stap: u64) -> Result<u64, TrapType> {
-        let ret = self.va_translation_step1(stap);
+    pub fn page_table_walk(&mut self) -> Result<u64, TrapType> {
+        let ret = self.va_translation_step1();
 
         assert!(ret.is_ok());
 
@@ -206,5 +253,46 @@ impl Mmu {
         ret?;
 
         Ok(self.pa.into())
+    }
+
+    pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+        if !check_aligned(addr, len) {
+            return Err(TrapType::LoadAddressMisaligned);
+        }
+
+        // no mmu
+        if self.stap.mode().eq(&StapMode::Bare) {
+            return Ok(self.bus.read(addr, len as usize).unwrap());
+        }
+        // has mmu
+        self.va = Sv39Va::from(addr);
+        self.page_table_walk()?; // err return
+        Ok(self.bus.read(self.pa.into(), len as usize).unwrap())
+    }
+
+    pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
+        if !check_aligned(addr, len) {
+            return Err(TrapType::StoreAddressMisaligned);
+        }
+        // no mmu
+        if self.stap.mode().eq(&StapMode::Bare) {
+            return Ok(self.bus.write(addr, data,len as usize).unwrap());
+        }
+        // has mmu
+        self.va = Sv39Va::from(addr);
+        self.page_table_walk()?; // err return
+        Ok(self.bus.write(self.pa.into(), data, len as usize).unwrap())
+    }
+
+    pub fn update_access_type(&mut self, access_type: AccessType) {
+        self.access_type = access_type;
+    }
+
+    pub fn update_mstatus(&mut self, mstatus_val: u64) {
+        self.mstatus = Mstatus::from(mstatus_val);
+    }
+
+    pub fn update_stap(&mut self, stap_val: u64) {
+        self.stap = Stap::from(stap_val);
     }
 }

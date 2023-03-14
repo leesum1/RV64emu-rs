@@ -96,6 +96,14 @@ pub struct Sv39PTE {
 }
 
 impl Sv39PTE {
+    pub fn point_next_level(&self) -> bool {
+        // 0 0 0
+        !(self.x() | self.w() | self.r())
+    }
+
+}
+
+impl Sv39PTE {
     pub fn ppn_all(&self) -> u64 {
         (self.0 >> 10) & 0xfff_ffff_ffff
     }

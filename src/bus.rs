@@ -1,4 +1,4 @@
-use crate::{device::device_trait::DeviceBase, sifive_clint::DeviceClint};
+use crate::{device::device_trait::DeviceBase, sifive_clint::DeviceClint, inst::inst_base::{check_area, check_aligned}};
 
 pub struct DeviceType {
     pub start: u64,
@@ -20,28 +20,20 @@ impl Bus {
             clint,
         }
     }
-    fn check_area(start: u64, len: u64, addr: u64) -> bool {
-        (addr >= start) && (addr < (start + len))
-    }
-
-    pub fn check_aligned(addr: u64, len: u64) -> bool {
-        // assert!(addr & (len - 1) == 0, "bus address not aligned");
-        addr & (len - 1) == 0
-    }
 
     pub fn add_device(&mut self, device: DeviceType) {
         self.devices.push(device);
     }
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
-        if !Bus::check_aligned(addr, len as u64) {
+        if !check_aligned(addr, len as u64) {
             return Err(());
         }
 
         // special devices
         // such as clint
         let special_device = || -> Result<u64, ()> {
-            if Bus::check_area(self.clint.start, self.clint.len, addr) {
+            if check_area(self.clint.start, self.clint.len, addr) {
                 Ok(self.clint.instance.do_read(addr - self.clint.start, len))
             } else {
                 panic!("can not find device,read addr{addr:X}");
@@ -53,7 +45,7 @@ impl Bus {
         let general_device = self
             .devices
             .iter_mut()
-            .find(|device| Bus::check_area(device.start, device.len, addr))
+            .find(|device| check_area(device.start, device.len, addr))
             .map(|device| device.instance.do_read(addr - device.start, len));
 
         // first find general devices
@@ -64,12 +56,12 @@ impl Bus {
     }
 
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, ()> {
-        if !Bus::check_aligned(addr, len as u64) {
+        if !check_aligned(addr, len as u64) {
             return Err(());
         }
 
         let mut special_device = || -> u64 {
-            if Bus::check_area(self.clint.start, self.clint.len, addr) {
+            if check_area(self.clint.start, self.clint.len, addr) {
                 self.clint
                     .instance
                     .do_write(addr - self.clint.start, data, len)
@@ -81,7 +73,7 @@ impl Bus {
         let general_device = self
             .devices
             .iter_mut()
-            .find(|device| Bus::check_area(device.start, device.len, addr))
+            .find(|device| check_area(device.start, device.len, addr))
             .map(|device| device.instance.do_write(addr - device.start, data, len));
 
         match general_device {

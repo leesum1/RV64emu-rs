@@ -1217,14 +1217,16 @@ pub enum AccessType {
     Load,
     Store,
     Fetch,
+    Amo,
 }
 
 impl AccessType {
     pub fn throw_exception(&self) -> TrapType {
         match self {
+            AccessType::Fetch => TrapType::InstructionPageFault,
             AccessType::Load => TrapType::LoadPageFault,
             AccessType::Store => TrapType::StorePageFault,
-            AccessType::Fetch => TrapType::InstructionPageFault,
+            AccessType::Amo => TrapType::StoreAccessFault,
         }
     }
 }
@@ -1247,4 +1249,13 @@ pub fn set_field(reg: u64, mask: u64, val: u64) -> u64 {
     (reg & !mask) | ((val * (mask & !(mask << 1))) & mask)
     // let shift = mask.trailing_zeros();
     // (reg & !mask) | ((val << shift) & mask)
+}
+
+pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
+    (addr >= start) && (addr < (start + len))
+}
+
+pub fn check_aligned(addr: u64, len: u64) -> bool {
+    // assert!(addr & (len - 1) == 0, "bus address not aligned");
+    addr & (len - 1) == 0
 }
