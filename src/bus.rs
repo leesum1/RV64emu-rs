@@ -27,6 +27,7 @@ impl Bus {
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
         if !check_aligned(addr, len as u64) {
+            println!("bus read:{:x},{:x}",addr,len);
             return Err(());
         }
 

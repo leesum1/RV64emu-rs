@@ -1,4 +1,7 @@
 #![allow(unused)]
+use std::io::{self, Write};
+
+use bitfield_struct::bitfield;
 use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
 
 use crate::{cpu_core::CpuCore, traptype::TrapType};
@@ -1230,7 +1233,7 @@ impl AccessType {
         }
     }
 }
-
+unsafe impl Send for PrivilegeLevels {}
 impl PrivilegeLevels {
     pub fn check_priv(&self, another_priv: PrivilegeLevels) -> bool {
         (another_priv as u64) >= (*self as u64)
@@ -1258,4 +1261,52 @@ pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
 pub fn check_aligned(addr: u64, len: u64) -> bool {
     // assert!(addr & (len - 1) == 0, "bus address not aligned");
     addr & (len - 1) == 0
+}
+
+// see spike fesvr/device.h class command_t
+// see https://github.com/riscv-software-src/riscv-isa-sim/issues/364
+// Bits 63:56 indicate the "device".
+// Bits 55:48 indicate the "command".
+// Device 0 is the syscall device, which is used to emulate Unixy syscalls.
+//  It only implements command 0, which has two subfunctions (for legacy reasons, sorry for the bad design):
+//  If bit 0 is clear, then bits 47:0 represent a pointer to a struct describing the syscall. The format of the syscall struct is pretty clear if you read the pk or fesvr code.
+//  If bit 0 is set, then bits 47:1 represent an exit code, with a zero value indicating success and other values indicating failure.
+// Device 1 is the blocking character device.
+//  Command 0 reads a character
+//  Command 1 writes a character from the 8 LSBs of tohost
+#[bitfield(u64)]
+pub struct FesvrCmd {
+    pub tohost: u16,
+    pub unknown: u32,
+    pub cmd: u8,
+    pub device: u8,
+}
+impl FesvrCmd {
+    fn is_character_device(&self) -> bool {
+        self.device() == 1
+    }
+    fn is_syscall_device(&self) -> bool {
+        self.device() == 0
+    }
+
+    pub fn exit_code(&self) -> u64 {
+        let val0_48 = (self.0 << 16) >> 16;
+        val0_48 >> 1 // [48:1]
+    }
+
+    pub fn character_device_write(&self) {
+        if (self.cmd() == 1) && self.is_character_device() {
+            let c = char::from_u32(self.tohost() as u32).unwrap();
+            print!("{c}");
+            io::stdout().flush().unwrap();
+        }
+    }
+
+    pub fn syscall_device(&self) -> Option<bool> {
+        if self.cmd() == 0 && self.is_syscall_device() && ((self.tohost() & 1_u16) == 1) {
+            Some(self.exit_code() == 0)
+        } else {
+            None
+        }
+    }
 }

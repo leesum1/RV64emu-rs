@@ -334,6 +334,16 @@ mod isa_test {
         pub name: String,
         pub ret: bool,
     }
+
+    #[test]
+    fn run_arch_test_onece() {
+        // vm_boot:000000008000cdb0
+        // handle_fault:0000000000002ae4
+        // handle_fault:0000000000002ae4
+        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64ui-v-add.bin");
+        println!("{ret}");
+    }
+
     #[test]
     fn run_arch_tests() {
         let sikp_file = vec![

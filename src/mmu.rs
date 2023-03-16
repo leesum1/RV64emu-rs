@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::{cell::Cell, rc::Rc};
 
 use crate::{
     bus::Bus,
@@ -14,18 +14,18 @@ pub struct Mmu {
     pub access_type: AccessType,
     mstatus: Mstatus,
     stap: Stap,
-    cur_priv: Cell<PrivilegeLevels>,
+    cur_priv: Rc<Cell<PrivilegeLevels>>,
     i: i8,
     level: i8,
     pagesize: u64,
     a: u64,
     va: Sv39Va,
-    pa: Sv39Pa,
+    pub pa: Sv39Pa,
     pte: Sv39PTE,
 }
 
 impl Mmu {
-    pub fn new(privilege: Cell<PrivilegeLevels>) -> Self {
+    pub fn new(privilege: Rc<Cell<PrivilegeLevels>>) -> Self {
         let clint_u = Clint::new();
         let device_clint = DeviceClint {
             start: 0x2000000,
@@ -62,7 +62,7 @@ impl Mmu {
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
         assert_eq!(self.stap.mode(), StapMode::Sv39); // todo!  sv39 mode only
         assert_ne!(self.cur_priv.get(), PrivilegeLevels::Machine); // check privilege mode
-        self.pagesize = 2 ^ 12; // 4096
+        self.pagesize = 4096; // 2 ^ 12
         self.level = 3;
         self.i = self.level - 1;
         self.a = self.stap.ppn() * self.pagesize;
@@ -77,7 +77,9 @@ impl Mmu {
         let pte_size = self.get_ptesize();
 
         let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
-
+        // println!("va:{:?}", self.stap);
+        // println!("va:{:?}", self.va);
+        // assert_eq!(self.stap.ppn() * 4096, self.a);
         // todo! PMA or PMP check
         let pte_data = self.bus.read(pte_addr, pte_size as usize).unwrap();
         self.pte = Sv39PTE::from(pte_data);
@@ -255,15 +257,26 @@ impl Mmu {
         Ok(self.pa.into())
     }
 
+    fn no_mmu(&self) -> bool {
+        // if ((cur_priv == M_MODE && (!mstatus->mprv || mstatus->mpp == M_MODE)) ||
+        // satp_reg->mode == 0) {
+        let x1 = !self.mstatus.mprv() || (self.mstatus.mpp() == 3);
+        let x2 = self.cur_priv.get().eq(&PrivilegeLevels::Machine);
+        let y1 = self.stap.mode().eq(&StapMode::Bare);
+
+        (x1 && x2) || y1
+    }
+
     pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
             return Err(TrapType::LoadAddressMisaligned);
         }
-
         // no mmu
-        if self.stap.mode().eq(&StapMode::Bare) {
+        if self.no_mmu() {
+            self.pa = Sv39Pa::from(addr);
             return Ok(self.bus.read(addr, len as usize).unwrap());
         }
+        // println!("has mmu,addr:{:x}",addr);
         // has mmu
         self.va = Sv39Va::from(addr);
         self.page_table_walk()?; // err return
@@ -275,8 +288,8 @@ impl Mmu {
             return Err(TrapType::StoreAddressMisaligned);
         }
         // no mmu
-        if self.stap.mode().eq(&StapMode::Bare) {
-            return Ok(self.bus.write(addr, data,len as usize).unwrap());
+        if self.no_mmu() {
+            return Ok(self.bus.write(addr, data, len as usize).unwrap());
         }
         // has mmu
         self.va = Sv39Va::from(addr);
@@ -295,4 +308,6 @@ impl Mmu {
     pub fn update_stap(&mut self, stap_val: u64) {
         self.stap = Stap::from(stap_val);
     }
+
+    pub fn update_privilege(&mut self, _new_privi: PrivilegeLevels) {}
 }

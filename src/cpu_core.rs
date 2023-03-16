@@ -1,4 +1,4 @@
-use std::{cell::Cell, fs::File, io::Write};
+use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 
 use crate::{
     bus::Bus,
@@ -10,7 +10,10 @@ use crate::{
         PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
         CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
     },
-    inst::{inst_base::AccessType, inst_rv64a::LrScReservation},
+    inst::{
+        inst_base::{AccessType, FesvrCmd, CSR_SATP, CSR_STVAL, CSR_MTVAL},
+        inst_rv64a::LrScReservation,
+    },
     inst_decode::InstDecode,
     itrace::Itrace,
     mmu::Mmu,
@@ -33,14 +36,14 @@ pub struct CpuCore {
     pub decode: InstDecode,
     pub pc: u64,
     pub npc: u64,
-    pub cur_priv: Cell<PrivilegeLevels>,
+    pub cur_priv: Rc<Cell<PrivilegeLevels>>,
     pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
     pub itrace: Itrace,
     pub debug_flag: bool,
 }
-
+unsafe impl Send for CpuCore {}
 impl CpuCore {
     pub fn new() -> Self {
         // todo! improve me
@@ -53,7 +56,7 @@ impl CpuCore {
         };
 
         let bus_u = Bus::new(device_clint);
-        let privi_u = Cell::new(PrivilegeLevels::Machine);
+        let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
 
         CpuCore {
             gpr: (Gpr::new()),
@@ -68,49 +71,42 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: privi_u,
             itrace: Itrace::new(),
-            debug_flag: false,
+            debug_flag: true,
         }
     }
 
-    pub fn inst_fetch(&mut self) -> Result<u32, TrapType> {
+    pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
         self.npc += 4;
 
         // first lookup icache
-        let icache_data = self.cpu_icache.get_inst(self.pc);
+        // let icache_data = self.cpu_icache.get_inst(self.pc);
         // if icache hit return, else load inst from mem and push into icache
-        match icache_data {
-            Some(icache_inst) => Ok(icache_inst),
-            None => {
-                let inst_val = self.read(self.pc, 4, AccessType::Fetch).unwrap();
-                self.cpu_icache.insert_inst(self.pc, inst_val as u32);
-                Ok(inst_val as u32)
-            }
-        }
+        // match icache_data {
+        //     Some(icache_inst) => Ok(icache_inst as u64),
+        //     None => self.read(self.pc, 4, AccessType::Fetch),
+        // }
 
-        // self.bus.read(self.pc, 4) as u32
+        self.read(self.pc, 4, AccessType::Fetch)
     }
 
-    pub fn step(&mut self, inst: u32) {
-        let fast_decode = self.decode.fast_path(inst);
+    pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
+        // let fast_decode = self.decode.fast_path(inst);
 
-        let inst_op = if fast_decode.is_some() {
-            fast_decode
-        } else {
-            self.decode.slow_path(inst)
-        };
+        // let inst_op = if fast_decode.is_some() {
+        //     fast_decode
+        // } else {
+        //     self.decode.slow_path(inst)
+        // };
 
-        // let inst_op = self.decode.slow_path(inst);
+        let inst_op = self.decode.slow_path(inst);
 
         match inst_op {
             Some(i) => {
                 if self.debug_flag {
                     self.itrace.disassemble_bytes(self.pc, inst);
                 }
-                let trap_code = (i.operation)(self, inst, self.pc);
-                if let Err(e) = trap_code {
-                    self.handle_exceptions(e)
-                }
+                (i.operation)(self, inst, self.pc) // return
             }
             None => panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
         }
@@ -120,15 +116,19 @@ impl CpuCore {
         for _ in 0..num {
             match self.cpu_state {
                 CpuState::Running => {
-                    let inst = self.inst_fetch();
+                    let fetch_ret = self.inst_fetch();
 
-                    match inst {
-                        Ok(inst_val) => self.step(inst_val),
-                        Err(trap_type) => {
-                            self.handle_exceptions(trap_type);
-                            continue;
-                        }
+                    let exe_ret = match fetch_ret {
+                        // op ret
+                        Ok(inst_val) => self.step(inst_val as u32),
+                        // fetch fault
+                        Err(trap_type) => Err(trap_type),
                     };
+
+                    if let Err(trap_type) = exe_ret {
+                        self.handle_exceptions(trap_type);
+                        continue;
+                    }
 
                     self.check_pending_int();
                     self.handle_interrupt();
@@ -182,6 +182,9 @@ impl CpuCore {
 
             self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
 
+            self.csr_regs.write_raw(CSR_STVAL.into(), self.pc);
+
+
             let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Supervisor);
@@ -194,6 +197,8 @@ impl CpuCore {
             self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
             self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
             self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type as u64);
+            self.csr_regs.write_raw(CSR_MTVAL.into(), self.pc);
+
 
             let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
@@ -277,7 +282,7 @@ impl CpuCore {
         self.mmu
             .update_mstatus(self.csr_regs.read_raw(CSR_MSTATUS.into()));
         self.mmu
-            .update_stap(self.csr_regs.read_raw(CSR_MSTATUS.into()));
+            .update_stap(self.csr_regs.read_raw(CSR_SATP.into()));
         self.mmu.do_read(addr, len)
     }
 
@@ -292,9 +297,8 @@ impl CpuCore {
         self.mmu
             .update_mstatus(self.csr_regs.read_raw(CSR_MSTATUS.into()));
         self.mmu
-            .update_stap(self.csr_regs.read_raw(CSR_MSTATUS.into()));
+            .update_stap(self.csr_regs.read_raw(CSR_SATP.into()));
 
-        
         self.mmu.do_write(addr, data, len)
     }
 
@@ -323,12 +327,22 @@ impl CpuCore {
     // if non-zero data is written.
     // End code 1 seems to mean pass.
     pub fn check_to_host(&mut self) {
-        let data = self.mmu.bus.read(0x8000_1000, 4).unwrap();
-        match data {
-            0 => (),
-            1 => self.cpu_state = CpuState::Stop,
-            2_u64..=u64::MAX => self.cpu_state = CpuState::Abort,
-        };
+        let data = self.mmu.bus.read(0x8000_1000, 8).unwrap();
+        // !! must clear mem
+        self.mmu.bus.write(0x8000_1000, 0,8).unwrap();
+
+        let cmd = FesvrCmd::from(data);
+        if let Some(pass) = cmd.syscall_device() {
+            if pass {
+                self.cpu_state = CpuState::Stop;
+            }
+            // fail
+            else {
+                self.cpu_state = CpuState::Abort;
+                println!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
+            }
+        }
+        cmd.character_device_write();
     }
 }
 
