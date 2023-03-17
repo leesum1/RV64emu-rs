@@ -105,7 +105,7 @@ impl Mmu {
             return Ok(5); // go to step 5
         }
         self.i -= 1;
-        if self.i <= 0 {
+        if self.i < 0 {
             return Err(self.access_type.throw_exception());
         }
 
@@ -220,7 +220,9 @@ impl Mmu {
 
     pub fn page_table_walk(&mut self) -> Result<u64, TrapType> {
         let ret = self.va_translation_step1();
-
+        if u64::from(self.va) == 8192 {
+            println!("mmu debug")
+        }
         assert!(ret.is_ok());
 
         'step2: loop {
@@ -293,7 +295,17 @@ impl Mmu {
         }
         // has mmu
         self.va = Sv39Va::from(addr);
-        self.page_table_walk()?; // err return
+        // self.page_table_walk()?; // err return
+        match self.page_table_walk() {
+            Ok(_) => {}
+            Err(e) => {
+                if e == TrapType::StorePageFault {
+                    panic!("mmu debug");
+                } else {
+                    return Err(e);
+                }
+            }
+        }
         Ok(self.bus.write(self.pa.into(), data, len as usize).unwrap())
     }
 
