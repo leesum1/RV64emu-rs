@@ -220,9 +220,7 @@ impl Mmu {
 
     pub fn page_table_walk(&mut self) -> Result<u64, TrapType> {
         let ret = self.va_translation_step1();
-        if u64::from(self.va) == 8192 {
-            println!("mmu debug")
-        }
+
         assert!(ret.is_ok());
 
         'step2: loop {
@@ -295,17 +293,7 @@ impl Mmu {
         }
         // has mmu
         self.va = Sv39Va::from(addr);
-        // self.page_table_walk()?; // err return
-        match self.page_table_walk() {
-            Ok(_) => {}
-            Err(e) => {
-                if e == TrapType::StorePageFault {
-                    panic!("mmu debug");
-                } else {
-                    return Err(e);
-                }
-            }
-        }
+        self.page_table_walk()?; // err return
         Ok(self.bus.write(self.pa.into(), data, len as usize).unwrap())
     }
 
@@ -321,5 +309,4 @@ impl Mmu {
         self.stap = Stap::from(stap_val);
     }
 
-    pub fn update_privilege(&mut self, _new_privi: PrivilegeLevels) {}
 }
