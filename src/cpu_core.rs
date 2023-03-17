@@ -11,7 +11,7 @@ use crate::{
         CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
     },
     inst::{
-        inst_base::{AccessType, FesvrCmd, CSR_SATP, CSR_STVAL, CSR_MTVAL},
+        inst_base::{AccessType, FesvrCmd, CSR_MTVAL, CSR_SATP, CSR_STVAL},
         inst_rv64a::LrScReservation,
     },
     inst_decode::InstDecode,
@@ -105,6 +105,7 @@ impl CpuCore {
             Some(i) => {
                 if self.debug_flag {
                     self.itrace.disassemble_bytes(self.pc, inst);
+                    // self.itrace.disassemble_bytes(self.mmu.pa.into(), inst);
                 }
                 (i.operation)(self, inst, self.pc) // return
             }
@@ -184,6 +185,7 @@ impl CpuCore {
 
             self.csr_regs.write_raw(CSR_STVAL.into(), self.pc);
 
+            self.itrace.trap_record(trap_type, self.pc, self.pc);
 
             let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
@@ -199,6 +201,7 @@ impl CpuCore {
             self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type as u64);
             self.csr_regs.write_raw(CSR_MTVAL.into(), self.pc);
 
+            self.itrace.trap_record(trap_type, self.pc, self.pc);
 
             let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
@@ -329,7 +332,7 @@ impl CpuCore {
     pub fn check_to_host(&mut self) {
         let data = self.mmu.bus.read(0x8000_1000, 8).unwrap();
         // !! must clear mem
-        self.mmu.bus.write(0x8000_1000, 0,8).unwrap();
+        self.mmu.bus.write(0x8000_1000, 0, 8).unwrap();
 
         let cmd = FesvrCmd::from(data);
         if let Some(pass) = cmd.syscall_device() {
