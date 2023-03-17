@@ -1,5 +1,5 @@
 #![allow(unused)]
-use std::io::{self, Write};
+use std::{io::{self, Write}, mem::discriminant};
 
 use bitfield_struct::bitfield;
 use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
@@ -1215,21 +1215,27 @@ pub enum PrivilegeLevels {
     Machine = 3,
 }
 
-#[derive(PartialEq)]
 pub enum AccessType {
-    Load,
-    Store,
-    Fetch,
-    Amo,
+    Load(u64),
+    Store(u64),
+    Fetch(u64),
+    Amo(u64),
+}
+// only check enum type without data
+// such as AccessType::Load(1) == AccessType::Load(0) return true instead of false
+impl PartialEq for AccessType {
+    fn eq(&self, other: &Self) -> bool {
+        discriminant(self) == discriminant(other)
+    }
 }
 
 impl AccessType {
     pub fn throw_exception(&self) -> TrapType {
         match self {
-            AccessType::Fetch => TrapType::InstructionPageFault,
-            AccessType::Load => TrapType::LoadPageFault,
-            AccessType::Store => TrapType::StorePageFault,
-            AccessType::Amo => TrapType::StoreAccessFault,
+            AccessType::Fetch(tval) => TrapType::InstructionPageFault(*tval),
+            AccessType::Load(tval) => TrapType::LoadPageFault(*tval),
+            AccessType::Store(tval) => TrapType::StorePageFault(*tval),
+            AccessType::Amo(tval) => TrapType::StoreAccessFault(*tval),
         }
     }
 }

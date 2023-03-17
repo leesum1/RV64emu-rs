@@ -87,7 +87,7 @@ impl CpuCore {
         //     None => self.read(self.pc, 4, AccessType::Fetch),
         // }
 
-        self.read(self.pc, 4, AccessType::Fetch)
+        self.read(self.pc, 4, AccessType::Fetch(self.pc))
     }
 
     pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
@@ -167,9 +167,11 @@ impl CpuCore {
         let trap_to_s_enable = self.cur_priv.get() <= PrivilegeLevels::Supervisor;
         let mut mstatus = Mstatus::from(mstatus_val);
 
+        let tval = trap_type.get_tval();
+
         // exception to S mode
         if has_exception & trap_to_s_enable {
-            let cause = trap_type as u64;
+            let cause = trap_type.idx();
             // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
             mstatus.set_spp(!(self.cur_priv.get() == PrivilegeLevels::User));
             // When a trap is taken into supervisor mode, SPIE is set to SIE
@@ -183,9 +185,9 @@ impl CpuCore {
 
             self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
 
-            self.csr_regs.write_raw(CSR_STVAL.into(), self.pc);
+            self.csr_regs.write_raw(CSR_STVAL.into(), tval);
 
-            self.itrace.trap_record(trap_type, self.pc, self.pc);
+            self.itrace.trap_record(trap_type, self.pc, tval);
 
             let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
@@ -198,10 +200,11 @@ impl CpuCore {
             mstatus.set_mpp(self.cur_priv.get() as u8);
             self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
             self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
-            self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type as u64);
-            self.csr_regs.write_raw(CSR_MTVAL.into(), self.pc);
+            self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type.idx());
+            self.csr_regs.write_raw(CSR_MTVAL.into(), tval);
 
-            self.itrace.trap_record(trap_type, self.pc, self.pc);
+            self.itrace.trap_record(trap_type, self.pc, tval);
+
 
             let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
@@ -248,7 +251,7 @@ impl CpuCore {
             mstatus.set_mie(false);
             self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
             self.csr_regs.write_raw(CSR_MEPC.into(), self.npc);
-            self.csr_regs.write_raw(CSR_MCAUSE.into(), cause as u64);
+            self.csr_regs.write_raw(CSR_MCAUSE.into(), cause.idx());
             let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             // todo! improve me
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(cause);
@@ -272,7 +275,7 @@ impl CpuCore {
 
             self.csr_regs.write_raw(CSR_SEPC.into(), self.npc);
 
-            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause as u64);
+            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause.idx());
 
             let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             self.npc = Stvec::from(stvec_val).get_trap_pc(cause);

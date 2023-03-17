@@ -337,10 +337,15 @@ mod isa_test {
 
     #[test]
     fn run_arch_test_onece() {
-        // vm_boot:000000008000cdb0
+        // vm_boot:000000008000ddb0
         // handle_fault:0000000000002ae4
         // handle_fault:0000000000002ae4
-        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64ui-v-add.bin");
+        // handle_fault:0000000000004000
+        // handle_fault:0000000000004000
+        // handle_fault:0000000000004000
+        // handle_fault:0000000000003000
+        // handle_fault:0000000000003000
+        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64ui-v-sd.bin");
         println!("{ret}");
     }
 
@@ -356,6 +361,8 @@ mod isa_test {
             "rv64mi-p-zicntr.bin",
             "rv64mi-p-sbreak.bin",
             "rv64si-p-sbreak.bin",
+            "rv64ui-v-ma_data.bin",
+            "rv64ua-v-lrsc.bin",
         ];
         let test2_dir = Path::new(TESTS_PATH);
         let mut tests_ret: Vec<TestRet> = Vec::new();

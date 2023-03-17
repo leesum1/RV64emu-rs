@@ -279,8 +279,8 @@ impl CsrRegs {
     pub fn read(&self, addr: u64, privi: PrivilegeLevels) -> Result<u64, TrapType> {
         assert!(addr < 4096);
 
-        if !self.check_csr(addr, privi, AccessType::Load) {
-            return Err(TrapType::IllegalInstruction);
+        if !self.check_csr(addr, privi, AccessType::Load(0)) {
+            return Err(TrapType::IllegalInstruction(0));
         };
 
         match self.read_csr_mask(addr) {
@@ -291,8 +291,8 @@ impl CsrRegs {
 
     pub fn write(&mut self, addr: u64, val: u64, privi: PrivilegeLevels) -> Result<u64, TrapType> {
         assert!(addr < 4096);
-        if !self.check_csr(addr, privi, AccessType::Store) {
-            return Err(TrapType::IllegalInstruction);
+        if !self.check_csr(addr, privi, AccessType::Store(0)) {
+            return Err(TrapType::IllegalInstruction(0));
         };
 
         match self.write_csr_mask(addr, val) {

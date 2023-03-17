@@ -37,7 +37,7 @@ impl Mmu {
         let bus_u = Bus::new(device_clint);
         Mmu {
             bus: bus_u,
-            access_type: AccessType::Load,
+            access_type: AccessType::Load(0),
             mstatus: 0.into(),
             stap: 0.into(),
             i: 0,
@@ -133,18 +133,18 @@ impl Mmu {
         };
 
         match self.access_type {
-            AccessType::Fetch if !self.pte.x() => {
+            AccessType::Fetch(_) if !self.pte.x() => {
                 return Err(self.access_type.throw_exception());
             }
             // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
             // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
             // MXR has no effect when page-based virtual memory is not in effect.
-            AccessType::Load
+            AccessType::Load(_)
                 if !(self.pte.r() || self.pte.x() & self.mstatus.mxr()) || !sum_bit_check() =>
             {
                 return Err(self.access_type.throw_exception());
             }
-            AccessType::Store | AccessType::Amo if !self.pte.w() || !sum_bit_check() => {
+            AccessType::Store(_) | AccessType::Amo(_) if !self.pte.w() || !sum_bit_check() => {
                 return Err(self.access_type.throw_exception());
             }
             _ => {}
@@ -184,7 +184,9 @@ impl Mmu {
         // choese to raise a exception
         if !self.pte.a()
             || ((!self.pte.d())
-                && (self.access_type == AccessType::Store || self.access_type == AccessType::Amo))
+                    // only check eume type without data
+                && (self.access_type == AccessType::Store(0)
+                    || self.access_type == AccessType::Amo(0)))
         {
             Err(self.access_type.throw_exception())
         } else {
@@ -269,7 +271,7 @@ impl Mmu {
 
     pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
-            return Err(TrapType::LoadAddressMisaligned);
+            return Err(TrapType::LoadAddressMisaligned(addr));
         }
         // no mmu
         if self.no_mmu() {
@@ -285,7 +287,7 @@ impl Mmu {
 
     pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
-            return Err(TrapType::StoreAddressMisaligned);
+            return Err(TrapType::StoreAddressMisaligned(addr));
         }
         // no mmu
         if self.no_mmu() {
@@ -308,5 +310,5 @@ impl Mmu {
     pub fn update_stap(&mut self, stap_val: u64) {
         self.stap = Stap::from(stap_val);
     }
-
 }
+

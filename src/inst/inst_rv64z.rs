@@ -83,7 +83,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
 
             // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
             if mstatus.tsr() {
-                return Err(TrapType::IllegalInstruction);
+                return Err(TrapType::IllegalInstruction(pc));
             }
 
             // supposing xPP holds the value y

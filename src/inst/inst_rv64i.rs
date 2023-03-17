@@ -33,7 +33,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 
             let next_pc = pc.wrapping_add(f.imm);
             if !check_aligned(next_pc, 4) {
-                return Err(TrapType::InstructionAddressMisaligned);
+                // todo! not clear
+                return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
             cpu.npc = next_pc;
             cpu.gpr.write(f.rd, wdata);
@@ -53,7 +54,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let next_pc = (rs1_data.wrapping_add(f.imm as u64)) & !1_u64;
 
             if !check_aligned(next_pc, 4) {
-                return Err(TrapType::InstructionAddressMisaligned);
+                // todo! not clear
+                return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
 
             cpu.npc = next_pc;
@@ -74,8 +76,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 == rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    println!("BEQ");
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    // todo! not clear
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -95,7 +97,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 != rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    // todo! not clear
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -115,7 +118,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 < rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -135,7 +138,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 >= rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -155,7 +158,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 < rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -174,7 +177,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if rs1 >= rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
                 if !check_aligned(next_pc, 4) {
-                    return Err(TrapType::InstructionAddressMisaligned);
+                    return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
             }
@@ -193,7 +196,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 1, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 1, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -213,7 +216,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 2, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 2, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -232,7 +235,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -251,7 +254,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 1, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 1, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -270,7 +273,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 2, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 2, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -295,7 +298,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             //     return Err(TrapType::StoreAddressMisaligned);
             // }
 
-            match cpu.write(mem_addr as u64, rs2 as u64, 1, AccessType::Store) {
+            match cpu.write(
+                mem_addr as u64,
+                rs2 as u64,
+                1,
+                AccessType::Store(mem_addr as u64),
+            ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -311,7 +319,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as u16;
             let mem_addr = rs1.wrapping_add(f.imm);
-            match cpu.write(mem_addr as u64, rs2 as u64, 2, AccessType::Store) {
+            match cpu.write(
+                mem_addr as u64,
+                rs2 as u64,
+                2,
+                AccessType::Store(mem_addr as u64),
+            ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -327,7 +340,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2) as u32;
             let mem_addr = rs1.wrapping_add(f.imm);
-            match cpu.write(mem_addr as u64, rs2 as u64, 4, AccessType::Store) {
+            match cpu.write(
+                mem_addr as u64,
+                rs2 as u64,
+                4,
+                AccessType::Store(mem_addr as u64),
+            ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -643,7 +661,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -662,7 +680,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let mem_addr = rs1.wrapping_add(f.imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 8, AccessType::Load) {
+            let mem_data = match cpu.read(mem_addr as u64, 8, AccessType::Load(mem_addr as u64)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -681,7 +699,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             let rs1 = cpu.gpr.read(f.rs1) as i64;
             let rs2 = cpu.gpr.read(f.rs2);
             let mem_addr = rs1.wrapping_add(f.imm);
-            match cpu.write(mem_addr as u64, rs2, 8, AccessType::Store) {
+            match cpu.write(mem_addr as u64, rs2, 8, AccessType::Store(mem_addr as u64)) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }

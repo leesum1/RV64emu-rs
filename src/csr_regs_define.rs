@@ -28,7 +28,7 @@ impl CsrAddr {
         let privi_check = (privi as u8) >= self.privilege();
         // println!("privi:{:?},{}", privi, privi_check);
         match access_type {
-            AccessType::Store => self.not_read_only() && privi_check,
+            AccessType::Store(_) => self.not_read_only() && privi_check,
             _ => privi_check,
         }
     }
