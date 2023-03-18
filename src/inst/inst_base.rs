@@ -1,5 +1,8 @@
 #![allow(unused)]
-use std::{io::{self, Write}, mem::discriminant};
+use std::{
+    io::{self, Write},
+    mem::discriminant,
+};
 
 use bitfield_struct::bitfield;
 use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
@@ -1200,11 +1203,6 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
         rd: ((word >> 7) & 0x1f) as u64,    // [11:7]
     }
 }
-// #define PRV_U 0
-// #define PRV_S 1
-// #define PRV_M 3
-
-// #define PRV_HS (PRV_S + 1)
 
 #[derive(
     EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, PartialOrd, Clone, Copy,
@@ -1230,12 +1228,21 @@ impl PartialEq for AccessType {
 }
 
 impl AccessType {
-    pub fn throw_exception(&self) -> TrapType {
+    pub fn throw_page_exception(&self) -> TrapType {
         match self {
             AccessType::Fetch(tval) => TrapType::InstructionPageFault(*tval),
             AccessType::Load(tval) => TrapType::LoadPageFault(*tval),
             AccessType::Store(tval) => TrapType::StorePageFault(*tval),
-            AccessType::Amo(tval) => TrapType::StoreAccessFault(*tval),
+            AccessType::Amo(tval) => TrapType::StorePageFault(*tval), // todo! ???
+        }
+    }
+
+    pub fn throw_access_exception(&self) -> TrapType {
+        match self {
+            AccessType::Fetch(tval) => TrapType::InstructionAccessFault(*tval),
+            AccessType::Load(tval) => TrapType::LoadAccessFault(*tval),
+            AccessType::Store(tval) => TrapType::StoreAccessFault(*tval),
+            AccessType::Amo(tval) => TrapType::StoreAccessFault(*tval), // todo! ???
         }
     }
 }
@@ -1247,6 +1254,7 @@ impl PrivilegeLevels {
 }
 
 pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;
+pub const MASK_NONE: u64 = !MASK_ALL;
 
 pub fn get_field(reg: u64, mask: u64) -> u64 {
     (reg & mask) / (mask & !(mask << 1))

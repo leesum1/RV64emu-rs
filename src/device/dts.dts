@@ -7,7 +7,7 @@
 	model = "riscv-virtio,qemu";
 
 	chosen {
-		// bootargs = "root=/dev/vda rw ttyS0";
+		bootargs = "console=hvc0 earlycon=sbi rdinit=/sbin/init";
 		stdout-path = "/uart@c0000000"; // chose a system console
 	};
 
@@ -54,14 +54,15 @@
 			reg = <0x0>;
 			status = "okay";
 			compatible = "riscv";
-			riscv,isa = "rv64ima";
-			mmu-type = "riscv,none"; // sv39
+			riscv,isa = "rv64imasu";
+			mmu-type = "riscv,sv39"; // sv39
 			// a hart is also an interrupt-controller
 			// some interrupt will directly connect to a hart
 			// such as soft irq and time irq and ext irq
 			//
         	L10: interrupt-controller {                                                                    
 				#interrupt-cells = <1>;
+				#address-cells = <0x1>;
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
             };

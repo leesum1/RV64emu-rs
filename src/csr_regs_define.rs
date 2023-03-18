@@ -388,3 +388,12 @@ pub struct Stap {
     #[bits(4)]
     pub mode: StapMode,
 }
+
+impl Stap {
+    pub fn unsupport_mod(&self) -> bool {
+        matches!(
+            self.mode(),
+            StapMode::Sv48 | StapMode::Sv57 | StapMode::Sv64
+        )
+    }
+}

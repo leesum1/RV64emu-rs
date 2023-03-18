@@ -11,7 +11,10 @@ use crate::{
         CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
     },
     inst::{
-        inst_base::{AccessType, FesvrCmd, CSR_MTVAL, CSR_SATP, CSR_STVAL},
+        inst_base::{
+            AccessType, FesvrCmd, CSR_MCYCLE, CSR_MINSTRET, CSR_MTVAL, CSR_SATP, CSR_STVAL,
+            CSR_TIME,
+        },
         inst_rv64a::LrScReservation,
     },
     inst_decode::InstDecode,
@@ -92,7 +95,6 @@ impl CpuCore {
 
     pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
         // let fast_decode = self.decode.fast_path(inst);
-
         // let inst_op = if fast_decode.is_some() {
         //     fast_decode
         // } else {
@@ -133,6 +135,12 @@ impl CpuCore {
 
                     self.check_pending_int();
                     self.handle_interrupt();
+                    // todo! improve
+                    let mcycle_next = self.csr_regs.read_raw(CSR_MCYCLE.into()) + 1;
+                    self.csr_regs.write_raw(CSR_MCYCLE.into(), mcycle_next);
+                    let minstret_next = self.csr_regs.read_raw(CSR_MINSTRET.into()) + 1;
+                    self.csr_regs.write_raw(CSR_MINSTRET.into(), minstret_next);
+
                     self.mmu.bus.update();
                 }
                 _ => break,
@@ -140,11 +148,15 @@ impl CpuCore {
         }
     }
     fn check_pending_int(&mut self) {
+        let clint = &self.mmu.bus.clint.instance;
         let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
         let mut mip = Mip::from(mip_val);
 
-        let irq_clint = self.mmu.bus.clint.instance.is_interrupt();
+        let irq_clint = clint.is_interrupt();
+        let mtime_val = clint.get_mtime();
         mip.set_mtip(irq_clint);
+        // time is a shadow of mtime
+        self.csr_regs.write_raw(CSR_TIME.into(), mtime_val);
         self.csr_regs.write_raw(CSR_MIP.into(), mip.into());
     }
 
@@ -205,7 +217,6 @@ impl CpuCore {
 
             self.itrace.trap_record(trap_type, self.pc, tval);
 
-
             let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Machine);
@@ -227,11 +238,6 @@ impl CpuCore {
         let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
         let mut mstatus = Mstatus::from(mstatus_val);
         let mideleg_val = self.csr_regs.read_raw(CSR_MIDELEG.into());
-
-        // let _mideleg = Mip::from(mideleg_val);
-        // let _mip_mie = MieMip::from(mip_mie_val);
-        // println!("{_mideleg:?}");
-        // println!("{_mip_mie:?},{:b}",u64::from(_mip_mie));
 
         let m_a1 = mstatus.mie() & (self.cur_priv.get() == PrivilegeLevels::Machine);
         let m_a2 = self.cur_priv.get() < PrivilegeLevels::Machine;

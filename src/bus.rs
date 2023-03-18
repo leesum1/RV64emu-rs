@@ -1,4 +1,8 @@
-use crate::{device::device_trait::DeviceBase, sifive_clint::DeviceClint, inst::inst_base::{check_area, check_aligned}};
+use crate::{
+    device::device_trait::DeviceBase,
+    inst::inst_base::{check_aligned, check_area},
+    sifive_clint::DeviceClint,
+};
 
 pub struct DeviceType {
     pub start: u64,
@@ -27,7 +31,7 @@ impl Bus {
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
         if !check_aligned(addr, len as u64) {
-            println!("bus read:{:x},{:x}",addr,len);
+            println!("bus read:{:x},{:x}", addr, len);
             return Err(());
         }
 
@@ -37,7 +41,8 @@ impl Bus {
             if check_area(self.clint.start, self.clint.len, addr) {
                 Ok(self.clint.instance.do_read(addr - self.clint.start, len))
             } else {
-                panic!("can not find device,read addr{addr:X}");
+                println!("can not find device,read addr{addr:X}");
+                Err(())
             }
         };
 
@@ -61,13 +66,15 @@ impl Bus {
             return Err(());
         }
 
-        let mut special_device = || -> u64 {
+        let mut special_device = || -> Result<u64, ()> {
             if check_area(self.clint.start, self.clint.len, addr) {
-                self.clint
+                Ok(self
+                    .clint
                     .instance
-                    .do_write(addr - self.clint.start, data, len)
+                    .do_write(addr - self.clint.start, data, len))
             } else {
-                panic!("can not find device,read addr{addr:X}");
+                println!("can not find device,read addr{addr:X}");
+                Err(())
             }
         };
 
@@ -79,7 +86,7 @@ impl Bus {
 
         match general_device {
             Some(val) => Ok(val),
-            None => Ok(special_device()),
+            None => special_device(),
         }
     }
 
@@ -118,45 +125,4 @@ impl std::fmt::Display for Bus {
 
         Ok(())
     }
-}
-
-#[cfg(test)]
-mod tests_bus {
-
-    // #[test]
-    // fn test1() {
-    //     let dram_u = DeviceType {
-    //         start: 0x8000_0000,
-    //         len: 1024,
-    //         instance: Box::new(DeviceDram::new(1024)),
-    //         name: "DRAM",
-    //     };
-
-    //     let mut bus_u = Bus::new();
-    //     bus_u.add_device(dram_u);
-
-    //     let data = 0xDEADBEEF;
-    //     let data1 = 0xDEADBEEFDEADBEEF_u128;
-    //     let len = 4;
-
-    //     // write data to dram
-    //     let addr = 0x8000_0000;
-    //     bus_u.write(addr, data, len);
-    //     bus_u.write(addr + 4, data, len);
-
-    //     // read data from dram
-    //     let result = bus_u.read(addr, len);
-    //     // check if the read data is equal to the written data
-    //     assert_eq!(result, data);
-
-    //     let result = bus_u.read(addr, 1);
-    //     assert_eq!(result, data & 0xff);
-    //     let result = bus_u.read(addr, 2);
-    //     assert_eq!(result, data & 0xffff);
-    //     let result = bus_u.read(addr, 4);
-    //     assert_eq!(result, data);
-    //     let result = bus_u.read(addr, 8);
-    //     println!("{result:x}\n{data1:x}");
-    //     assert_eq!(result as u128, data1);
-    // }
 }

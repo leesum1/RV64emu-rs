@@ -90,7 +90,7 @@ impl Mmu {
     // to the original access type.
     fn va_translation_step3(&self) -> Result<(), TrapType> {
         if !self.pte.v() || (!self.pte.r() && self.pte.w()) {
-            Err(self.access_type.throw_exception())
+            Err(self.access_type.throw_page_exception())
         } else {
             Ok(())
         }
@@ -106,7 +106,7 @@ impl Mmu {
         }
         self.i -= 1;
         if self.i < 0 {
-            return Err(self.access_type.throw_exception());
+            return Err(self.access_type.throw_page_exception());
         }
 
         self.a = self.pte.ppn_all() * self.pagesize;
@@ -134,7 +134,7 @@ impl Mmu {
 
         match self.access_type {
             AccessType::Fetch(_) if !self.pte.x() => {
-                return Err(self.access_type.throw_exception());
+                return Err(self.access_type.throw_page_exception());
             }
             // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
             // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
@@ -142,10 +142,10 @@ impl Mmu {
             AccessType::Load(_)
                 if !(self.pte.r() || self.pte.x() & self.mstatus.mxr()) || !sum_bit_check() =>
             {
-                return Err(self.access_type.throw_exception());
+                return Err(self.access_type.throw_page_exception());
             }
             AccessType::Store(_) | AccessType::Amo(_) if !self.pte.w() || !sum_bit_check() => {
-                return Err(self.access_type.throw_exception());
+                return Err(self.access_type.throw_page_exception());
             }
             _ => {}
         }
@@ -165,7 +165,7 @@ impl Mmu {
         };
 
         if (self.i > 0) && is_misalign_superpage() {
-            return Err(self.access_type.throw_exception());
+            return Err(self.access_type.throw_page_exception());
         }
 
         Ok(7)
@@ -188,7 +188,7 @@ impl Mmu {
                 && (self.access_type == AccessType::Store(0)
                     || self.access_type == AccessType::Amo(0)))
         {
-            Err(self.access_type.throw_exception())
+            Err(self.access_type.throw_page_exception())
         } else {
             Ok(8)
         }
@@ -243,19 +243,14 @@ impl Mmu {
                 }
             }
         }
-
-        let ret = self.va_translation_step5();
-        ret?;
-
-        let ret = self.va_translation_step6();
-        ret?;
-
-        let ret = self.va_translation_step7();
-        ret?;
-
-        let ret = self.va_translation_step8();
-        ret?;
-
+        self.va_translation_step5()?;
+        // ret?;
+        self.va_translation_step6()?;
+        // ret?;
+        self.va_translation_step7()?;
+        // ret?;
+        self.va_translation_step8()?;
+        // ret?;
         Ok(self.pa.into())
     }
 
@@ -276,13 +271,18 @@ impl Mmu {
         // no mmu
         if self.no_mmu() {
             self.pa = Sv39Pa::from(addr);
-            return Ok(self.bus.read(addr, len as usize).unwrap());
+            return self
+                .bus
+                .read(addr, len as usize)
+                .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
         // println!("has mmu,addr:{:x}",addr);
         // has mmu
         self.va = Sv39Va::from(addr);
         self.page_table_walk()?; // err return
-        Ok(self.bus.read(self.pa.into(), len as usize).unwrap())
+        self.bus
+            .read(self.pa.into(), len as usize)
+            .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
     pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
@@ -291,12 +291,17 @@ impl Mmu {
         }
         // no mmu
         if self.no_mmu() {
-            return Ok(self.bus.write(addr, data, len as usize).unwrap());
+            return self
+                .bus
+                .write(addr, data, len as usize)
+                .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
         // has mmu
         self.va = Sv39Va::from(addr);
         self.page_table_walk()?; // err return
-        Ok(self.bus.write(self.pa.into(), data, len as usize).unwrap())
+        self.bus
+            .write(self.pa.into(), data, len as usize)
+            .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
     pub fn update_access_type(&mut self, access_type: AccessType) {
@@ -311,4 +316,3 @@ impl Mmu {
         self.stap = Stap::from(stap_val);
     }
 }
-

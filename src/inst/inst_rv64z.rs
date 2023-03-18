@@ -179,10 +179,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             };
 
             let rs1_data = cpu.gpr.read(f.rs1);
-            // println!("CSRRS_pre:{t:x}");
             let csr_wb_data = t | rs1_data;
-            // println!("rs1_data:{rs1_data:x}");
-            // println!("CSRRS_now:{csr_wb_data:x}");
+
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {

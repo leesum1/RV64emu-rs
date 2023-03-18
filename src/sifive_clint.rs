@@ -22,6 +22,7 @@ impl Clint {
         }
     }
     pub fn do_read(&self, addr: u64, len: usize) -> u64 {
+        // println!("Read Clint:{addr},{len}");
         match (addr, len) {
             (MSIP_OFFSET, 4) => 0,
             (MTIME_OFFSET, 8) => self.mtime,
@@ -38,6 +39,11 @@ impl Clint {
         };
         data
     }
+
+    pub fn get_mtime(&self) -> u64 {
+        self.mtime
+    }
+
 
     pub fn do_update(&mut self) {
         self.mtime += 2;
