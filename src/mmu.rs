@@ -2,7 +2,7 @@ use std::{cell::Cell, rc::Rc};
 
 use crate::{
     bus::Bus,
-    csr_regs_define::{Mstatus, Stap, StapMode},
+    csr_regs_define::{Mstatus, StapMode, SatpIn},
     inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
     sifive_clint::{Clint, DeviceClint},
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
@@ -13,7 +13,7 @@ pub struct Mmu {
     pub bus: Bus,
     pub access_type: AccessType,
     mstatus: Mstatus,
-    stap: Stap,
+    stap: SatpIn,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     i: i8,
     level: i8,
@@ -255,9 +255,7 @@ impl Mmu {
     }
 
     fn no_mmu(&self) -> bool {
-        // if ((cur_priv == M_MODE && (!mstatus->mprv || mstatus->mpp == M_MODE)) ||
-        // satp_reg->mode == 0) {
-        let x1 = !self.mstatus.mprv() || (self.mstatus.mpp() == 3);
+        let x1 = !self.mstatus.mprv() || (self.mstatus.mpp() == (PrivilegeLevels::Machine as u8));
         let x2 = self.cur_priv.get().eq(&PrivilegeLevels::Machine);
         let y1 = self.stap.mode().eq(&StapMode::Bare);
 
@@ -265,10 +263,12 @@ impl Mmu {
     }
 
     pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+        //check whether the address is aligned
         if !check_aligned(addr, len) {
             return Err(TrapType::LoadAddressMisaligned(addr));
         }
         // no mmu
+        //if the machine is without mmu,then we need not do page table walk,just return the physical address
         if self.no_mmu() {
             self.pa = Sv39Pa::from(addr);
             return self
@@ -276,10 +276,12 @@ impl Mmu {
                 .read(addr, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
-        // println!("has mmu,addr:{:x}",addr);
         // has mmu
+        //get the virtual address
         self.va = Sv39Va::from(addr);
+        //do page table walk
         self.page_table_walk()?; // err return
+                                 //read the data from the physical address
         self.bus
             .read(self.pa.into(), len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
@@ -312,7 +314,7 @@ impl Mmu {
         self.mstatus = Mstatus::from(mstatus_val);
     }
 
-    pub fn update_stap(&mut self, stap_val: u64) {
-        self.stap = Stap::from(stap_val);
+    pub fn update_satp(&mut self, stap_val: u64) {
+        self.stap = SatpIn::from(stap_val);
     }
 }

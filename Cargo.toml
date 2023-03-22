@@ -20,6 +20,7 @@ ringbuf = "0.3.2"
 bitfield-struct = "0.3.2"
 llvm-sys = "150"
 console = "0.15.5"
+enum_dispatch = "0.3.11"
 
 [profile.release]
 # lto = true

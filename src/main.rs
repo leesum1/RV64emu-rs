@@ -13,6 +13,7 @@ mod sifive_clint;
 mod sv39;
 mod traptype;
 
+
 use std::{
     cell::Cell,
     io::{self, Read},
@@ -343,7 +344,7 @@ mod isa_test {
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
-        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64mi-p-access.bin");
+        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64ui-v-add.bin");
         println!("{ret}");
     }
 

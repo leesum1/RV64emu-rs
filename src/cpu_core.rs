@@ -3,25 +3,23 @@ use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 use crate::{
     bus::Bus,
     cpu_icache::CpuIcache,
+
     csr_regs::CsrRegs,
-    csr_regs_define::{Mip, Mstatus, Mtvec, Stvec},
     gpr::Gpr,
     inst::inst_base::{
-        PrivilegeLevels, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC, CSR_MIDELEG, CSR_MIE, CSR_MIP,
-        CSR_MSTATUS, CSR_MTVEC, CSR_SCAUSE, CSR_SEPC, CSR_STVEC,
+        PrivilegeLevels,
     },
     inst::{
         inst_base::{
-            AccessType, FesvrCmd, CSR_MCYCLE, CSR_MINSTRET, CSR_MTVAL, CSR_SATP, CSR_STVAL,
-            CSR_TIME,
+            AccessType, FesvrCmd,
         },
         inst_rv64a::LrScReservation,
     },
     inst_decode::InstDecode,
     itrace::Itrace,
     mmu::Mmu,
-    sifive_clint::{Clint, DeviceClint},
-    traptype::TrapType,
+    sifive_clint::{Clint, DeviceClint}, traptype::TrapType, csr_regs_define::XipIn,
+
 };
 
 #[derive(PartialEq)]
@@ -111,7 +109,10 @@ impl CpuCore {
                 }
                 (i.operation)(self, inst, self.pc) // return
             }
-            None => panic!("inst err,pc:{:X},inst:{:x}", self.pc, inst),
+            None => {
+                println!("inst err,pc:{:X},inst:{:x}", self.pc, inst);
+                Err(TrapType::IllegalInstruction(inst.into()))
+            }
         }
     }
 
@@ -135,11 +136,16 @@ impl CpuCore {
 
                     self.check_pending_int();
                     self.handle_interrupt();
-                    // todo! improve
-                    let mcycle_next = self.csr_regs.read_raw(CSR_MCYCLE.into()) + 1;
-                    self.csr_regs.write_raw(CSR_MCYCLE.into(), mcycle_next);
-                    let minstret_next = self.csr_regs.read_raw(CSR_MINSTRET.into()) + 1;
-                    self.csr_regs.write_raw(CSR_MINSTRET.into(), minstret_next);
+                    // Increment the cycle counter
+                    // let mcycle_next = self.csr_regs.read_raw(CSR_MCYCLE.into()) + 1;
+                    // self.csr_regs.write_raw(CSR_MCYCLE.into(), mcycle_next);
+                    let cycle = self.csr_regs.cycle.get();
+                    self.csr_regs.cycle.set(cycle+1);
+                    // Increment the instruction counter
+                    // let minstret_next = self.csr_regs.read_raw(CSR_MINSTRET.into()) + 1;
+                    // self.csr_regs.write_raw(CSR_MINSTRET.into(), minstret_next);
+                    let instret = self.csr_regs.instret.get();
+                    self.csr_regs.instret.set(instret+1);
 
                     self.mmu.bus.update();
                 }
@@ -149,15 +155,18 @@ impl CpuCore {
     }
     fn check_pending_int(&mut self) {
         let clint = &self.mmu.bus.clint.instance;
-        let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
-        let mut mip = Mip::from(mip_val);
+        // let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
+        // let mut mip = Mip::from(mip_val);
+        let mut mip = self.csr_regs.xip.get();
 
         let irq_clint = clint.is_interrupt();
-        let mtime_val = clint.get_mtime();
+        let _mtime_val = clint.get_mtime();
         mip.set_mtip(irq_clint);
+
+        self.csr_regs.xip.set(mip);
         // time is a shadow of mtime
-        self.csr_regs.write_raw(CSR_TIME.into(), mtime_val);
-        self.csr_regs.write_raw(CSR_MIP.into(), mip.into());
+        // self.csr_regs.write_raw(CSR_TIME.into(), mtime_val);
+        // self.csr_regs.write_raw(CSR_MIP.into(), mip.into());
     }
 
     pub fn halt(&mut self) -> usize {
@@ -173,17 +182,22 @@ impl CpuCore {
     }
 
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
-        let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
-        let medeleg_val = self.csr_regs.read_raw(CSR_MEDELEG.into());
-        let has_exception = (medeleg_val & (1_u64 << trap_type.get_exception_num())) != 0;
+        // let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
+        // let medeleg_val = self.csr_regs.read_raw(CSR_MEDELEG.into());
+        let medeleg = self.csr_regs.medeleg.get();
+        let mut mstatus = self.csr_regs.xstatus.get();
+
+        // let has_exception = (medeleg_val & (1_u64 << trap_type.get_exception_num())) != 0;
+        let has_exception = u64::from(medeleg) & (1_u64 << trap_type.get_exception_num()) != 0;
+
         let trap_to_s_enable = self.cur_priv.get() <= PrivilegeLevels::Supervisor;
-        let mut mstatus = Mstatus::from(mstatus_val);
+        // let mut mstatus = Mstatus::from(mstatus_val);
 
         let tval = trap_type.get_tval();
+        let cause = trap_type.idx();
 
         // exception to S mode
         if has_exception & trap_to_s_enable {
-            let cause = trap_type.idx();
             // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
             mstatus.set_spp(!(self.cur_priv.get() == PrivilegeLevels::User));
             // When a trap is taken into supervisor mode, SPIE is set to SIE
@@ -191,18 +205,25 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
 
-            self.csr_regs.write_raw(CSR_SEPC.into(), self.pc);
+            // self.csr_regs.write_raw(CSR_SEPC.into(), self.pc);
 
-            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
+            // self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
 
-            self.csr_regs.write_raw(CSR_STVAL.into(), tval);
+            // self.csr_regs.write_raw(CSR_STVAL.into(), tval);
+
+            self.csr_regs.xstatus.set(mstatus);
+            self.csr_regs.sepc.set(self.pc);
+            self.csr_regs.scause.set(cause.into());
+            self.csr_regs.stval.set(tval);
 
             self.itrace.trap_record(trap_type, self.pc, tval);
 
-            let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
-            self.npc = Stvec::from(stvec_val).get_trap_pc(trap_type);
+            // let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
+            let stvec = self.csr_regs.stvec.get();
+
+            self.npc = stvec.get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Supervisor);
         }
         // exception to M mode
@@ -210,15 +231,22 @@ impl CpuCore {
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mie(false);
             mstatus.set_mpp(self.cur_priv.get() as u8);
-            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-            self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
-            self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type.idx());
-            self.csr_regs.write_raw(CSR_MTVAL.into(), tval);
+            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
+            // self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type.idx());
+            // self.csr_regs.write_raw(CSR_MTVAL.into(), tval);
+
+
+            self.csr_regs.xstatus.set(mstatus);
+            self.csr_regs.mepc.set(self.pc);
+            self.csr_regs.mcause.set(cause.into());
+            self.csr_regs.mtval.set(tval);
 
             self.itrace.trap_record(trap_type, self.pc, tval);
 
-            let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
-            self.npc = Mtvec::from(mtvec_val).get_trap_pc(trap_type);
+            // let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
+            let mtvec = self.csr_regs.mtvec.get();
+            self.npc = mtvec.get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Machine);
         }
     }
@@ -226,41 +254,51 @@ impl CpuCore {
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
 
-        let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
-        let mie_val = self.csr_regs.read_raw(CSR_MIE.into());
+        // let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
+        // let mie_val = self.csr_regs.read_raw(CSR_MIE.into());
 
-        let mip_mie_val = mip_val & mie_val;
+        let xie = self.csr_regs.xie.get();
+        let xip = self.csr_regs.xip.get();
+
+        let mip_mie_val = u64::from(xie) & u64::from(xip);
         // no interupt allowed
         if mip_mie_val == 0 {
             return;
         }
 
-        let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
-        let mut mstatus = Mstatus::from(mstatus_val);
-        let mideleg_val = self.csr_regs.read_raw(CSR_MIDELEG.into());
+        let mut mstatus = self.csr_regs.xstatus.get();
+
+        let mideleg = self.csr_regs.mideleg.get();
 
         let m_a1 = mstatus.mie() & (self.cur_priv.get() == PrivilegeLevels::Machine);
         let m_a2 = self.cur_priv.get() < PrivilegeLevels::Machine;
         let int_to_m_enable = m_a1 | m_a2;
-        let int_to_m_peding = mip_mie_val & !mideleg_val;
+        let int_to_m_peding = mip_mie_val & !u64::from(mideleg);
 
         let s_a1 = mstatus.sie() & (self.cur_priv.get() == PrivilegeLevels::Supervisor);
         let s_a2 = self.cur_priv.get() < PrivilegeLevels::Supervisor;
         let int_to_s_enable = s_a1 | s_a2;
-        let int_to_s_peding = mip_mie_val & mideleg_val;
+        let int_to_s_peding = mip_mie_val & u64::from(mideleg);
 
         // handing interupt in M mode
         if int_to_m_enable && int_to_m_peding != 0 {
-            let cause = Mip::from(int_to_m_peding).get_priority_interupt();
+            let cause = XipIn::from(int_to_m_peding).get_priority_interupt();
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv.get() as u8);
             mstatus.set_mie(false);
-            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-            self.csr_regs.write_raw(CSR_MEPC.into(), self.npc);
-            self.csr_regs.write_raw(CSR_MCAUSE.into(), cause.idx());
-            let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
+            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // self.csr_regs.write_raw(CSR_MEPC.into(), self.npc);
+            // self.csr_regs.write_raw(CSR_MCAUSE.into(), cause.idx());
+            // let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
+
+            self.csr_regs.xstatus.set(mstatus);
+            self.csr_regs.mepc.set(self.npc);
+            self.csr_regs.mcause.set(cause.idx().into());
+            // self.csr_regs.mtval.set(0);
+
+            let mtvec = self.csr_regs.mtvec.get();
             // todo! improve me
-            self.npc = Mtvec::from(mtvec_val).get_trap_pc(cause);
+            self.npc = mtvec.get_trap_pc(cause);
             self.cur_priv.set(PrivilegeLevels::Machine);
         }
         // handing interupt in S mode
@@ -269,7 +307,7 @@ impl CpuCore {
         // reading or writing the homonymous field in mstatus.
         // so, we use mstatus instead of sstatus below
         else if int_to_s_enable && int_to_s_peding != 0 {
-            let cause = Mip::from(int_to_s_peding).get_priority_interupt();
+            let cause = XipIn::from(int_to_s_peding).get_priority_interupt();
             // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
             mstatus.set_spp(!(self.cur_priv.get() == PrivilegeLevels::User));
             // When a trap is taken into supervisor mode, SPIE is set to SIE
@@ -277,24 +315,24 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // self.csr_regs.write_raw(CSR_SEPC.into(), self.npc);
+            // self.csr_regs.write_raw(CSR_SCAUSE.into(), cause.idx());
+            // let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
 
-            self.csr_regs.write_raw(CSR_SEPC.into(), self.npc);
+            self.csr_regs.sepc.set(self.npc);
+            self.csr_regs.scause.set(cause.idx().into());
 
-            self.csr_regs.write_raw(CSR_SCAUSE.into(), cause.idx());
-
-            let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
-            self.npc = Stvec::from(stvec_val).get_trap_pc(cause);
+            let stvec = self.csr_regs.stvec.get();
+            self.npc = stvec.get_trap_pc(cause);
             self.cur_priv.set(PrivilegeLevels::Supervisor);
         }
     }
 
     pub fn read(&mut self, addr: u64, len: u64, access_type: AccessType) -> Result<u64, TrapType> {
         self.mmu.update_access_type(access_type);
-        self.mmu
-            .update_mstatus(self.csr_regs.read_raw(CSR_MSTATUS.into()));
-        self.mmu
-            .update_stap(self.csr_regs.read_raw(CSR_SATP.into()));
+        self.mmu.update_mstatus(self.csr_regs.xstatus.get().into());
+        self.mmu.update_satp(self.csr_regs.satp.get().into());
         self.mmu.do_read(addr, len)
     }
 
@@ -306,12 +344,18 @@ impl CpuCore {
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(access_type);
-        self.mmu
-            .update_mstatus(self.csr_regs.read_raw(CSR_MSTATUS.into()));
-        self.mmu
-            .update_stap(self.csr_regs.read_raw(CSR_SATP.into()));
+        self.mmu.update_mstatus(self.csr_regs.xstatus.get().into());
+        self.mmu.update_satp(self.csr_regs.satp.get().into());
 
         self.mmu.do_write(addr, data, len)
+    }
+
+    pub fn get_csr_regs(&mut self) -> &mut CsrRegs {
+        &mut self.csr_regs
+    }
+
+    pub fn get_gp_regs(&mut self) -> &mut Gpr {
+        &mut self.gpr
     }
 
     // for riscof

@@ -1,4 +1,4 @@
-use crate::{csr_regs_define::Mstatus, inst::inst_base::*, traptype::TrapType};
+use crate::{inst::inst_base::*, traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_Z: [Instruction; 14] = [
@@ -36,8 +36,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // When executing an xRET instruction, supposing xPP holds the value y, xIE is set to xPIE; the
             // privilege mode is changed to y; xPIE is set to 1; and xPP is set to the least-privileged supported
             // mode (U if U-mode is implemented, else M). If xPP̸=M, xRET also sets MPRV=0.
-            let mstatus_val = cpu.csr_regs.read_raw(CSR_MSTATUS.into());
-            let mut mstatus = Mstatus::from(mstatus_val);
+            // let mstatus_val = cpu.csr_regs.read_raw(CSR_MSTATUS.into());
+            // let mut mstatus = Mstatus::from(mstatus_val);
+            let mut mstatus = cpu.csr_regs.xstatus.get();
 
             // supposing xPP holds the value y
             let y = mstatus.get_mpp_priv();
@@ -57,12 +58,13 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             }
 
             // println!("MRET:mstatus_now:{mstatus_val:x}");
-            cpu.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            cpu.csr_regs.xstatus.set(mstatus);
             // println!("MRET:mstatus_now2:{mstatus_val:x}");
 
-            let mepc_val = cpu.csr_regs.read_raw(CSR_MEPC.into());
+            // let mepc_val = cpu.csr_regs.read_raw(CSR_MEPC.into());
+            let mepc = cpu.csr_regs.mepc.get();
             // println!("mret->{mepc_val:x}");
-            cpu.npc = mepc_val;
+            cpu.npc = mepc;
 
             Ok(())
         },
@@ -78,8 +80,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             // privilege mode is changed to y; xPIE is set to 1; and xPP is set to the least-privileged supported
             // mode (U if U-mode is implemented, else M). If xPP̸=M, x RET also sets MPRV=0.
             //  xRET sets the pc to the value stored in the xepc register.
-            let mstatus_val = cpu.csr_regs.read_raw(CSR_MSTATUS.into());
-            let mut mstatus = Mstatus::from(mstatus_val);
+            // let mstatus_val = cpu.csr_regs.read_raw(CSR_MSTATUS.into());
+            // let mut mstatus = Mstatus::from(mstatus_val);
+            let mut mstatus = cpu.csr_regs.xstatus.get();
 
             // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
             if mstatus.tsr() {
@@ -103,13 +106,15 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 mstatus.set_mprv(false);
             }
 
-            cpu.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            // cpu.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
+            cpu.csr_regs.xstatus.set(mstatus);
             // println!("MRET:mstatus_now2:{mstatus_val:x}");
 
             // xRET sets the pc to the value stored in the xepc register.
-            let sepc_val = cpu.csr_regs.read_raw(CSR_SEPC.into());
+            // let sepc_val = cpu.csr_regs.read_raw(CSR_SEPC.into());
+            let sepc = cpu.csr_regs.sepc.get();
             // println!("sret->{sepc_val:x}");
-            cpu.npc = sepc_val;
+            cpu.npc = sepc;
 
             Ok(())
         },

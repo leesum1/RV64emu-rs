@@ -1,12 +1,79 @@
-use std::u8;
+use std::{
+    cell::{Cell},
+    rc::Rc,
+    u8,
+};
 
 use bitfield_struct::bitfield;
-use strum_macros::FromRepr;
+use enum_dispatch::enum_dispatch;
 
 use crate::{
     inst::inst_base::{AccessType, PrivilegeLevels},
     traptype::TrapType,
 };
+#[enum_dispatch]
+pub enum CsrEnum {
+    ReadOnlyCSR,
+    CommonCSR,
+    Misa,
+    Xstatus,
+    Xtvec,
+    Xie,
+    Xip,
+    Xcause,
+    Medeleg,
+    // Mideleg,
+    Mcounteren,
+    Menvcfg,
+    Mseccfg,
+    PMPcfg,
+    PMPaddr,
+    Satp,
+    Counter,
+}
+
+#[enum_dispatch(CsrEnum)]
+pub trait Csr {
+    fn read(&self) -> u64 {
+        self.read_raw()
+    }
+    fn write(&mut self, _data: u64) {}
+    fn read_raw(&self) -> u64;
+}
+fn write_with_mask(old: u64, data: u64, mask: u64) -> u64 {
+    (old & !mask) | (data & mask)
+}
+
+pub struct ReadOnlyCSR(pub u64);
+impl Csr for ReadOnlyCSR {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
+
+pub struct CommonCSR {
+    inner: Rc<Cell<u64>>,
+}
+
+impl CommonCSR {
+    pub fn new(share: Rc<Cell<u64>>) -> Self {
+        Self { inner: share }
+    }
+    pub fn new_noshare(data: u64) -> Self {
+        Self {
+            inner: Rc::new(Cell::new(data)),
+        }
+    }
+}
+
+impl Csr for CommonCSR {
+    fn write(&mut self, data: u64) {
+        self.inner.set(data);
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get()
+    }
+}
 
 #[bitfield(u64)]
 pub struct CsrAddr {
@@ -25,17 +92,16 @@ pub struct CsrAddr {
 // writes to the read-only bits are ignored.
 impl CsrAddr {
     pub fn check_privilege(&self, privi: PrivilegeLevels, access_type: AccessType) -> bool {
-        let privi_check = (privi as u8) >= self.privilege();
-        // println!("privi:{:?},{}", privi, privi_check);
+        let has_privilege = (privi as u8) >= self.privilege();
+        // println!("privi:{:?},{}", privi, has_privilege);
         match access_type {
-            AccessType::Store(_) => self.not_read_only() && privi_check,
-            _ => privi_check,
+            AccessType::Store(_) => self.not_read_only() && has_privilege,
+            _ => has_privilege,
         }
     }
 
     fn not_read_only(&self) -> bool {
         let read_only = self.read_write() == 0b11;
-        // println!("readonly:{}", read_only);
         !read_only // not read only
     }
 }
@@ -73,8 +139,90 @@ pub struct Misa {
     #[bits(2)]
     pub mxl: u8,
 }
+// read only
+impl Csr for Misa {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
 
-pub type Sstatus = Mstatus;
+#[bitfield(u64)]
+pub struct XstatusIn {
+    _wpri0: bool,
+    pub sie: bool,
+    _wpri1: bool,
+    pub mie: bool,
+    _wpri2: bool,
+    pub spie: bool,
+    pub ube: bool,
+    pub mpie: bool,
+    pub spp: bool,
+    #[bits(2)]
+    pub vs: u8,
+    #[bits(2)]
+    pub mpp: u8,
+    #[bits(2)]
+    pub fs: u8,
+    #[bits(2)]
+    pub xs: u8,
+    pub mprv: bool,
+    pub sum: bool,
+    pub mxr: bool,
+    pub tvm: bool,
+    pub tw: bool,
+    pub tsr: bool,
+    #[bits(9)]
+    _wpri3: u16,
+    #[bits(2)]
+    pub uxl: u8,
+    #[bits(2)]
+    pub sxl: u8,
+    pub sbe: bool,
+    pub mbe: bool,
+    #[bits(25)]
+    _wpri4: u32,
+    pub sd: bool,
+}
+
+impl XstatusIn {
+    // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise
+    // 0: user mode 1: s mode
+    pub fn get_spp_priv(&self) -> PrivilegeLevels {
+        match self.spp() {
+            true => PrivilegeLevels::Supervisor,
+            false => PrivilegeLevels::User,
+        }
+    }
+    pub fn get_mpp_priv(&self) -> PrivilegeLevels {
+        PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
+    }
+}
+
+pub struct Xstatus {
+    inner: Rc<Cell<XstatusIn>>,
+    mask: u64,
+}
+
+impl Xstatus {
+    pub fn new(share: Rc<Cell<XstatusIn>>, mask: u64) -> Self {
+        Self { inner: share, mask }
+    }
+}
+
+impl Csr for Xstatus {
+    fn write(&mut self, data: u64) {
+        let new_data = write_with_mask(self.inner.get().into(), data, self.mask);
+        self.inner.set(XstatusIn::from(new_data));
+    }
+    fn read(&self) -> u64 {
+        let data = self.read_raw();
+        data & self.mask
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get().into()
+    }
+}
+
 #[bitfield(u64)]
 pub struct Mstatus {
     _wpri0: bool,
@@ -113,6 +261,15 @@ pub struct Mstatus {
     pub sd: bool,
 }
 
+impl Csr for Mstatus {
+    fn write(&mut self, data: u64) {
+        self.0 = data
+    }
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
+
 impl Mstatus {
     // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise
     // 0: user mode 1: s mode
@@ -125,37 +282,99 @@ impl Mstatus {
     pub fn get_mpp_priv(&self) -> PrivilegeLevels {
         PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
     }
+
+    fn update_sd(&mut self) {
+        // self.set_sd(self.mie() && self.mie());
+    }
+
+    fn get_write_mask() -> u64 {
+        0x88C0_0000_0000_0000
+    }
+
+    fn get_read_mask() -> u64 {
+        0x88C0_0000_0000_0000
+    }
 }
 
-pub type Stvec = Mtvec;
+#[derive(Debug, PartialEq, Eq)]
+pub enum TvecMode {
+    Direct = 0,
+    Vectored = 1,
+    Reserved,
+}
+
+
 #[bitfield(u64)]
-pub struct Mtvec {
+pub struct XtvecIn {
     #[bits(2)]
-    pub mode: u8,
+    pub mode: TvecMode,
     #[bits(62)]
     pub base: u64,
 }
 
-#[repr(u8)]
-#[derive(FromRepr)]
-pub enum TvecMode {
-    Direct = 0,
-    Vectored = 1,
-}
-
-impl Mtvec {
+impl XtvecIn {
     pub fn get_trap_pc(&self, trap: TrapType) -> u64 {
-        let mode = TvecMode::from_repr(self.mode()).expect("Mtvec mode err");
         let base = self.base() << 2;
-        match mode {
+        match self.mode() {
             TvecMode::Vectored if trap.is_interupt() => base + 4 * trap.get_irq_num(),
             TvecMode::Direct | TvecMode::Vectored => base,
+            TvecMode::Reserved => todo!(),
+        }
+    }
+
+    pub fn get_write_mask(val: u64) -> u64 {
+        let tvec = XtvecIn::from(val);
+        if tvec.mode() == TvecMode::Reserved {
+            0xFFFF_FFFF_FFFF_FFFF
+        } else {
+            0xFFFF_FFFF_FFFF_FFFC
         }
     }
 }
-pub type MieMip = Mie;
+
+pub struct Xtvec {
+    inner: Rc<Cell<XtvecIn>>,
+}
+
+impl Xtvec {
+    pub fn new(share: Rc<Cell<XtvecIn>>) -> Self {
+        Self { inner: share }
+    }
+}
+
+impl Csr for Xtvec {
+    fn write(&mut self, data: u64) {
+        self.inner.set(XtvecIn::from(data));
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get().into()
+    }
+}
+
+
+impl From<u64> for TvecMode {
+    fn from(val: u64) -> Self {
+        match val {
+            0 => TvecMode::Direct,
+            1 => TvecMode::Vectored,
+            _ => TvecMode::Reserved,
+        }
+    }
+}
+
+impl From<TvecMode> for u64 {
+    fn from(val: TvecMode) -> Self {
+        match val {
+            TvecMode::Direct => 0,
+            TvecMode::Vectored => 1,
+            TvecMode::Reserved => todo!(),
+        }
+    }
+}
+
+
 #[bitfield(u64)]
-pub struct Mie {
+pub struct XieIn {
     _pad0: bool,
     pub ssie: bool,
     _pad1: bool,
@@ -172,11 +391,34 @@ pub struct Mie {
     _pad6: u64,
 }
 
-pub type Sip = Mip;
-pub type Sie = Mie;
+pub struct Xie {
+    inner: Rc<Cell<XieIn>>,
+    mask: u64,
+}
+
+impl Xie {
+    pub fn new(share: Rc<Cell<XieIn>>, mask: u64) -> Self {
+        Self { inner: share, mask }
+    }
+}
+
+impl Csr for Xie {
+    fn write(&mut self, data: u64) {
+        let mask = self.mask;
+        let mut inner = self.inner.get();
+        inner.0 = write_with_mask(inner.0, data, mask);
+        self.inner.set(inner);
+    }
+    fn read_raw(&self) -> u64 {
+        let inner = self.inner.get();
+        inner.0 & self.mask
+    }
+}
+
+
 
 #[bitfield(u64)]
-pub struct Mip {
+pub struct XipIn {
     _pad0: bool,
     pub ssip: bool,
     _pad1: bool,
@@ -193,7 +435,7 @@ pub struct Mip {
     _pad6: u64,
 }
 // standard interrupt priority is MEI, MSI, MTI, SEI, SSI, STI
-impl Mip {
+impl XipIn {
     pub fn get_priority_interupt(&self) -> TrapType {
         if self.meip() {
             return TrapType::MachineExternalInterrupt;
@@ -212,18 +454,71 @@ impl Mip {
         panic!("no interupt:{self:?}");
     }
 }
-pub type Scause = Mcause;
+
+pub struct Xip {
+    inner: Rc<Cell<XipIn>>,
+    mask: u64,
+}
+
+impl Xip {
+    pub fn new(share: Rc<Cell<XipIn>>, mask: u64) -> Self {
+        Self { inner: share, mask }
+    }
+}
+impl Csr for Xip {
+    fn read_raw(&self) -> u64 {
+        self.inner.get().0 & self.mask
+    }
+    fn write(&mut self, data: u64) {
+        let mask = self.mask;
+        let mut inner = self.inner.get();
+        inner.0 = write_with_mask(inner.0, data, mask);
+        self.inner.set(inner);
+    }
+}
+
+
+
 #[bitfield(u64)]
-pub struct Mcause {
+pub struct XcauseIn {
     #[bits(63)]
     pub exception_code: u64,
     pub interrupt: bool,
 }
 
-pub type Mideleg = Mip;
+impl Csr for XcauseIn {
+    // fn write(&mut self, data: u64) {
+    //     self.0 = data
+    // }
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
+
+pub struct Xcause {
+    inner: Rc<Cell<XcauseIn>>,
+}
+
+impl Xcause {
+    pub fn new(share: Rc<Cell<XcauseIn>>) -> Self {
+        Self { inner: share }
+    }
+}
+
+impl Csr for Xcause {
+    fn write(&mut self, data: u64) {
+        self.inner.set(XcauseIn::from(data));
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get().0
+    }
+}
+
+pub type Mideleg = Xip;
+pub type MidelegIn = XipIn;
 
 #[bitfield(u64)]
-pub struct Medeleg {
+pub struct MedelegIn {
     pub inst_addr_misalign: bool,
     pub inst_access_fault: bool,
     pub illegal_inst: bool,
@@ -244,7 +539,25 @@ pub struct Medeleg {
     pub _reserved2: u64,
 }
 
-pub type Mcountinhibit = Mcounteren;
+pub struct Medeleg {
+    inner: Rc<Cell<MedelegIn>>,
+}
+
+impl Medeleg {
+    pub fn new(share: Rc<Cell<MedelegIn>>) -> Self {
+        Self { inner: share }
+    }
+}
+
+impl Csr for Medeleg {
+    fn write(&mut self, data: u64) {
+        self.inner.set(MedelegIn::from(data));
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get().0
+    }
+}
+
 #[bitfield(u64)]
 pub struct Mcounteren {
     pub cy: bool,
@@ -253,6 +566,12 @@ pub struct Mcounteren {
     #[bits(29)]
     hmp3_31: u32,
     _pad: u32,
+}
+
+impl Csr for Mcounteren {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Mcounteren {
@@ -286,6 +605,12 @@ pub struct Menvcfg {
     pub stce: bool,
 }
 
+impl Csr for Menvcfg {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
+
 #[bitfield(u64)]
 pub struct Mseccfg {
     pub mml: bool,
@@ -297,6 +622,11 @@ pub struct Mseccfg {
     pub sseed: bool,
     #[bits(54)]
     _wpri0: u64,
+}
+impl Csr for Mseccfg {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
 }
 
 #[bitfield(u8)]
@@ -322,7 +652,7 @@ impl From<PMPcfgIn> for u64 {
         val.0 as u64
     }
 }
-
+pub type PMPcfgShare = Rc<Cell<Box<PMPcfg>>>;
 #[bitfield(u64)]
 pub struct PMPcfg {
     #[bits(8)]
@@ -343,12 +673,24 @@ pub struct PMPcfg {
     pub pmp7cfg: PMPcfgIn,
 }
 
+impl Csr for PMPcfg {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
+}
+
 #[bitfield(u64)]
 pub struct PMPaddr {
     #[bits(54)]
     pub address_55_2: u64,
     #[bits(10)]
     _pad: u32,
+}
+
+impl Csr for PMPaddr {
+    fn read_raw(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -380,7 +722,7 @@ impl From<StapMode> for u64 {
 }
 
 #[bitfield(u64)]
-pub struct Stap {
+pub struct SatpIn {
     #[bits(44)]
     pub ppn: u64,
     #[bits(16)]
@@ -389,7 +731,7 @@ pub struct Stap {
     pub mode: StapMode,
 }
 
-impl Stap {
+impl SatpIn {
     pub fn unsupport_mod(&self) -> bool {
         matches!(
             self.mode(),
@@ -397,3 +739,52 @@ impl Stap {
         )
     }
 }
+
+pub struct Satp {
+    inner: Rc<Cell<SatpIn>>,
+}
+
+impl Satp {
+    pub fn new(share: Rc<Cell<SatpIn>>) -> Self {
+        Satp { inner: share }
+    }
+}
+
+impl Csr for Satp {
+    fn write(&mut self, data: u64) {
+        let new_val = SatpIn::from(data);
+
+        let mut stap = self.inner.get();
+        if !new_val.unsupport_mod() {
+            stap.set_mode(new_val.mode());
+        }
+        stap.set_asid(new_val.asid());
+        stap.set_ppn(new_val.ppn());
+
+        self.inner.set(stap);
+    }
+    fn read_raw(&self) -> u64 {
+        self.inner.get().into()
+    }
+}
+
+pub struct Counter {
+    inner: Rc<Cell<u64>>,
+}
+
+impl Counter {
+    pub fn new(share: Rc<Cell<u64>>) -> Self {
+        Counter { inner: share }
+    }
+    pub fn inc(&self) {
+        self.inner.set(self.inner.get() + 1);
+    }
+}
+
+impl Csr for Counter {
+    fn read_raw(&self) -> u64 {
+        self.inner.get()
+    }
+}
+
+
