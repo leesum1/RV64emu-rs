@@ -257,7 +257,7 @@ impl CsrRegs {
         };
 
         // Check the permission of the CSR. If it is not allowed, return an illegal instruction trap.
-        if csr.check_permission(addr, privi, AccessType::Load(0)).is_err() {
+        if csr.check_permission(addr, privi, AccessType::Store(0)).is_err() {
             return Err(TrapType::IllegalInstruction(0));
         }
 
