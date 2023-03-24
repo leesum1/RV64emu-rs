@@ -1,8 +1,4 @@
-use std::{
-    cell::{Cell},
-    rc::Rc,
-    u8,
-};
+use std::{cell::Cell, rc::Rc, u8};
 
 use bitfield_struct::bitfield;
 use enum_dispatch::enum_dispatch;
@@ -11,6 +7,9 @@ use crate::{
     inst::inst_base::{AccessType, PrivilegeLevels},
     traptype::TrapType,
 };
+
+pub type CsrShare<T> = Rc<Cell<T>>;
+
 #[enum_dispatch]
 pub enum CsrEnum {
     ReadOnlyCSR,
@@ -39,6 +38,25 @@ pub trait Csr {
     }
     fn write(&mut self, _data: u64) {}
     fn read_raw(&self) -> u64;
+
+    // fn check_csr(&mut self, addr: u64, privi: PrivilegeLevels, access_type: AccessType) -> bool {
+    //     let csr_addr = CsrAddr::from(addr);
+    //     csr_addr.check_privilege(privi, access_type)
+    // }
+    fn check_permission(
+        &self,
+        addr: u64,
+        privi: PrivilegeLevels,
+        access_type: AccessType,
+    ) -> Result<(), ()> {
+        assert!(addr < 4096);
+        let csr_addr = CsrAddr::from(addr as u16);
+
+        match csr_addr.check_privilege(privi, access_type) {
+            true => Ok(()),
+            false => Err(()),
+        }
+    }
 }
 fn write_with_mask(old: u64, data: u64, mask: u64) -> u64 {
     (old & !mask) | (data & mask)
@@ -75,7 +93,7 @@ impl Csr for CommonCSR {
     }
 }
 
-#[bitfield(u64)]
+#[bitfield(u16)]
 pub struct CsrAddr {
     #[bits(8)]
     addr: u8,
@@ -83,8 +101,8 @@ pub struct CsrAddr {
     privilege: u8,
     #[bits(2)]
     read_write: u8,
-    #[bits(52)]
-    _pad: u64,
+    #[bits(4)]
+    _pad: u8,
 }
 // Attempts to access a non-existent CSR raise an illegal instruction exception. Attempts to access a
 // CSR without appropriate privilege level or to write a read-only register also raise illegal instruction
@@ -200,23 +218,28 @@ impl XstatusIn {
 
 pub struct Xstatus {
     inner: Rc<Cell<XstatusIn>>,
-    mask: u64,
+    rmask: u64,
+    wmask: u64,
 }
 
 impl Xstatus {
-    pub fn new(share: Rc<Cell<XstatusIn>>, mask: u64) -> Self {
-        Self { inner: share, mask }
+    pub fn new(share: Rc<Cell<XstatusIn>>, rmask: u64, wmask: u64) -> Self {
+        Self {
+            inner: share,
+            rmask,
+            wmask,
+        }
     }
 }
 
 impl Csr for Xstatus {
     fn write(&mut self, data: u64) {
-        let new_data = write_with_mask(self.inner.get().into(), data, self.mask);
+        let new_data = write_with_mask(self.inner.get().into(), data, self.wmask);
         self.inner.set(XstatusIn::from(new_data));
     }
     fn read(&self) -> u64 {
         let data = self.read_raw();
-        data & self.mask
+        data & self.rmask
     }
     fn read_raw(&self) -> u64 {
         self.inner.get().into()
@@ -303,7 +326,6 @@ pub enum TvecMode {
     Reserved,
 }
 
-
 #[bitfield(u64)]
 pub struct XtvecIn {
     #[bits(2)]
@@ -351,7 +373,6 @@ impl Csr for Xtvec {
     }
 }
 
-
 impl From<u64> for TvecMode {
     fn from(val: u64) -> Self {
         match val {
@@ -371,7 +392,6 @@ impl From<TvecMode> for u64 {
         }
     }
 }
-
 
 #[bitfield(u64)]
 pub struct XieIn {
@@ -414,8 +434,6 @@ impl Csr for Xie {
         inner.0 & self.mask
     }
 }
-
-
 
 #[bitfield(u64)]
 pub struct XipIn {
@@ -476,8 +494,6 @@ impl Csr for Xip {
         self.inner.set(inner);
     }
 }
-
-
 
 #[bitfield(u64)]
 pub struct XcauseIn {
@@ -742,11 +758,15 @@ impl SatpIn {
 
 pub struct Satp {
     inner: Rc<Cell<SatpIn>>,
+    xstatus: Rc<Cell<XstatusIn>>,
 }
 
 impl Satp {
-    pub fn new(share: Rc<Cell<SatpIn>>) -> Self {
-        Satp { inner: share }
+    pub fn new(share: Rc<Cell<SatpIn>>, Xstatus_share: Rc<Cell<XstatusIn>>) -> Self {
+        Satp {
+            inner: share,
+            xstatus: Xstatus_share,
+        }
     }
 }
 
@@ -766,6 +786,44 @@ impl Csr for Satp {
     fn read_raw(&self) -> u64 {
         self.inner.get().into()
     }
+
+    // fn check_permission(&self) -> Result<(), ()> {
+    //     let tvm = self.xstatus.get().tvm();
+
+    //     let require_priv = if tvm {
+    //         PrivilegeLevels::Machine
+    //     } else {
+    //         PrivilegeLevels::Supervisor
+    //     };
+
+    //     // println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
+
+    //     if !require_priv.check_priv(cur_priv) {
+    //         Err(())
+    //     } else {
+    //         Ok(())
+    //     }
+    // }
+
+    fn check_permission(
+        &self,
+        _addr: u64,
+        privi: PrivilegeLevels,
+        _access_type: AccessType,
+    ) -> Result<(), ()> {
+        let tvm = self.xstatus.get().tvm();
+
+        let require_priv = if tvm {
+            PrivilegeLevels::Machine
+        } else {
+            PrivilegeLevels::Supervisor
+        };
+        println!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
+        match require_priv.check_priv(privi) {
+            true => Ok(()),
+            false => Err(()),
+        }
+    }
 }
 
 pub struct Counter {
@@ -776,9 +834,6 @@ impl Counter {
     pub fn new(share: Rc<Cell<u64>>) -> Self {
         Counter { inner: share }
     }
-    pub fn inc(&self) {
-        self.inner.set(self.inner.get() + 1);
-    }
 }
 
 impl Csr for Counter {
@@ -786,5 +841,3 @@ impl Csr for Counter {
         self.inner.get()
     }
 }
-
-

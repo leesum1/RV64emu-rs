@@ -4,20 +4,19 @@ use hashbrown::HashMap;
 
 use crate::{
     csr_regs_define::{
-        CommonCSR, Counter, Csr, CsrAddr, CsrEnum, Medeleg, MedelegIn, Mideleg, MidelegIn,
-        Misa, ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn, Xstatus,
-        XstatusIn, Xtvec, XtvecIn,
+        CommonCSR, Counter, Csr, CsrAddr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg,
+        MidelegIn, Misa, ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn,
+        Xstatus, XstatusIn, Xtvec, XtvecIn,
     },
     inst::inst_base::{
-        AccessType, PrivilegeLevels, CSR_CYCLE, CSR_INSTRET, CSR_MARCHID, CSR_MCAUSE, CSR_MCYCLE,
-        CSR_MEDELEG, CSR_MEPC, CSR_MHARTID, CSR_MIDELEG, CSR_MIE, CSR_MIMPID, CSR_MINSTRET,
-        CSR_MIP, CSR_MISA, CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC, CSR_MVENDORID,
-        CSR_SATP, CSR_SCAUSE, CSR_SEPC, CSR_SIE, CSR_SIP, CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL,
-        CSR_STVEC, CSR_TIME, MASK_ALL,
+        AccessType, PrivilegeLevels, CSR_CYCLE, CSR_INSTRET, CSR_MARCHID, CSR_MCAUSE,
+        CSR_MCOUNTEREN, CSR_MCYCLE, CSR_MEDELEG, CSR_MEPC, CSR_MHARTID, CSR_MIDELEG, CSR_MIE,
+        CSR_MIMPID, CSR_MINSTRET, CSR_MIP, CSR_MISA, CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL,
+        CSR_MTVEC, CSR_MVENDORID, CSR_SATP, CSR_SCAUSE, CSR_SCOUNTEREN, CSR_SEPC, CSR_SIE, CSR_SIP,
+        CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, MASK_ALL,
     },
     traptype::TrapType,
 };
-type CsrShare<T> = Rc<Cell<T>>;
 
 pub struct CsrRegs {
     pub csr_map: HashMap<u64, CsrEnum>,
@@ -55,6 +54,20 @@ impl CsrRegs {
             .with_uxl(misa_val.mxl())
             .with_sxl(misa_val.mxl());
 
+        let sstatus_wmask = XstatusIn::new()
+            .with_spp(true)
+            .with_sie(true)
+            .with_spie(true)
+            .with_ube(true)
+            .with_vs(0b11)
+            .with_fs(0b11)
+            .with_xs(0b11)
+            .with_sum(true)
+            .with_mxr(true)
+            .with_sd(true);
+
+        let mstatus_mask = XstatusIn::from(u64::MAX).with_uxl(0);
+
         // read only
         let misa = misa_val;
         let mhartid = ReadOnlyCSR(0);
@@ -62,9 +75,9 @@ impl CsrRegs {
         let mvendorid = ReadOnlyCSR(0);
         let mimpid = ReadOnlyCSR(0);
         // important csrs
-        let status_share = Rc::new(Cell::new(mstatus_val));
-        let mstatus = Xstatus::new(status_share.clone(), MASK_ALL);
-        let sstatus = Xstatus::new(status_share.clone(), MASK_ALL);
+        let xstatus_share = Rc::new(Cell::new(mstatus_val));
+        let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_mask.into());
+        let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
 
         let xip_share = Rc::new(Cell::new(XipIn::new()));
         let mip = Xip::new(xip_share.clone(), MASK_ALL);
@@ -101,7 +114,7 @@ impl CsrRegs {
         let sscratch = CommonCSR::new_noshare(0);
 
         let satp_share = Rc::new(Cell::new(SatpIn::new()));
-        let satp = Satp::new(satp_share.clone());
+        let satp = Satp::new(satp_share.clone(), xstatus_share.clone());
 
         let cycle_share = Rc::new(Cell::new(0));
         let mcycle = Counter::new(cycle_share.clone());
@@ -114,6 +127,11 @@ impl CsrRegs {
         let instret_share = Rc::new(Cell::new(0));
         let minstret = Counter::new(instret_share.clone());
         let instret = Counter::new(instret_share.clone());
+
+        let mcounteren_share = Rc::new(Cell::new(0));
+        let scounteren_share = Rc::new(Cell::new(0));
+        let mcounteren = CommonCSR::new(mcounteren_share.clone());
+        let scounteren = CommonCSR::new(scounteren_share.clone());
 
         let mut csr_map: HashMap<u64, CsrEnum> = HashMap::new();
 
@@ -147,10 +165,12 @@ impl CsrRegs {
         csr_map.insert(CSR_TIME.into(), time.into());
         csr_map.insert(CSR_MINSTRET.into(), minstret.into());
         csr_map.insert(CSR_INSTRET.into(), instret.into());
+        csr_map.insert(CSR_MCOUNTEREN.into(), mcounteren.into());
+        csr_map.insert(CSR_SCOUNTEREN.into(), scounteren.into());
 
         Self {
             csr_map,
-            xstatus: status_share,
+            xstatus: xstatus_share,
             xip: xip_share,
             xie: xie_share,
             mcause: mcause_share,
@@ -181,7 +201,7 @@ impl CsrRegs {
     // exceptions. A read/write register might also contain some bits that are read-only, in which case
     // writes to the read-only bits are ignored.
     fn check_csr(&mut self, addr: u64, privi: PrivilegeLevels, access_type: AccessType) -> bool {
-        let csr_addr = CsrAddr::from(addr);
+        let csr_addr = CsrAddr::from(addr as u16);
         csr_addr.check_privilege(privi, access_type)
     }
 
@@ -190,45 +210,66 @@ impl CsrRegs {
         self.cur_priv = privi; // Update the current privilege level
 
         // Check if the CSR is accessible
-        if !self.check_csr(addr, privi, AccessType::Load(0)) {
-            return Err(TrapType::IllegalInstruction(addr));
+        // if !self.check_csr(addr, privi, AccessType::Load(0)) {
+        //     return Err(TrapType::IllegalInstruction(addr));
+        // };
+        
+        // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
+        let csr = match self.csr_map.get(&addr) {
+            Some(csr) => csr,
+            None => return Err(TrapType::IllegalInstruction(0)),
         };
 
-        match self.csr_map.get(&addr) {
-            Some(csr) => Ok(csr.read()),
-            None => {
-                // panic!("csr:{addr:x}")
-                Err(TrapType::IllegalInstruction(addr))
-            }
+        // Check the permission of the CSR. If it is not allowed to be read, return an illegal instruction trap.
+        if csr.check_permission(addr, privi, AccessType::Load(0)).is_err() {
+            return Err(TrapType::IllegalInstruction(0));
         }
+
+        // Return the value of the CSR.
+        Ok(csr.read())
     }
 
     pub fn write(&mut self, addr: u64, data: u64, privi: PrivilegeLevels) -> Result<(), TrapType> {
         assert!(addr < 4096); // The size of a CSR is 4KB
         self.cur_priv = privi; // Update the current privilege level
 
-        // Check if the CSR is accessible
-        if !self.check_csr(addr, privi, AccessType::Store(0)) {
-            return Err(TrapType::IllegalInstruction(addr));
+        // // Check if the CSR is accessible
+        // if !self.check_csr(addr, privi, AccessType::Store(0)) {
+        //     return Err(TrapType::IllegalInstruction(addr));
+        // };
+
+        // match self.csr_map.get_mut(&addr) {
+        //     Some(csr) => {
+        //         csr.write(data);
+        //         Ok(())
+        //     }
+        //     None => {
+        //         // panic!("csr:{addr:x}")
+        //         Err(TrapType::IllegalInstruction(addr))
+        //     }
+        // }
+
+
+        // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
+        let csr = match self.csr_map.get_mut(&addr) {
+            Some(csr) => csr,
+            None => return Err(TrapType::IllegalInstruction(0)),
         };
 
-        match self.csr_map.get_mut(&addr) {
-            Some(csr) => {
-                csr.write(data);
-                Ok(())
-            }
-            None => {
-                // panic!("csr:{addr:x}")
-                Err(TrapType::IllegalInstruction(addr))
-            }
+        // Check the permission of the CSR. If it is not allowed, return an illegal instruction trap.
+        if csr.check_permission(addr, privi, AccessType::Load(0)).is_err() {
+            return Err(TrapType::IllegalInstruction(0));
         }
+
+        // Return the value of the CSR.
+        csr.write(data);
+        Ok(())
+
     }
 }
 
-
 #[test]
-fn csr_new1(){
-
+fn csr_new1() {
     let mut csr_regs = CsrRegs::new();
 
     let x = csr_regs.read(0x0305, PrivilegeLevels::Machine);

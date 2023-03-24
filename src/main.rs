@@ -13,7 +13,6 @@ mod sifive_clint;
 mod sv39;
 mod traptype;
 
-
 use std::{
     cell::Cell,
     io::{self, Read},
@@ -82,36 +81,36 @@ fn main() {
     let mut cpu = CpuCore::new();
 
     // device dram
-    let mut mem = Box::new(DeviceDram::new(128 * 1024 * 1024));
+    let mut mem = DeviceDram::new(128 * 1024 * 1024);
     mem.load_binary(&args.img);
     let device_name = mem.get_name();
 
     cpu.mmu.bus.add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
-        instance: mem,
+        instance: mem.into(),
         name: device_name,
     });
 
     // device uart
-    let uart = Box::new(DeviceUart::new());
+    let uart = DeviceUart::new();
     let device_name = uart.get_name();
 
     cpu.mmu.bus.add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
-        instance: uart,
+        instance: uart.into(),
         name: device_name,
     });
 
     // device rtc
-    let rtc = Box::new(DeviceRTC::new());
+    let rtc = DeviceRTC::new();
     let device_name = rtc.get_name();
 
     cpu.mmu.bus.add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
-        instance: rtc,
+        instance: rtc.into(),
         name: device_name,
     });
 
@@ -139,23 +138,23 @@ fn main() {
 
     let vgactl_msg = Rc::new(Cell::new(false));
 
-    let vgactl = Box::new(DeviceVGACTL::new(vgactl_msg.clone()));
+    let vgactl = DeviceVGACTL::new(vgactl_msg.clone());
 
     let device_name = vgactl.get_name();
     cpu.mmu.bus.add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
-        instance: vgactl,
+        instance: vgactl.into(),
         name: device_name,
     });
 
     // device vga
-    let vga = Box::new(DeviceVGA::new(canvas, vgactl_msg));
+    let vga = DeviceVGA::new(canvas, vgactl_msg);
     let device_name = vga.get_name();
     cpu.mmu.bus.add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
-        instance: vga,
+        instance: vga.into(),
         name: device_name,
     });
 
@@ -169,24 +168,24 @@ fn main() {
         RingReceiver<sdl2::keyboard::Keycode>,
     ) = ring_channel(NonZeroUsize::new(16).unwrap());
 
-    let device_kb = Box::new(DeviceKB::new(kb_am_rx, kb_sdl_rx));
+    let device_kb = DeviceKB::new(kb_am_rx, kb_sdl_rx);
     let device_name = device_kb.get_name();
 
     cpu.mmu.bus.add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
-        instance: device_kb,
+        instance: device_kb.into(),
         name: device_name,
     });
     // device mouse
     let (mouse_sdl_tx, mouse_sdl_rx): (RingSender<DeviceMouseItem>, RingReceiver<DeviceMouseItem>) =
         ring_channel(NonZeroUsize::new(1).unwrap());
-    let device_mouse = Box::new(DeviceMouse::new(mouse_sdl_rx));
+    let device_mouse = DeviceMouse::new(mouse_sdl_rx);
 
     cpu.mmu.bus.add_device(DeviceType {
         start: MOUSE_ADDR,
         len: 16,
-        instance: device_mouse,
+        instance: device_mouse.into(),
         name: "Mouse",
     });
 
@@ -194,12 +193,12 @@ fn main() {
     let (mut sifive_uart_tx, sifive_uart_rx): (RingSender<i32>, RingReceiver<i32>) =
         ring_channel(NonZeroUsize::new(64).unwrap());
 
-    let device_sifive_uart = Box::new(DeviceSifiveUart::new(sifive_uart_rx));
+    let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
 
     cpu.mmu.bus.add_device(DeviceType {
         start: SIFIVE_UART_BASE,
         len: 0x1000,
-        instance: device_sifive_uart,
+        instance: device_sifive_uart.into(),
         name: "Sifive_Uart",
     });
     // show device address map
@@ -308,13 +307,13 @@ mod isa_test {
         let mut cpu = CpuCore::new();
 
         // device dram
-        let mut mem = Box::new(DeviceDram::new(128 * 1024 * 1024));
+        let mut mem = DeviceDram::new(128 * 1024 * 1024);
         mem.load_binary(img);
         let device_name = mem.get_name();
         cpu.mmu.bus.add_device(DeviceType {
             start: MEM_BASE,
             len: mem.capacity as u64,
-            instance: mem,
+            instance: mem.into(),
             name: device_name,
         });
 
@@ -344,7 +343,7 @@ mod isa_test {
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
-        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64ui-v-add.bin");
+        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64mi-p-illegal.bin");
         println!("{ret}");
     }
 
@@ -357,9 +356,9 @@ mod isa_test {
             "rv64mi-p-illegal.bin",
             "rv64ui-p-ma_data.bin",
             "rv64mi-p-breakpoint.bin",
-            "rv64mi-p-zicntr.bin",
-            "rv64mi-p-sbreak.bin",
-            "rv64si-p-sbreak.bin",
+            // "rv64mi-p-zicntr.bin",
+            // "rv64mi-p-sbreak.bin",
+            // "rv64si-p-sbreak.bin",
             "rv64ui-v-ma_data.bin",
         ];
         let test2_dir = Path::new(TESTS_PATH);

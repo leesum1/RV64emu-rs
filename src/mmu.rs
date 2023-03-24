@@ -2,7 +2,7 @@ use std::{cell::Cell, rc::Rc};
 
 use crate::{
     bus::Bus,
-    csr_regs_define::{Mstatus, StapMode, SatpIn},
+    csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
     inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
     sifive_clint::{Clint, DeviceClint},
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
@@ -12,8 +12,8 @@ use crate::{
 pub struct Mmu {
     pub bus: Bus,
     pub access_type: AccessType,
-    mstatus: Mstatus,
-    stap: SatpIn,
+    mstatus: CsrShare<XstatusIn>,
+    satp: CsrShare<SatpIn>,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     i: i8,
     level: i8,
@@ -25,7 +25,11 @@ pub struct Mmu {
 }
 
 impl Mmu {
-    pub fn new(privilege: Rc<Cell<PrivilegeLevels>>) -> Self {
+    pub fn new(
+        privilege: Rc<Cell<PrivilegeLevels>>,
+        mstatus: CsrShare<XstatusIn>,
+        satp: CsrShare<SatpIn>,
+    ) -> Self {
         let clint_u = Clint::new();
         let device_clint = DeviceClint {
             start: 0x2000000,
@@ -38,8 +42,8 @@ impl Mmu {
         Mmu {
             bus: bus_u,
             access_type: AccessType::Load(0),
-            mstatus: 0.into(),
-            stap: 0.into(),
+            mstatus,
+            satp,
             i: 0,
             level: 0,
             pagesize: 0,
@@ -60,12 +64,12 @@ impl Mmu {
 
     // todo! check privilege mode
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
-        assert_eq!(self.stap.mode(), StapMode::Sv39); // todo!  sv39 mode only
+        assert_eq!(self.satp.get().mode(), StapMode::Sv39); // todo!  sv39 mode only
         assert_ne!(self.cur_priv.get(), PrivilegeLevels::Machine); // check privilege mode
         self.pagesize = 4096; // 2 ^ 12
         self.level = 3;
         self.i = self.level - 1;
-        self.a = self.stap.ppn() * self.pagesize;
+        self.a = self.satp.get().ppn() * self.pagesize;
         Ok(2)
     }
     // 2. Let pte be the value of the PTE at address a+va.vpn[i]×PTESIZE. (For Sv32, PTESIZE=4.)
@@ -129,7 +133,7 @@ impl Mmu {
             }
             // in S-mode
 
-            self.mstatus.sum() || !self.pte.u()
+            self.mstatus.get().sum() || !self.pte.u()
         };
 
         match self.access_type {
@@ -140,7 +144,8 @@ impl Mmu {
             // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
             // MXR has no effect when page-based virtual memory is not in effect.
             AccessType::Load(_)
-                if !(self.pte.r() || self.pte.x() & self.mstatus.mxr()) || !sum_bit_check() =>
+                if !(self.pte.r() || self.pte.x() & self.mstatus.get().mxr())
+                    || !sum_bit_check() =>
             {
                 return Err(self.access_type.throw_page_exception());
             }
@@ -255,9 +260,10 @@ impl Mmu {
     }
 
     fn no_mmu(&self) -> bool {
-        let x1 = !self.mstatus.mprv() || (self.mstatus.mpp() == (PrivilegeLevels::Machine as u8));
+        let x1 = !self.mstatus.get().mprv()
+            || (self.mstatus.get().mpp() == (PrivilegeLevels::Machine as u8));
         let x2 = self.cur_priv.get().eq(&PrivilegeLevels::Machine);
-        let y1 = self.stap.mode().eq(&StapMode::Bare);
+        let y1 = self.satp.get().mode().eq(&StapMode::Bare);
 
         (x1 && x2) || y1
     }
@@ -291,6 +297,7 @@ impl Mmu {
         if !check_aligned(addr, len) {
             return Err(TrapType::StoreAddressMisaligned(addr));
         }
+
         // no mmu
         if self.no_mmu() {
             return self
@@ -309,12 +316,5 @@ impl Mmu {
     pub fn update_access_type(&mut self, access_type: AccessType) {
         self.access_type = access_type;
     }
-
-    pub fn update_mstatus(&mut self, mstatus_val: u64) {
-        self.mstatus = Mstatus::from(mstatus_val);
-    }
-
-    pub fn update_satp(&mut self, stap_val: u64) {
-        self.stap = SatpIn::from(stap_val);
-    }
 }
+

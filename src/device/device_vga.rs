@@ -13,15 +13,17 @@ type VgactlRx = Rc<Cell<bool>>;
 
 pub struct DeviceVGA {
     pub vga_canvas: WindowCanvas,
-    pub pix_buf: [u8; VGA_BUF_SIZE],
+    pub pix_buf: Box<[u8]>,
     rx: VgactlRx,
 }
 
 impl DeviceVGA {
     pub fn new(canvas_w: WindowCanvas, rx: VgactlRx) -> Self {
+        let buff = vec![0_u8;VGA_BUF_SIZE].into_boxed_slice();
+
         DeviceVGA {
             vga_canvas: canvas_w,
-            pix_buf: [0; VGA_BUF_SIZE],
+            pix_buf: buff,
             rx,
         }
     }

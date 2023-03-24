@@ -8,7 +8,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         name: "EBREAK",
         operation: |cpu, inst, pc| {
             // cpu.halt();
-            Ok(())
+            // Ok(())
+
+            Err(TrapType::Breakpoint(pc))
         },
     },
     Instruction {
@@ -86,7 +88,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
 
             // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
             if mstatus.tsr() {
-                return Err(TrapType::IllegalInstruction(pc));
+                return Err(TrapType::IllegalInstruction(inst.into()));
             }
 
             // supposing xPP holds the value y
@@ -132,7 +134,28 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         mask: MASK_SFENCE_VMA,
         match_data: MATCH_SFENCE_VMA,
         name: "SFENCE_VMA",
-        operation: |cpu, inst, pc| Ok(()),
+        operation: |cpu, inst, pc| {
+            // if (cur_priv < S_MODE || (cur_priv == S_MODE && mstatus->tvm))
+            // return false;
+            // require_privilege(get_field(STATE.mstatus->read(), MSTATUS_TVM) ? PRV_M : PRV_S);
+
+            let mstatus = cpu.csr_regs.xstatus.get();
+            let cur_priv = cpu.cur_priv.get();
+
+            let require_priv = if mstatus.tvm() {
+                PrivilegeLevels::Machine
+            } else {
+                PrivilegeLevels::Supervisor
+            };
+
+            println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
+
+            if !require_priv.check_priv(cur_priv) {
+                Err(TrapType::IllegalInstruction(inst.into()))
+            } else {
+                Ok(())
+            }
+        },
     },
     Instruction {
         mask: MASK_FENCE,

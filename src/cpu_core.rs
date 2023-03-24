@@ -1,25 +1,19 @@
 use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 
 use crate::{
-    bus::Bus,
     cpu_icache::CpuIcache,
-
     csr_regs::CsrRegs,
+    csr_regs_define::XipIn,
     gpr::Gpr,
-    inst::inst_base::{
-        PrivilegeLevels,
-    },
+    inst::inst_base::PrivilegeLevels,
     inst::{
-        inst_base::{
-            AccessType, FesvrCmd,
-        },
+        inst_base::{AccessType, FesvrCmd},
         inst_rv64a::LrScReservation,
     },
     inst_decode::InstDecode,
     itrace::Itrace,
     mmu::Mmu,
-    sifive_clint::{Clint, DeviceClint}, traptype::TrapType, csr_regs_define::XipIn,
-
+    traptype::TrapType,
 };
 
 #[derive(PartialEq)]
@@ -32,7 +26,6 @@ pub enum CpuState {
 pub struct CpuCore {
     pub gpr: Gpr,
     pub csr_regs: CsrRegs,
-    pub bus: Bus,
     pub mmu: Mmu,
     pub decode: InstDecode,
     pub pc: u64,
@@ -48,27 +41,22 @@ unsafe impl Send for CpuCore {}
 impl CpuCore {
     pub fn new() -> Self {
         // todo! improve me
-        let clint_u = Clint::new();
-        let device_clint = DeviceClint {
-            start: 0x2000000,
-            len: 0xBFFF,
-            instance: clint_u,
-            name: "Clint",
-        };
-
-        let bus_u = Bus::new(device_clint);
+        let csr_regs_u = CsrRegs::new();
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
+        let mstatus = csr_regs_u.xstatus.clone();
+        let satp = csr_regs_u.satp.clone();
+
+        let mmu_u = Mmu::new(privi_u.clone(), mstatus, satp);
 
         CpuCore {
             gpr: (Gpr::new()),
             decode: InstDecode::new(),
-            bus: bus_u,
-            mmu: Mmu::new(privi_u.clone()),
+            mmu: mmu_u,
             pc: 0x8000_0000,
             npc: 0x8000_0000,
             lr_sc_set: LrScReservation::new(),
             cpu_state: CpuState::Stop,
-            csr_regs: CsrRegs::new(),
+            csr_regs: csr_regs_u,
             cpu_icache: CpuIcache::new(),
             cur_priv: privi_u,
             itrace: Itrace::new(),
@@ -80,14 +68,18 @@ impl CpuCore {
         self.pc = self.npc;
         self.npc += 4;
 
-        // first lookup icache
+        // // first lookup icache
         // let icache_data = self.cpu_icache.get_inst(self.pc);
-        // if icache hit return, else load inst from mem and push into icache
-        // match icache_data {
+        // // if icache hit return, else load inst from mem and push into icache
+        // let fetch_ret = match icache_data {
         //     Some(icache_inst) => Ok(icache_inst as u64),
-        //     None => self.read(self.pc, 4, AccessType::Fetch),
-        // }
+        //     None => self.read(self.pc, 4, AccessType::Fetch(self.pc)),
+        // };
 
+        // if let Ok(inst) = fetch_ret {
+        //     self.cpu_icache.insert_inst(self.pc, inst as u32)
+        // }
+        // fetch_ret
         self.read(self.pc, 4, AccessType::Fetch(self.pc))
     }
 
@@ -137,15 +129,11 @@ impl CpuCore {
                     self.check_pending_int();
                     self.handle_interrupt();
                     // Increment the cycle counter
-                    // let mcycle_next = self.csr_regs.read_raw(CSR_MCYCLE.into()) + 1;
-                    // self.csr_regs.write_raw(CSR_MCYCLE.into(), mcycle_next);
                     let cycle = self.csr_regs.cycle.get();
-                    self.csr_regs.cycle.set(cycle+1);
+                    self.csr_regs.cycle.set(cycle + 1);
                     // Increment the instruction counter
-                    // let minstret_next = self.csr_regs.read_raw(CSR_MINSTRET.into()) + 1;
-                    // self.csr_regs.write_raw(CSR_MINSTRET.into(), minstret_next);
                     let instret = self.csr_regs.instret.get();
-                    self.csr_regs.instret.set(instret+1);
+                    self.csr_regs.instret.set(instret + 1);
 
                     self.mmu.bus.update();
                 }
@@ -235,7 +223,6 @@ impl CpuCore {
             // self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
             // self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type.idx());
             // self.csr_regs.write_raw(CSR_MTVAL.into(), tval);
-
 
             self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.mepc.set(self.pc);
@@ -331,8 +318,6 @@ impl CpuCore {
 
     pub fn read(&mut self, addr: u64, len: u64, access_type: AccessType) -> Result<u64, TrapType> {
         self.mmu.update_access_type(access_type);
-        self.mmu.update_mstatus(self.csr_regs.xstatus.get().into());
-        self.mmu.update_satp(self.csr_regs.satp.get().into());
         self.mmu.do_read(addr, len)
     }
 
@@ -344,9 +329,6 @@ impl CpuCore {
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(access_type);
-        self.mmu.update_mstatus(self.csr_regs.xstatus.get().into());
-        self.mmu.update_satp(self.csr_regs.satp.get().into());
-
         self.mmu.do_write(addr, data, len)
     }
 
@@ -414,13 +396,13 @@ mod tests_cpu {
         // let file_name =
         //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
         let mut cpu = CpuCore::new();
-        let mut dr = Box::new(DeviceDram::new(128 * 1024 * 1024));
+        let mut dr = DeviceDram::new(128 * 1024 * 1024);
         dr.load_binary(file_name);
 
         let dram_u = DeviceType {
             start: 0x8000_0000,
             len: dr.capacity as u64,
-            instance: dr,
+            instance: dr.into(),
             name: "DRAM",
         };
 

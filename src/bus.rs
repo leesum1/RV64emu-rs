@@ -1,5 +1,5 @@
 use crate::{
-    device::device_trait::DeviceBase,
+    device::device_trait::{DeviceBase, DeviceEnume},
     inst::inst_base::{check_aligned, check_area},
     sifive_clint::DeviceClint,
 };
@@ -7,9 +7,11 @@ use crate::{
 pub struct DeviceType {
     pub start: u64,
     pub len: u64,
-    pub instance: Box<dyn DeviceBase>,
+    pub instance: DeviceEnume,
     pub name: &'static str,
 }
+
+unsafe impl Send for DeviceType {}
 
 pub struct Bus {
     pub clint: DeviceClint,
@@ -91,6 +93,7 @@ impl Bus {
     }
 
     pub fn update(&mut self) {
+
         self.clint.instance.do_update();
         self.devices
             .iter_mut()
@@ -126,3 +129,4 @@ impl std::fmt::Display for Bus {
         Ok(())
     }
 }
+
