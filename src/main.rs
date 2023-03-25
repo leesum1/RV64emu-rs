@@ -343,19 +343,19 @@ mod isa_test {
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
-        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64mi-p-illegal.bin");
+        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64si-p-dirty.bin");
         println!("{ret}");
     }
 
     #[test]
     fn run_arch_tests() {
         let sikp_files = vec![
-            "rv64si-p-dirty.bin",
+            // "rv64si-p-dirty.bin",
             "rv64si-p-icache-alias.bin",
             // "rv64mi-p-access.bin",
-            "rv64mi-p-illegal.bin",
+            // "rv64mi-p-illegal.bin",
             "rv64ui-p-ma_data.bin",
-            "rv64mi-p-breakpoint.bin",
+            // "rv64mi-p-breakpoint.bin",
             // "rv64mi-p-zicntr.bin",
             // "rv64mi-p-sbreak.bin",
             // "rv64si-p-sbreak.bin",

@@ -15,6 +15,7 @@ pub struct Mmu {
     mstatus: CsrShare<XstatusIn>,
     satp: CsrShare<SatpIn>,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
+    mmu_effective_priv: PrivilegeLevels,
     i: i8,
     level: i8,
     pagesize: u64,
@@ -52,6 +53,7 @@ impl Mmu {
             pa: 0.into(),
             pte: 0.into(),
             cur_priv: privilege,
+            mmu_effective_priv: PrivilegeLevels::Machine,
         }
     }
 
@@ -65,7 +67,7 @@ impl Mmu {
     // todo! check privilege mode
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
         assert_eq!(self.satp.get().mode(), StapMode::Sv39); // todo!  sv39 mode only
-        assert_ne!(self.cur_priv.get(), PrivilegeLevels::Machine); // check privilege mode
+        assert_ne!(self.mmu_effective_priv, PrivilegeLevels::Machine); // check privilege mode
         self.pagesize = 4096; // 2 ^ 12
         self.level = 3;
         self.i = self.level - 1;
@@ -128,7 +130,7 @@ impl Mmu {
         // accessible by U-mode (U=1 in Figure 4.18) will fault.
         // When SUM=1, these accesses are permitted.
         let sum_bit_check = || -> bool {
-            if self.cur_priv.get() != PrivilegeLevels::Supervisor {
+            if self.mmu_effective_priv != PrivilegeLevels::Supervisor {
                 return true;
             }
             // in S-mode
@@ -259,13 +261,22 @@ impl Mmu {
         Ok(self.pa.into())
     }
 
-    fn no_mmu(&self) -> bool {
-        let x1 = !self.mstatus.get().mprv()
-            || (self.mstatus.get().mpp() == (PrivilegeLevels::Machine as u8));
-        let x2 = self.cur_priv.get().eq(&PrivilegeLevels::Machine);
-        let y1 = self.satp.get().mode().eq(&StapMode::Bare);
+    fn no_mmu(&mut self) -> bool {
+        let satp_bare_mode = self.satp.get().mode().eq(&StapMode::Bare);
+        let mstatus = self.mstatus.get();
+        self.mmu_effective_priv = self.cur_priv.get();
 
-        (x1 && x2) || y1
+        // When MPRV=1, load and store memory addresses are translated and protected, and endianness is applied, as though
+        //the current privilege mode were set to MPP. Instruction address-translation and protection are
+        // unaffected by the setting of MPRV. MPRV is read-only 0 if U-mode is not supported.
+        if self.access_type != AccessType::Fetch(0) && mstatus.mprv() {
+            self.mmu_effective_priv = mstatus.get_mpp_priv();
+        }
+
+        // If the effective privilege level is machine mode or if the satp mode is bare mode, then the MMU is effectively disabled
+        // (i.e. no_mmu() returns true)
+        let machine_mdoe = self.mmu_effective_priv.eq(&PrivilegeLevels::Machine);
+        machine_mdoe || satp_bare_mode
     }
 
     pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
@@ -317,4 +328,3 @@ impl Mmu {
         self.access_type = access_type;
     }
 }
-

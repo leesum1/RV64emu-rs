@@ -1213,6 +1213,7 @@ pub enum PrivilegeLevels {
     Machine = 3,
 }
 
+#[derive(Debug)]
 pub enum AccessType {
     Load(u64),
     Store(u64),

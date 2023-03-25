@@ -13,7 +13,7 @@ use crate::{
         CSR_MCOUNTEREN, CSR_MCYCLE, CSR_MEDELEG, CSR_MEPC, CSR_MHARTID, CSR_MIDELEG, CSR_MIE,
         CSR_MIMPID, CSR_MINSTRET, CSR_MIP, CSR_MISA, CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL,
         CSR_MTVEC, CSR_MVENDORID, CSR_SATP, CSR_SCAUSE, CSR_SCOUNTEREN, CSR_SEPC, CSR_SIE, CSR_SIP,
-        CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, MASK_ALL,
+        CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, MASK_ALL, CSR_TSELECT,
     },
     traptype::TrapType,
 };
@@ -133,6 +133,10 @@ impl CsrRegs {
         let mcounteren = CommonCSR::new(mcounteren_share.clone());
         let scounteren = CommonCSR::new(scounteren_share.clone());
 
+        // not support debug mode,just to pass breakpoint test
+        // Skip tselect if hard-wired.
+        let tselect = ReadOnlyCSR(u64::MAX);
+
         let mut csr_map: HashMap<u64, CsrEnum> = HashMap::new();
 
         csr_map.insert(CSR_MISA.into(), misa.into());
@@ -167,6 +171,7 @@ impl CsrRegs {
         csr_map.insert(CSR_INSTRET.into(), instret.into());
         csr_map.insert(CSR_MCOUNTEREN.into(), mcounteren.into());
         csr_map.insert(CSR_SCOUNTEREN.into(), scounteren.into());
+        csr_map.insert(CSR_TSELECT.into(), tselect.into());
 
         Self {
             csr_map,
