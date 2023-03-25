@@ -351,7 +351,7 @@ mod isa_test {
     fn run_arch_tests() {
         let sikp_files = vec![
             // "rv64si-p-dirty.bin",
-            "rv64si-p-icache-alias.bin",
+            // "rv64si-p-icache-alias.bin",
             // "rv64mi-p-access.bin",
             // "rv64mi-p-illegal.bin",
             "rv64ui-p-ma_data.bin",
