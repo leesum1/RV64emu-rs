@@ -107,7 +107,7 @@ impl Mmu {
     // exception corresponding to the original access type. Otherwise, let a = pte.ppn × PAGESIZE
     // and go to step 2.
     fn va_translation_step4(&mut self) -> Result<u8, TrapType> {
-        if self.pte.r() && self.pte.x() {
+        if self.pte.r() || self.pte.x() {
             return Ok(5); // go to step 5
         }
         self.i -= 1;
