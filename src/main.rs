@@ -343,7 +343,8 @@ mod isa_test {
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
         // handle_fault:0000000000003000
-        let ret = start_test("/home/leesum/workhome/riscv-tests/isa/build/bin/rv64si-p-icache-alias.bin");
+        let path = "/home/leesum/workhome/riscv-tests/benchmarks/dhrystone.bin";
+        let ret = start_test(path);
         println!("{ret}");
     }
 

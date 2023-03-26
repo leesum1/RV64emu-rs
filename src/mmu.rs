@@ -30,8 +30,9 @@ impl Mmu {
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: CsrShare<XstatusIn>,
         satp: CsrShare<SatpIn>,
+        mtime: CsrShare<u64>,
     ) -> Self {
-        let clint_u = Clint::new();
+        let clint_u = Clint::new(mtime);
         let device_clint = DeviceClint {
             start: 0x2000000,
             len: 0xBFFF,

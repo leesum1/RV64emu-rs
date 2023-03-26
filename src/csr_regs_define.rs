@@ -762,10 +762,10 @@ pub struct Satp {
 }
 
 impl Satp {
-    pub fn new(share: Rc<Cell<SatpIn>>, Xstatus_share: Rc<Cell<XstatusIn>>) -> Self {
+    pub fn new(share: Rc<Cell<SatpIn>>, xstatus_share: Rc<Cell<XstatusIn>>) -> Self {
         Satp {
             inner: share,
-            xstatus: Xstatus_share,
+            xstatus: xstatus_share,
         }
     }
 }
@@ -818,7 +818,7 @@ impl Csr for Satp {
         } else {
             PrivilegeLevels::Supervisor
         };
-        println!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
+        // println!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
         match require_priv.check_priv(privi) {
             true => Ok(()),
             false => Err(()),

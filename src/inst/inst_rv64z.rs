@@ -8,8 +8,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         name: "EBREAK",
         operation: |cpu, inst, pc| {
             // cpu.halt();
-            // Ok(())
-
+            
             Err(TrapType::Breakpoint(pc))
         },
     },
@@ -148,7 +147,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 PrivilegeLevels::Supervisor
             };
 
-            println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
+            // println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
 
             if !require_priv.check_priv(cur_priv) {
                 Err(TrapType::IllegalInstruction(inst.into()))

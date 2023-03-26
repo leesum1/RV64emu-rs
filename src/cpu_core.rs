@@ -45,8 +45,9 @@ impl CpuCore {
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
         let mstatus = csr_regs_u.xstatus.clone();
         let satp = csr_regs_u.satp.clone();
+        let mtime = csr_regs_u.time.clone();
 
-        let mmu_u = Mmu::new(privi_u.clone(), mstatus, satp);
+        let mmu_u = Mmu::new(privi_u.clone(), mstatus, satp, mtime);
 
         CpuCore {
             gpr: (Gpr::new()),
@@ -60,7 +61,7 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: privi_u,
             itrace: Itrace::new(),
-            debug_flag: true,
+            debug_flag: false,
         }
     }
 
@@ -143,18 +144,11 @@ impl CpuCore {
     }
     fn check_pending_int(&mut self) {
         let clint = &self.mmu.bus.clint.instance;
-        // let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
-        // let mut mip = Mip::from(mip_val);
         let mut mip = self.csr_regs.xip.get();
-
         let irq_clint = clint.is_interrupt();
-        let _mtime_val = clint.get_mtime();
         mip.set_mtip(irq_clint);
-
         self.csr_regs.xip.set(mip);
-        // time is a shadow of mtime
-        // self.csr_regs.write_raw(CSR_TIME.into(), mtime_val);
-        // self.csr_regs.write_raw(CSR_MIP.into(), mip.into());
+
     }
 
     pub fn halt(&mut self) -> usize {

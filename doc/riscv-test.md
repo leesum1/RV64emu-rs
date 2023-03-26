@@ -24,26 +24,26 @@ rv64mi_sc_tests = \
 	zicntr \
 ```
 
-* [ ] access
+* [] access
 
 currently, does not support PMP
-* [ ] breakpoint
+* [x] breakpoint
 
 currently, does not support breakpoint
-* [ ] csr
-* [ ] mcsr
-* [ ] illegal
+* [x] csr
+* [x] mcsr
+* [x] illegal
 * [x] ma_fetch
 * [x] ma_addr
 * [x] scall
-* [ ] sbreak
+* [x] sbreak
 * [x] ld-misaligned
 * [x] lw-misaligned
 * [x] lh-misaligned
 * [x] sh-misaligned
 * [x] sw-misaligned
 * [x] sd-misaligned
-* [ ] zicntr
+* [x] zicntr
 
 ## rv64-si
 
@@ -59,10 +59,10 @@ rv64si_sc_tests = \
 	sbreak \
 ```
 
-* [ ] csr
-* [ ] dirty
-* [ ] icache-alias
+* [x] csr
+* [x] dirty
+* [x] icache-alias
 * [x] ma_fetch
 * [x] scall
 * [x] wfi
-* [ ] sbreak
+* [x] sbreak
