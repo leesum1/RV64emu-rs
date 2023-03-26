@@ -36,6 +36,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
                 // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
+
+            if f.is_call() {
+                cpu.ftrace.call_record(pc, next_pc);
+            }
             cpu.npc = next_pc;
             cpu.gpr.write(f.rd, wdata);
             Ok(())
@@ -56,6 +60,13 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             if !check_aligned(next_pc, 4) {
                 // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
+            };
+
+            if let Some(val) = f.get_jalr_type() {
+                match val {
+                    true => cpu.ftrace.ret_record(pc, next_pc),
+                    false => cpu.ftrace.call_record(pc, next_pc),
+                }
             };
 
             cpu.npc = next_pc;

@@ -13,7 +13,7 @@ use crate::{
     inst_decode::InstDecode,
     itrace::Itrace,
     mmu::Mmu,
-    traptype::TrapType,
+    traptype::TrapType, ftrace::Ftrace,
 };
 
 #[derive(PartialEq)]
@@ -35,6 +35,7 @@ pub struct CpuCore {
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
     pub itrace: Itrace,
+    pub ftrace:Ftrace,
     pub debug_flag: bool,
 }
 unsafe impl Send for CpuCore {}
@@ -61,6 +62,7 @@ impl CpuCore {
             cpu_icache: CpuIcache::new(),
             cur_priv: privi_u,
             itrace: Itrace::new(),
+            ftrace:Ftrace::new(),
             debug_flag: false,
         }
     }

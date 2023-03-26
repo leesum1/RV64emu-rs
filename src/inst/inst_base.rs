@@ -1084,9 +1084,46 @@ pub struct FormatI {
     pub rs1: u64,
     pub imm: i64,
 }
+
+impl FormatI {
+    // only used in jalr instruction
+    // jalr is used to return from a function or call a function
+    // true means "return", false means "call"
+    pub fn get_jalr_type(&self) -> Option<bool> {
+        let rs1_is_link = matches!(self.rs1, 1 | 5);
+        let rd_is_link = matches!(self.rd, 1 | 5);
+        let rs1_eq_rd = self.rs1 == self.rd;
+
+        let is_return = rs1_is_link && !rd_is_link;
+
+        let is_call_1 = (!rs1_is_link && rd_is_link);
+        let is_call_2 = (rs1_is_link && rd_is_link && rs1_eq_rd);
+        let is_call_3 = (rs1_is_link && rd_is_link && !rs1_eq_rd);
+        let is_call = is_call_1 || is_call_2 || is_call_3;
+
+        if is_call && is_return {
+            panic!("jalr type error, is_call and is_return are both true")
+        }
+
+        if is_return {
+            Some(true)
+        } else if is_call {
+            Some(false)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct FormatJ {
     pub rd: u64,
     pub imm: u64,
+}
+
+impl FormatJ {
+    pub fn is_call(&self) -> bool {
+        self.rd == 1 || self.rd == 5
+    }
 }
 pub struct FormatR {
     pub rd: u64,

@@ -12,6 +12,7 @@ mod mmu;
 mod sifive_clint;
 mod sv39;
 mod traptype;
+mod ftrace;
 
 use std::{
     cell::Cell,
