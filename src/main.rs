@@ -85,6 +85,7 @@ fn main() {
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
     let signal_term_trace = signal_term.clone();
+    let signal_term_sdl_event = signal_term.clone();
     let signal_term_uart = signal_term;
 
     let (trace_tx, trace_rx) = crossbeam_channel::unbounded();
@@ -243,15 +244,15 @@ fn main() {
         // send signal to stop the trace thread
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
-
+    // debug trace thread
     let trace_thread = thread::spawn(move || {
         while !signal_term_trace.load(Ordering::Relaxed) {
             trace_log.run();
             // std::thread::sleep(Duration::from_millis(100));
         }
     });
-
-    thread::spawn(move || {
+    // uart thread to get terminal input
+    let sifive_uart_thread = thread::spawn(move || {
         let stdin = io::stdin();
         let mut handle = stdin.lock().bytes();
         while !signal_term_uart.load(Ordering::Relaxed) {
@@ -263,9 +264,17 @@ fn main() {
         }
     });
     // the main thread to handle sdl events
-    handle_sdl_event(cpu_main, event_system, kb_am_tx, kb_sdl_tx, mouse_sdl_tx);
+    handle_sdl_event(
+        signal_term_sdl_event,
+        event_system,
+        kb_am_tx,
+        kb_sdl_tx,
+        mouse_sdl_tx,
+    );
 
     trace_thread.join().unwrap();
+    sifive_uart_thread.join().unwrap();
+    cpu_main.join().unwrap();
 }
 
 fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
@@ -277,7 +286,7 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
 }
 
 fn handle_sdl_event(
-    cpu_handle: JoinHandle<()>,
+    signal_term: Arc<AtomicBool>,
     static_event: sdl2::EventSubsystem,
     mut kb_am_tx: RingSender<DeviceKbItem>,
     mut kb_sdl_tx: RingSender<Keycode>,
@@ -287,7 +296,7 @@ fn handle_sdl_event(
     let _event_system = static_event;
     let _sdl_context = _event_system.sdl();
     let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-    while !cpu_handle.is_finished() {
+    while !signal_term.load(Ordering::Relaxed) {
         let mouse_state = event_pump.mouse_state();
 
         mouse_sdl_tx

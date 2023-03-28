@@ -272,16 +272,3 @@ impl CsrRegs {
 
     }
 }
-
-#[test]
-fn csr_new1() {
-    let mut csr_regs = CsrRegs::new();
-
-    let x = csr_regs.read(0x0305, PrivilegeLevels::Machine);
-
-    println!("{:?}", x);
-
-    let y = csr_regs.write(0x0305, 0x1234, PrivilegeLevels::Machine);
-
-    println!("{:?}", y);
-}

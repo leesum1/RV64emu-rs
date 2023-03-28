@@ -22,8 +22,10 @@ enum_dispatch = "0.3.11"
 crossbeam-channel = "0.5.7"
 
 [features]
-# default = ["rv_debug_trace"]
+# default = ["rv_debug_trace","support_am"]
 rv_debug_trace = []
+support_am = []
+
 
 [profile.release]
 # lto = true

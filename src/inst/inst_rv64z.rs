@@ -7,8 +7,8 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
         match_data: MATCH_EBREAK,
         name: "EBREAK",
         operation: |cpu, inst, pc| {
-            // cpu.halt();
-            
+            #[cfg(feature = "support_am")]
+            cpu.halt();
             Err(TrapType::Breakpoint(pc))
         },
     },
