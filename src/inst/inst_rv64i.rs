@@ -1,4 +1,4 @@
-use crate::{inst::inst_base::*, traptype::TrapType};
+use crate::{inst::inst_base::*, trace::traces::TraceType, traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [
@@ -38,8 +38,10 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             };
 
             if f.is_call() {
-                cpu.ftrace.call_record(pc, next_pc);
-            }
+                if let Some(sender) = &cpu.trace_sender {
+                    sender.send(TraceType::Call(pc, next_pc)).unwrap();
+                };
+            };
             cpu.npc = next_pc;
             cpu.gpr.write(f.rd, wdata);
             Ok(())
@@ -63,10 +65,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
             };
 
             if let Some(val) = f.get_jalr_type() {
-                match val {
-                    true => cpu.ftrace.ret_record(pc, next_pc),
-                    false => cpu.ftrace.call_record(pc, next_pc),
-                }
+                if let Some(sender) = &cpu.trace_sender {
+                    match val {
+                        true => sender.send(TraceType::Return(pc, next_pc)).unwrap(),
+                        false => sender.send(TraceType::Call(pc, next_pc)).unwrap(),
+                    }
+                };
             };
 
             cpu.npc = next_pc;

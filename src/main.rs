@@ -7,12 +7,11 @@ mod device;
 mod gpr;
 mod inst;
 mod inst_decode;
-mod itrace;
 mod mmu;
 mod sifive_clint;
 mod sv39;
+mod trace;
 mod traptype;
-mod ftrace;
 
 use std::{
     cell::Cell,
@@ -20,6 +19,10 @@ use std::{
     num::NonZeroUsize,
     process,
     rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -51,6 +54,7 @@ use crate::{
         device_vga::DeviceVGA,
         device_vgactl::DeviceVGACTL,
     },
+    trace::traces::Traces,
 };
 // /* 各个设备地址 */
 // #define MEM_BASE 0x80000000
@@ -78,8 +82,21 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let signal_term = Arc::new(AtomicBool::new(false));
+    let signal_term_cpucore = signal_term.clone();
+    let signal_term_trace = signal_term.clone();
+    let signal_term_uart = signal_term;
 
-    let mut cpu = CpuCore::new();
+    let (trace_tx, trace_rx) = crossbeam_channel::unbounded();
+    let mut trace_log = Traces::new(trace_rx);
+
+    let mut cpu = if cfg!(feature = "rv_debug_trace") {
+        println!("Enabling debug tracing");
+        CpuCore::new(Some(trace_tx))
+    } else {
+        println!("Disabling debug tracing");
+        CpuCore::new(None)
+    };
 
     // device dram
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
@@ -205,17 +222,6 @@ fn main() {
     // show device address map
     println!("{0}", cpu.mmu.bus);
 
-    thread::spawn(move || {
-        let stdin = io::stdin();
-        let mut handle = stdin.lock().bytes();
-        loop {
-            let x = handle.next();
-            if let Some(Ok(ch)) = x {
-                sifive_uart_tx.send(ch as i32).unwrap();
-            }
-        }
-    });
-
     // create another thread to simmulate the cpu_core
     // while the main thread is used to handle sdl events
     // which will be send to coresponding devices through ring_channel
@@ -233,9 +239,33 @@ fn main() {
         args.signature
             .map(|x| cpu.dump_signature(&x))
             .unwrap_or_else(|| println!("no signature"));
+
+        // send signal to stop the trace thread
+        signal_term_cpucore.store(true, Ordering::Relaxed);
+    });
+
+    let trace_thread = thread::spawn(move || {
+        while !signal_term_trace.load(Ordering::Relaxed) {
+            trace_log.run();
+            // std::thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock().bytes();
+        while !signal_term_uart.load(Ordering::Relaxed) {
+            let x = handle.next();
+            if let Some(Ok(ch)) = x {
+                sifive_uart_tx.send(ch as i32).unwrap();
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
     });
     // the main thread to handle sdl events
     handle_sdl_event(cpu_main, event_system, kb_am_tx, kb_sdl_tx, mouse_sdl_tx);
+
+    trace_thread.join().unwrap();
 }
 
 fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
@@ -305,7 +335,7 @@ mod isa_test {
     };
 
     fn start_test(img: &str) -> bool {
-        let mut cpu = CpuCore::new();
+        let mut cpu = CpuCore::new(None);
 
         // device dram
         let mut mem = DeviceDram::new(128 * 1024 * 1024);

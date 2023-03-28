@@ -130,8 +130,8 @@ impl CsrRegs {
 
         let mcounteren_share = Rc::new(Cell::new(0));
         let scounteren_share = Rc::new(Cell::new(0));
-        let mcounteren = CommonCSR::new(mcounteren_share.clone());
-        let scounteren = CommonCSR::new(scounteren_share.clone());
+        let mcounteren = CommonCSR::new(mcounteren_share);
+        let scounteren = CommonCSR::new(scounteren_share);
 
         // not support debug mode,just to pass breakpoint test
         // Skip tselect if hard-wired.

@@ -24,7 +24,7 @@ impl Ftrace {
     }
 
     pub fn ret_record(&mut self, inst_pc: u64, pc: u64) {
-        self.cur_deepth -= 1;
+        self.cur_deepth = self.cur_deepth.wrapping_sub(1);
         let ret_str = format!(
             "pc:{:08x},deep:{} Return<---0x{:08x}\n",
             inst_pc, self.cur_deepth, pc

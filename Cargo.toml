@@ -16,10 +16,14 @@ sdl2 = {version="0.35" }
 ring-channel = "0.11"
 # colored = "2"
 hashbrown = "0.13.2"
-ringbuf = "0.3.2"
 bitfield-struct = "0.3.2"
 llvm-sys = "150"
 enum_dispatch = "0.3.11"
+crossbeam-channel = "0.5.7"
+
+[features]
+# default = ["rv_debug_trace"]
+rv_debug_trace = []
 
 [profile.release]
 # lto = true

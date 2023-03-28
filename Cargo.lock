@@ -147,6 +147,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf2b3e8478797446514c91ef04bafcb59faba183e621ad488df88983cc14128c"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -568,26 +578,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "ringbuf"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93ca10b9c9e53ac855a2d6953bce34cef6edbac32c4b13047a4d59d67299420a"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
 name = "riscv64-emu"
 version = "0.1.0"
 dependencies = [
  "bitfield-struct",
  "chrono",
  "clap",
+ "crossbeam-channel",
  "enum_dispatch",
  "hashbrown",
  "llvm-sys",
  "ring-channel",
- "ringbuf",
  "sdl2",
  "strum",
  "strum_macros",

@@ -11,9 +11,9 @@ use crate::{
         inst_rv64a::LrScReservation,
     },
     inst_decode::InstDecode,
-    itrace::Itrace,
     mmu::Mmu,
-    traptype::TrapType, ftrace::Ftrace,
+    trace::traces::TraceType,
+    traptype::TrapType,
 };
 
 #[derive(PartialEq)]
@@ -34,13 +34,11 @@ pub struct CpuCore {
     pub lr_sc_set: LrScReservation, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
-    pub itrace: Itrace,
-    pub ftrace:Ftrace,
-    pub debug_flag: bool,
+    pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 unsafe impl Send for CpuCore {}
 impl CpuCore {
-    pub fn new() -> Self {
+    pub fn new(trace_sender: Option<crossbeam_channel::Sender<TraceType>>) -> Self {
         // todo! improve me
         let csr_regs_u = CsrRegs::new();
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
@@ -61,9 +59,7 @@ impl CpuCore {
             csr_regs: csr_regs_u,
             cpu_icache: CpuIcache::new(),
             cur_priv: privi_u,
-            itrace: Itrace::new(),
-            ftrace:Ftrace::new(),
-            debug_flag: false,
+            trace_sender,
         }
     }
 
@@ -98,10 +94,10 @@ impl CpuCore {
 
         match inst_op {
             Some(i) => {
-                if self.debug_flag {
-                    self.itrace.disassemble_bytes(self.pc, inst);
-                    // self.itrace.disassemble_bytes(self.mmu.pa.into(), inst);
-                }
+                #[cfg(feature = "rv_debug_trace")]
+                if let Some(sender) = &self.trace_sender {
+                    sender.send(TraceType::Itrace(self.pc, inst)).unwrap();
+                };
                 (i.operation)(self, inst, self.pc) // return
             }
             None => {
@@ -150,7 +146,6 @@ impl CpuCore {
         let irq_clint = clint.is_interrupt();
         mip.set_mtip(irq_clint);
         self.csr_regs.xip.set(mip);
-
     }
 
     pub fn halt(&mut self) -> usize {
@@ -202,7 +197,11 @@ impl CpuCore {
             self.csr_regs.scause.set(cause.into());
             self.csr_regs.stval.set(tval);
 
-            self.itrace.trap_record(trap_type, self.pc, tval);
+            if let Some(sender) = &self.trace_sender {
+                sender
+                    .send(TraceType::Trap(trap_type, self.pc, tval))
+                    .unwrap();
+            };
 
             // let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             let stvec = self.csr_regs.stvec.get();
@@ -225,7 +224,11 @@ impl CpuCore {
             self.csr_regs.mcause.set(cause.into());
             self.csr_regs.mtval.set(tval);
 
-            self.itrace.trap_record(trap_type, self.pc, tval);
+            if let Some(sender) = &self.trace_sender {
+                sender
+                    .send(TraceType::Trap(trap_type, self.pc, tval))
+                    .unwrap();
+            };
 
             // let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             let mtvec = self.csr_regs.mtvec.get();
@@ -391,7 +394,7 @@ mod tests_cpu {
     fn run_once(file_name: &str) {
         // let file_name =
         //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
-        let mut cpu = CpuCore::new();
+        let mut cpu = CpuCore::new(None);
         let mut dr = DeviceDram::new(128 * 1024 * 1024);
         dr.load_binary(file_name);
 
