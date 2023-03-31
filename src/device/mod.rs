@@ -7,3 +7,4 @@ pub mod device_sifive_uart;
 pub mod device_uart;
 pub mod device_vga;
 pub mod device_vgactl;
+pub mod device_sifive_plic;

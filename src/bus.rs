@@ -1,5 +1,8 @@
 use crate::{
-    device::device_trait::{DeviceBase, DeviceEnume},
+    device::{
+        device_sifive_plic::{DevicePlic, SifvePlic},
+        device_trait::{DeviceBase, DeviceEnume},
+    },
     inst::inst_base::{check_aligned, check_area},
     sifive_clint::DeviceClint,
 };
@@ -15,15 +18,24 @@ unsafe impl Send for DeviceType {}
 
 pub struct Bus {
     pub clint: DeviceClint,
+    pub plic: DevicePlic,
     pub devices: Vec<DeviceType>,
 }
 unsafe impl Send for Bus {}
 
 impl Bus {
     pub fn new(clint: DeviceClint) -> Self {
+        let plic = DevicePlic {
+            start: 0x0C00_0000,
+            len: 0x30_0008,
+            instance: SifvePlic::new(),
+            name: "PLIC",
+        };
+
         Bus {
             devices: vec![],
             clint,
+            plic,
         }
     }
 
@@ -93,7 +105,6 @@ impl Bus {
     }
 
     pub fn update(&mut self) {
-
         self.clint.instance.do_update();
         self.devices
             .iter_mut()
@@ -129,4 +140,3 @@ impl std::fmt::Display for Bus {
         Ok(())
     }
 }
-
