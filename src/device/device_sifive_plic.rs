@@ -14,6 +14,8 @@ const PLIC_ENABLE2: u64 = 0x2004;
 const PLIC_THRESHOLD: u64 = 0x20_0000;
 const PLIC_CLAIM: u64 = 0x20_0004;
 
+pub const SIFIVE_UART_IRQ: u32 = 10;
+
 struct IrqSource {
     id: u32,
     pending: Rc<Cell<bool>>,
@@ -81,31 +83,6 @@ struct IrqThreshold {
     pub threshold: u8,
     #[bits(29)]
     pub reserved: u32,
-}
-
-impl IrqThreshold {
-    pub fn is_mask_all(&mut self) -> bool {
-        self.threshold() == 7
-    }
-    pub fn is_mask_none(&mut self) -> bool {
-        self.threshold() == 0
-    }
-}
-
-struct IrqClaim {
-    val: u32,
-}
-
-impl IrqClaim {
-    pub fn new() -> Self {
-        IrqClaim { val: 0 }
-    }
-    pub fn set(&mut self, irq_id: u32) {
-        self.val = irq_id;
-    }
-    pub fn get(&self) -> u32 {
-        self.val
-    }
 }
 
 pub struct DevicePlic {
@@ -220,9 +197,11 @@ impl SifvePlic {
                 }
             }
         });
+        // todo! unclear
         irq_pendding.set(false);
         irq_id
     }
+    // todo! unclear
     fn claim_write(&mut self, irq_id: u32) {
         self.set_pending_bit(irq_id, false);
     }
@@ -301,9 +280,9 @@ mod plic_test {
 
         plic.set_enable_bit(1, true);
         plic.do_write(PLIC_THRESHOLD, 0, 4);
-        plic.do_write(PLIC_PRIORITY_START + 4 * 1, 2, 4);
+        plic.do_write(PLIC_PRIORITY_START + 4, 2, 4);
 
         uart_irq.set(false);
-        assert_eq!(plic.plic_external_interrupt(), false);
+        assert!(!plic.plic_external_interrupt());
     }
 }

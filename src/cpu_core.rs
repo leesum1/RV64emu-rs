@@ -142,9 +142,14 @@ impl CpuCore {
     }
     fn check_pending_int(&mut self) {
         let clint = &self.mmu.bus.clint.instance;
+        let plic = &mut self.mmu.bus.plic.instance;
         let mut mip = self.csr_regs.xip.get();
+
         let irq_clint = clint.is_interrupt();
+        let irq_plic = plic.plic_external_interrupt();
         mip.set_mtip(irq_clint);
+        mip.set_meip(irq_plic);
+        mip.set_seip(irq_plic);
         self.csr_regs.xip.set(mip);
     }
 

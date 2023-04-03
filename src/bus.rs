@@ -51,9 +51,11 @@ impl Bus {
 
         // special devices
         // such as clint
-        let special_device = || -> Result<u64, ()> {
+        let mut special_device = || -> Result<u64, ()> {
             if check_area(self.clint.start, self.clint.len, addr) {
                 Ok(self.clint.instance.do_read(addr - self.clint.start, len))
+            } else if check_area(self.plic.start, self.plic.len, addr) {
+                Ok(self.plic.instance.do_read(addr - self.plic.start, len))
             } else {
                 println!("can not find device,read addr{addr:X}");
                 Err(())
@@ -86,6 +88,11 @@ impl Bus {
                     .clint
                     .instance
                     .do_write(addr - self.clint.start, data, len))
+            } else if check_area(self.plic.start, self.plic.len, addr) {
+                Ok(self
+                    .plic
+                    .instance
+                    .do_write(addr - self.plic.start, data, len))
             } else {
                 println!("can not find device,read addr{addr:X}");
                 Err(())
