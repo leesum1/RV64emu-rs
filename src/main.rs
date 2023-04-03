@@ -23,7 +23,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::{self, JoinHandle},
+    thread::{self},
     time::Duration,
 };
 
@@ -44,6 +44,7 @@ use crate::{
         device_kb::{DeviceKB, DeviceKbItem},
         device_mouse::{DeviceMouse, DeviceMouseItem},
         device_rtc::DeviceRTC,
+        device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
         device_trait::{
@@ -209,10 +210,15 @@ fn main() {
     });
 
     // device sifive_uart
-    let (mut sifive_uart_tx, sifive_uart_rx): (RingSender<i32>, RingReceiver<i32>) =
-        ring_channel(NonZeroUsize::new(64).unwrap());
+    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
 
     let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
+
+    cpu.mmu
+        .bus
+        .plic
+        .instance
+        .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
 
     cpu.mmu.bus.add_device(DeviceType {
         start: SIFIVE_UART_BASE,
@@ -252,7 +258,7 @@ fn main() {
         }
     });
     // uart thread to get terminal input
-    let sifive_uart_thread = thread::spawn(move || {
+    let _sifive_uart_thread = thread::spawn(move || {
         let stdin = io::stdin();
         let mut handle = stdin.lock().bytes();
         while !signal_term_uart.load(Ordering::Relaxed) {
@@ -273,7 +279,7 @@ fn main() {
     );
 
     trace_thread.join().unwrap();
-    sifive_uart_thread.join().unwrap();
+    // sifive_uart_thread.join().unwrap();
     cpu_main.join().unwrap();
 }
 
