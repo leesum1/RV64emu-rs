@@ -142,8 +142,16 @@ impl std::fmt::Display for Bus {
             self.clint.len
         ))
         .unwrap();
-        x.for_each(|device_str| f.write_str(&device_str).unwrap());
+        f.write_fmt(format_args!(
+            "name:{:15} Area:0X{:08X}-->0X{:08X},len:0X{:08X}\n",
+            self.plic.name,
+            self.plic.start,
+            self.plic.start + self.plic.len,
+            self.plic.len
+        ))
+        .unwrap();
 
+        x.for_each(|device_str| f.write_str(&device_str).unwrap());
         Ok(())
     }
 }

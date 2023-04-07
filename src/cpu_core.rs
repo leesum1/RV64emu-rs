@@ -3,7 +3,7 @@ use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 use crate::{
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
-    csr_regs_define::XipIn,
+    csr_regs_define::{XipIn},
     gpr::Gpr,
     inst::inst_base::PrivilegeLevels,
     inst::{
@@ -147,6 +147,7 @@ impl CpuCore {
 
         let irq_clint = clint.is_interrupt();
         let irq_plic = plic.plic_external_interrupt();
+        // todo! check me
         mip.set_mtip(irq_clint);
         mip.set_meip(irq_plic);
         mip.set_seip(irq_plic);
@@ -166,16 +167,12 @@ impl CpuCore {
     }
 
     pub fn handle_exceptions(&mut self, trap_type: TrapType) {
-        // let mstatus_val = self.csr_regs.read_raw(CSR_MSTATUS.into());
-        // let medeleg_val = self.csr_regs.read_raw(CSR_MEDELEG.into());
         let medeleg = self.csr_regs.medeleg.get();
         let mut mstatus = self.csr_regs.xstatus.get();
 
-        // let has_exception = (medeleg_val & (1_u64 << trap_type.get_exception_num())) != 0;
         let has_exception = u64::from(medeleg) & (1_u64 << trap_type.get_exception_num()) != 0;
 
         let trap_to_s_enable = self.cur_priv.get() <= PrivilegeLevels::Supervisor;
-        // let mut mstatus = Mstatus::from(mstatus_val);
 
         let tval = trap_type.get_tval();
         let cause = trap_type.idx();
@@ -189,14 +186,6 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-
-            // self.csr_regs.write_raw(CSR_SEPC.into(), self.pc);
-
-            // self.csr_regs.write_raw(CSR_SCAUSE.into(), cause);
-
-            // self.csr_regs.write_raw(CSR_STVAL.into(), tval);
-
             self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.sepc.set(self.pc);
             self.csr_regs.scause.set(cause.into());
@@ -208,7 +197,6 @@ impl CpuCore {
                     .unwrap();
             };
 
-            // let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
             let stvec = self.csr_regs.stvec.get();
 
             self.npc = stvec.get_trap_pc(trap_type);
@@ -219,10 +207,6 @@ impl CpuCore {
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mie(false);
             mstatus.set_mpp(self.cur_priv.get() as u8);
-            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-            // self.csr_regs.write_raw(CSR_MEPC.into(), self.pc);
-            // self.csr_regs.write_raw(CSR_MCAUSE.into(), trap_type.idx());
-            // self.csr_regs.write_raw(CSR_MTVAL.into(), tval);
 
             self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.mepc.set(self.pc);
@@ -235,7 +219,6 @@ impl CpuCore {
                     .unwrap();
             };
 
-            // let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
             let mtvec = self.csr_regs.mtvec.get();
             self.npc = mtvec.get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Machine);
@@ -245,9 +228,6 @@ impl CpuCore {
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
 
-        // let mip_val = self.csr_regs.read_raw(CSR_MIP.into());
-        // let mie_val = self.csr_regs.read_raw(CSR_MIE.into());
-
         let xie = self.csr_regs.xie.get();
         let xip = self.csr_regs.xip.get();
 
@@ -256,7 +236,7 @@ impl CpuCore {
         if mip_mie_val == 0 {
             return;
         }
-
+        // println!("mip_mie_val:{:?}", XieIn::from(mip_mie_val));
         let mut mstatus = self.csr_regs.xstatus.get();
 
         let mideleg = self.csr_regs.mideleg.get();
@@ -277,15 +257,21 @@ impl CpuCore {
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv.get() as u8);
             mstatus.set_mie(false);
-            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-            // self.csr_regs.write_raw(CSR_MEPC.into(), self.npc);
-            // self.csr_regs.write_raw(CSR_MCAUSE.into(), cause.idx());
-            // let mtvec_val = self.csr_regs.read_raw(CSR_MTVEC.into());
 
             self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.mepc.set(self.npc);
             self.csr_regs.mcause.set(cause.idx().into());
             // self.csr_regs.mtval.set(0);
+
+            if let Some(sender) = &self.trace_sender {
+                sender
+                    .send(TraceType::Trap(
+                        cause,
+                        self.pc,
+                        0,
+                    ))
+                    .unwrap();
+            };
 
             let mtvec = self.csr_regs.mtvec.get();
             // todo! improve me
@@ -306,17 +292,22 @@ impl CpuCore {
             // and SIE is set to 0
             mstatus.set_sie(false);
 
-            // self.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
-            // self.csr_regs.write_raw(CSR_SEPC.into(), self.npc);
-            // self.csr_regs.write_raw(CSR_SCAUSE.into(), cause.idx());
-            // let stvec_val = self.csr_regs.read_raw(CSR_STVEC.into());
+            if let Some(sender) = &self.trace_sender {
+                sender
+                    .send(TraceType::Trap(
+                        cause,
+                        self.pc,
+                        0,
+                    ))
+                    .unwrap();
+            };
 
             self.csr_regs.sepc.set(self.npc);
             self.csr_regs.scause.set(cause.idx().into());
 
             let stvec = self.csr_regs.stvec.get();
-            self.npc = stvec.get_trap_pc(cause);
             self.cur_priv.set(PrivilegeLevels::Supervisor);
+            self.npc = stvec.get_trap_pc(cause);
         }
     }
 
