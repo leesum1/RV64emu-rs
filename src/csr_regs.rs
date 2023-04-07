@@ -13,7 +13,7 @@ use crate::{
         CSR_MCOUNTEREN, CSR_MCYCLE, CSR_MEDELEG, CSR_MEPC, CSR_MHARTID, CSR_MIDELEG, CSR_MIE,
         CSR_MIMPID, CSR_MINSTRET, CSR_MIP, CSR_MISA, CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL,
         CSR_MTVEC, CSR_MVENDORID, CSR_SATP, CSR_SCAUSE, CSR_SCOUNTEREN, CSR_SEPC, CSR_SIE, CSR_SIP,
-        CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, MASK_ALL, CSR_TSELECT,
+        CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, CSR_TSELECT, MASK_ALL,
     },
     traptype::TrapType,
 };
@@ -79,13 +79,18 @@ impl CsrRegs {
         let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_mask.into());
         let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
 
+        // todo!
+        // I don't know why, Linux kernel will set sip.stip = 1,it will cause a trap
+        // I use this mask to fix it
+        let sip_mask = XieIn::new().with_seie(true).with_ssie(true);
+
         let xip_share = Rc::new(Cell::new(XipIn::new()));
         let mip = Xip::new(xip_share.clone(), MASK_ALL);
-        let sip = Xip::new(xip_share.clone(), MASK_ALL);
+        let sip = Xip::new(xip_share.clone(), sip_mask.into());
 
         let xie_share = Rc::new(Cell::new(XieIn::new()));
         let mie = Xie::new(xie_share.clone(), MASK_ALL);
-        let sie = Xie::new(xie_share.clone(), MASK_ALL);
+        let sie = Xie::new(xie_share.clone(), sip_mask.into());
 
         let mcause_share = Rc::new(Cell::new(XcauseIn::new()));
         let mcause = Xcause::new(mcause_share.clone());
@@ -218,7 +223,7 @@ impl CsrRegs {
         // if !self.check_csr(addr, privi, AccessType::Load(0)) {
         //     return Err(TrapType::IllegalInstruction(addr));
         // };
-        
+
         // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
         let csr = match self.csr_map.get(&addr) {
             Some(csr) => csr,
@@ -226,7 +231,10 @@ impl CsrRegs {
         };
 
         // Check the permission of the CSR. If it is not allowed to be read, return an illegal instruction trap.
-        if csr.check_permission(addr, privi, AccessType::Load(0)).is_err() {
+        if csr
+            .check_permission(addr, privi, AccessType::Load(0))
+            .is_err()
+        {
             return Err(TrapType::IllegalInstruction(0));
         }
 
@@ -254,7 +262,6 @@ impl CsrRegs {
         //     }
         // }
 
-
         // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
         let csr = match self.csr_map.get_mut(&addr) {
             Some(csr) => csr,
@@ -262,13 +269,15 @@ impl CsrRegs {
         };
 
         // Check the permission of the CSR. If it is not allowed, return an illegal instruction trap.
-        if csr.check_permission(addr, privi, AccessType::Store(0)).is_err() {
+        if csr
+            .check_permission(addr, privi, AccessType::Store(0))
+            .is_err()
+        {
             return Err(TrapType::IllegalInstruction(0));
         }
 
         // Return the value of the CSR.
         csr.write(data);
         Ok(())
-
     }
 }

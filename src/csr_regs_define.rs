@@ -502,15 +502,6 @@ pub struct XcauseIn {
     pub interrupt: bool,
 }
 
-impl Csr for XcauseIn {
-    // fn write(&mut self, data: u64) {
-    //     self.0 = data
-    // }
-    fn read_raw(&self) -> u64 {
-        self.0
-    }
-}
-
 pub struct Xcause {
     inner: Rc<Cell<XcauseIn>>,
 }

@@ -15,7 +15,6 @@ mod traptype;
 
 use std::{
     cell::Cell,
-    io::{self, Read},
     num::NonZeroUsize,
     process,
     rc::Rc,
@@ -87,9 +86,9 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
     let signal_term_trace = signal_term.clone();
     let signal_term_sdl_event = signal_term.clone();
-    let signal_term_uart = signal_term;
+    let _signal_term_uart = signal_term;
 
-    let (trace_tx, trace_rx) = crossbeam_channel::unbounded();
+    let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
     let mut trace_log = Traces::new(trace_rx);
 
     let mut cpu = if cfg!(feature = "rv_debug_trace") {
@@ -103,6 +102,8 @@ fn main() {
     // device dram
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
     mem.load_binary(&args.img);
+    // mem.load_binary("/home/leesum/workhome/opensbi/build/platform/generic/firmware/fw_payload.bin");
+
     let device_name = mem.get_name();
 
     cpu.mmu.bus.add_device(DeviceType {
@@ -210,7 +211,7 @@ fn main() {
     });
 
     // device sifive_uart
-    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
+    let (_sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
 
     let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
 
@@ -258,17 +259,18 @@ fn main() {
         }
     });
     // uart thread to get terminal input
-    let _sifive_uart_thread = thread::spawn(move || {
-        let stdin = io::stdin();
-        let mut handle = stdin.lock().bytes();
-        while !signal_term_uart.load(Ordering::Relaxed) {
-            let x = handle.next();
-            if let Some(Ok(ch)) = x {
-                sifive_uart_tx.send(ch as i32).unwrap();
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    });
+    // let _sifive_uart_thread = thread::spawn(move || {
+    //     // let stdin = io::stdin();
+    //     // let mut handle = stdin.lock().bytes();
+    //     while !signal_term_uart.load(Ordering::Relaxed) {
+    //         // let x = handle.next();
+    //         // if let Some(Ok(ch)) = x {
+    //         //     sifive_uart_tx.send(ch as i32).unwrap();
+    //         // }
+    //         sifive_uart_tx.send(ch as i32).unwrap();
+    //         std::thread::sleep(Duration::from_millis(1000));
+    //     }
+    // });
     // the main thread to handle sdl events
     handle_sdl_event(
         signal_term_sdl_event,

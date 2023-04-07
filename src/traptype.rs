@@ -73,6 +73,8 @@ impl TrapType {
     }
 
     pub fn get_tval(&self) -> u64 {
+        // The TVAL register is only used for some types of traps.
+        // See the RISC-V privilege specification for details.
         match self {
             TrapType::LoadPageFault(val)
             | TrapType::StorePageFault(val)

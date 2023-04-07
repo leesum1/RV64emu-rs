@@ -20,7 +20,7 @@ impl Clint {
     pub fn new(mtime_share:CsrShare<u64>) -> Self {
         Clint {
             mtime: mtime_share,
-            mtimecmp: 0,
+            mtimecmp: u64::MAX,
         }
     }
     pub fn do_read(&self, addr: u64, len: usize) -> u64 {

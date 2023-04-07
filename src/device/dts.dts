@@ -7,7 +7,8 @@
 	model = "riscv-virtio,qemu";
 
 	chosen {
-		bootargs = "console=hvc0 earlycon=sbi rdinit=/sbin/init";
+		bootargs = "console=hvc0 earlycon=sbi";
+		// bootargs = "console=ttyS0";
 		stdout-path = "/uart@c0000000"; // chose a system console
 	};
 
@@ -39,30 +40,24 @@
 	cpus {
 		#address-cells = <0x1>;
 		#size-cells = <0x0>;
-		timebase-frequency = <0x989680>;
-		// todo! I can't understand !
-		cpu-map {
-			cluster0 {
-				core0 {
-					cpu = <&cpu0>;
-				};
-			};
-		};
+		timebase-frequency = <10000000>;
 
 		cpu0:cpu@0 {
 			device_type = "cpu";
-			reg = <0x0>;
+			reg = <0x00>;
 			status = "okay";
 			compatible = "riscv";
-			riscv,isa = "rv64imasu";
+			riscv,isa = "rv64ima";
 			mmu-type = "riscv,sv39"; // sv39
+      		clock-frequency = <1000000000>;
+
 			// a hart is also an interrupt-controller
 			// some interrupt will directly connect to a hart
 			// such as soft irq and time irq and ext irq
 			//
         	L10: interrupt-controller {                                                                    
-				#interrupt-cells = <1>;
-				#address-cells = <0x1>;
+        		#address-cells = <2>;
+        		#interrupt-cells = <1>;
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
             };
