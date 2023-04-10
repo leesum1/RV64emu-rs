@@ -15,6 +15,7 @@ mod traptype;
 
 use std::{
     cell::Cell,
+    io::{self, Read},
     num::NonZeroUsize,
     process,
     rc::Rc,
@@ -86,7 +87,7 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
     let signal_term_trace = signal_term.clone();
     let signal_term_sdl_event = signal_term.clone();
-    let _signal_term_uart = signal_term;
+    let signal_term_uart = signal_term;
 
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
     let mut trace_log = Traces::new(trace_rx);
@@ -211,7 +212,7 @@ fn main() {
     });
 
     // device sifive_uart
-    let (_sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
+    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
 
     let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
 
@@ -259,18 +260,17 @@ fn main() {
         }
     });
     // uart thread to get terminal input
-    // let _sifive_uart_thread = thread::spawn(move || {
-    //     // let stdin = io::stdin();
-    //     // let mut handle = stdin.lock().bytes();
-    //     while !signal_term_uart.load(Ordering::Relaxed) {
-    //         // let x = handle.next();
-    //         // if let Some(Ok(ch)) = x {
-    //         //     sifive_uart_tx.send(ch as i32).unwrap();
-    //         // }
-    //         sifive_uart_tx.send(ch as i32).unwrap();
-    //         std::thread::sleep(Duration::from_millis(1000));
-    //     }
-    // });
+    let sifive_uart_thread = thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock().bytes();
+        while !signal_term_uart.load(Ordering::Relaxed) {
+            let x = handle.next();
+            if let Some(Ok(ch)) = x {
+                    sifive_uart_tx.send(ch as i32).unwrap();
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    });
     // the main thread to handle sdl events
     handle_sdl_event(
         signal_term_sdl_event,
@@ -281,7 +281,7 @@ fn main() {
     );
 
     trace_thread.join().unwrap();
-    // sifive_uart_thread.join().unwrap();
+    sifive_uart_thread.join().unwrap();
     cpu_main.join().unwrap();
 }
 
