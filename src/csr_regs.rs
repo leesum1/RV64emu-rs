@@ -82,7 +82,8 @@ impl CsrRegs {
         // todo!
         // I don't know why, Linux kernel will set sip.stip = 1,it will cause a trap
         // I use this mask to fix it
-        let sip_mask = XieIn::new().with_seie(true).with_ssie(true);
+        // because of bug in handle_interrupt, mstatus is not write back to xstatus!!!!
+        let sip_mask = XieIn::new().with_seie(true).with_ssie(true).with_stie(true);
 
         let xip_share = Rc::new(Cell::new(XipIn::new()));
         let mip = Xip::new(xip_share.clone(), MASK_ALL);

@@ -45,8 +45,11 @@ impl CpuCore {
         let mstatus = csr_regs_u.xstatus.clone();
         let satp = csr_regs_u.satp.clone();
         let mtime = csr_regs_u.time.clone();
+        let xip = csr_regs_u.xip.clone();
 
-        let mmu_u = Mmu::new(privi_u.clone(), mstatus, satp, mtime);
+        let mut mmu_u = Mmu::new(privi_u.clone(), mstatus, satp, mtime);
+        mmu_u.bus.plic.instance.add_context(xip.clone(), true);
+        mmu_u.bus.plic.instance.add_context(xip, false);
 
         CpuCore {
             gpr: (Gpr::new()),
@@ -144,14 +147,11 @@ impl CpuCore {
         let clint = &self.mmu.bus.clint.instance;
         let plic = &mut self.mmu.bus.plic.instance;
         let mut mip = self.csr_regs.xip.get();
-
         let irq_clint = clint.is_interrupt();
-        let irq_plic = plic.plic_external_interrupt();
         // todo! check me
         mip.set_mtip(irq_clint);
-        mip.set_meip(irq_plic);
-        mip.set_seip(irq_plic);
         self.csr_regs.xip.set(mip);
+        plic.tick();
     }
 
     pub fn halt(&mut self) -> usize {
@@ -264,13 +264,7 @@ impl CpuCore {
             // self.csr_regs.mtval.set(0);
 
             if let Some(sender) = &self.trace_sender {
-                sender
-                    .send(TraceType::Trap(
-                        cause,
-                        self.pc,
-                        0,
-                    ))
-                    .unwrap();
+                sender.send(TraceType::Trap(cause, self.pc, 0)).unwrap();
             };
 
             let mtvec = self.csr_regs.mtvec.get();
@@ -293,15 +287,10 @@ impl CpuCore {
             mstatus.set_sie(false);
 
             if let Some(sender) = &self.trace_sender {
-                sender
-                    .send(TraceType::Trap(
-                        cause,
-                        self.pc,
-                        0,
-                    ))
-                    .unwrap();
+                sender.send(TraceType::Trap(cause, self.pc, 0)).unwrap();
             };
-
+            
+            self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.sepc.set(self.npc);
             self.csr_regs.scause.set(cause.idx().into());
 
