@@ -1,18 +1,79 @@
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
 use bitfield_struct::bitfield;
 
+use crate::csr_regs_define::XipIn;
+
 use super::device_trait::DeviceBase;
 
-const PLIC_PRIORITY_START: u64 = 0x0;
-const PLIC_PRIORITY_END: u64 = 0x3FF; // 4×Interrupt ID
+/* ref spike plic */
+const PLIC_MAX_CONTEXTS: usize = 15872;
+/*
+ * The PLIC consists of memory-mapped control registers, with a memory map
+ * as follows:
+ *
+ * base + 0x000000: Reserved (interrupt source 0 does not exist)
+ * base + 0x000004: Interrupt source 1 priority
+ * base + 0x000008: Interrupt source 2 priority
+ * ...
+ * base + 0x000FFC: Interrupt source 1023 priority
+ * base + 0x001000: Pending 0
+ * base + 0x001FFF: Pending
+ * base + 0x002000: Enable bits for sources 0-31 on context 0
+ * base + 0x002004: Enable bits for sources 32-63 on context 0
+ * ...
+ * base + 0x0020FC: Enable bits for sources 992-1023 on context 0
+ * base + 0x002080: Enable bits for sources 0-31 on context 1
+ * ...
+ * base + 0x002100: Enable bits for sources 0-31 on context 2
+ * ...
+ * base + 0x1F1F80: Enable bits for sources 992-1023 on context 15871
+ * base + 0x1F1F84: Reserved
+ * ...		    (higher context IDs would fit here, but wouldn't fit
+ *		     inside the per-context priority vector)
+ * base + 0x1FFFFC: Reserved
+ * base + 0x200000: Priority threshold for context 0
+ * base + 0x200004: Claim/complete for context 0
+ * base + 0x200008: Reserved
+ * ...
+ * base + 0x200FFC: Reserved
+ * base + 0x201000: Priority threshold for context 1
+ * base + 0x201004: Claim/complete for context 1
+ * ...
+ * base + 0xFFE000: Priority threshold for context 15871
+ * base + 0xFFE004: Claim/complete for context 15871
+ * base + 0xFFE008: Reserved
+ * ...
+ * base + 0xFFFFFC: Reserved
+ */
 
-const PLIC_PENDING1: u64 = 0x1000;
-const PLIC_PENDING2: u64 = 0x1004;
-const PLIC_ENABLE1: u64 = 0x2000;
-const PLIC_ENABLE2: u64 = 0x2004;
-const PLIC_THRESHOLD: u64 = 0x20_0000;
-const PLIC_CLAIM: u64 = 0x20_0004;
+/* Each interrupt source has a priority register associated with it. */
+const PRIORITY_BASE: u64 = 0;
+const PRIORITY_PER_ID: u64 = 4;
+const PRIORITY_END: u64 = PENDING_BASE - 1;
+
+/* Each interrupt source has a pending bit associated with it. */
+const PENDING_BASE: u64 = 0x1000;
+const PENDING_END: u64 = ENABLE_BASE - 1;
+/*
+ * Each hart context has a vector of interupt enable bits associated with it.
+ * There's one bit for each interrupt source.
+ */
+const ENABLE_BASE: u64 = 0x2000;
+const ENABLE_PER_HART: u64 = 0x80;
+const ENABLE_END: u64 = CONTEXT_BASE - 1;
+/*
+ * Each hart context has a set of control registers associated with it.  Right
+ * now there's only two: a source priority threshold over which the hart will
+ * take an interrupt, and a register to claim interrupts.
+ */
+const CONTEXT_BASE: u64 = 0x200000;
+const CONTEXT_PER_HART: u64 = 0x1000;
+const CONTEXT_THRESHOLD: u64 = 0;
+const CONTEXT_CLAIM: u64 = 4;
+
+const CONTEXT_END: u64 = REG_SIZE - 1;
+const REG_SIZE: u64 = 0x1000000;
 
 pub const SIFIVE_UART_IRQ: u32 = 10;
 
@@ -39,6 +100,7 @@ impl IrqPriority {
     }
 }
 
+#[derive(Clone, Copy)]
 struct IrqPending {
     val: u32,
 }
@@ -85,6 +147,15 @@ struct IrqThreshold {
     pub reserved: u32,
 }
 
+impl IrqThreshold {
+    pub fn get_all(&self) -> u32 {
+        self.threshold() as u32
+    }
+    pub fn set_all(&mut self, val: u32) {
+        self.set_threshold(val as u8)
+    }
+}
+
 pub struct DevicePlic {
     pub start: u64,
     pub len: u64,
@@ -92,14 +163,42 @@ pub struct DevicePlic {
     pub name: &'static str,
 }
 
+struct PlicContext {
+    mmode: bool,
+    xip: Rc<Cell<XipIn>>,
+    threshold: IrqThreshold,
+    enable: [IrqEnable; 2], // 0: 0-31, 1: 32-63
+    claim: u32,
+}
+impl PlicContext {
+    pub fn new(xip_share: Rc<Cell<XipIn>>, mmode: bool) -> Self {
+        PlicContext {
+            threshold: IrqThreshold::new(),
+            enable: [IrqEnable::new(); 2],
+            claim: 0,
+            mmode,
+            xip: xip_share,
+        }
+    }
+    pub fn get_enable_by_id(&self, irq_id: u32) -> bool {
+        self.enable[irq_id as usize / 32].get_bit(irq_id % 32)
+    }
+
+    pub fn update_xip(&self, level: bool) {
+        let mut xip = self.xip.get();
+        match self.mmode {
+            true => xip.set_meip(level),
+            false => xip.set_seip(level),
+        };
+        self.xip.set(xip);
+    }
+}
 pub struct SifvePlic {
     irq_sources: Vec<IrqSource>,
+    // regs
     vec_irq_priority: Vec<IrqPriority>,
-    irq_pending0_31: IrqPending,
-    irq_pending32_63: IrqPending,
-    irq_enable0_31: IrqEnable,
-    irq_enable32_63: IrqEnable,
-    irq_threshold: IrqThreshold,
+    irq_pending: [IrqPending; 2], // 0: 0-31, 1: 32-63
+    context: Vec<PlicContext>,
 }
 
 impl SifvePlic {
@@ -107,14 +206,10 @@ impl SifvePlic {
         SifvePlic {
             irq_sources: Vec::new(),
             vec_irq_priority: vec![IrqPriority::new(); 64],
-            irq_pending0_31: IrqPending::new(),
-            irq_pending32_63: IrqPending::new(),
-            irq_enable0_31: IrqEnable::new(),
-            irq_enable32_63: IrqEnable::new(),
-            irq_threshold: IrqThreshold::new(),
+            irq_pending: [IrqPending::new(); 2],
+            context: Vec::new(),
         }
     }
-
     pub fn register_irq_source(&mut self, irq_id: u32, irq_pending: Rc<Cell<bool>>) {
         assert!(irq_id < 64, "irq_id:{} is too large", irq_id);
         // Check if the irq_id is already registered, if so, panic
@@ -127,127 +222,168 @@ impl SifvePlic {
             pending: irq_pending,
         });
     }
-    fn tick(&mut self) {
+    pub fn add_context(&mut self, xip_share: Rc<Cell<XipIn>>, mmode: bool) {
+        self.context.push(PlicContext::new(xip_share, mmode));
+    }
+    pub fn tick(&mut self) {
+        // Update the pending bits
         for item in self.irq_sources.iter() {
             let pending_bit = item.pending.get();
             let irq_id = item.id;
-            match irq_id {
-                1..=31 => self.irq_pending0_31.set_bool(irq_id, pending_bit),
-                32..=63 => self.irq_pending32_63.set_bool(irq_id, pending_bit),
-                _ => panic!("irq_id:{} is too large", irq_id),
-            }
+            self.irq_pending[irq_id as usize / 32].set_bool(irq_id % 32, pending_bit);
         }
-    }
-
-    fn get_enable_bit(&self, irq_id: u32) -> bool {
-        match irq_id {
-            1..=31 => self.irq_enable0_31.get_bit(irq_id),
-            32..=63 => self.irq_enable32_63.get_bit(irq_id),
-            _ => false,
-        }
-    }
-
-    fn set_pending_bit(&mut self, irq_id: u32, val: bool) {
-        match irq_id {
-            1..=31 => self.irq_pending0_31.set_bool(irq_id, val),
-            32..=63 => self.irq_pending32_63.set_bool(irq_id, val),
-            _ => panic!("irq_id:{} is too large", irq_id),
-        }
-    }
-
-    pub fn plic_external_interrupt(&mut self) -> bool {
-        // update pending bits
-        self.tick();
-        // check if there is any pending interrupt
-        // if there is any pending interrupt, check if it is enabled and its priority is higher than the threshold
-        // if so, return true
-        self.irq_sources
-            .iter()
-            .filter(|item| item.pending.get())
-            .any(|item| {
+        // Update the xip
+        for c in &self.context {
+            let int_flag = self.irq_sources.iter().any(|item| {
                 let irq_id = item.id;
-                let enable_bit = self.get_enable_bit(irq_id);
-                let irq_priority = self.vec_irq_priority[irq_id as usize].get();
-                let threshold = self.irq_threshold.threshold();
-                enable_bit && irq_priority > threshold
-            })
+                let pending_bit = item.pending.get();
+                let enable_bit = c.get_enable_by_id(irq_id);
+                let priority = self.vec_irq_priority[irq_id as usize].get();
+                let threshold = c.threshold.get_all() as u8;
+                pending_bit && enable_bit && priority > threshold
+            });
+            // if int_flag {
+            //     println!("int_flag is true");
+            // }
+            c.update_xip(int_flag);
+        }
     }
 
-    // 1. Get the highest priority pending interrupt, and clear the pending bit.
-    // 2. Return the interrupt ID.
-    fn claim_read(&mut self) -> u32 {
+    fn priority_read(&self, offset: u32) -> u32 {
+        let idx_word = (offset >> 2) as usize;
+        self.vec_irq_priority[idx_word].get() as u32
+    }
+    fn priority_write(&mut self, offset: u32, val: u32) {
+        let idx_word = (offset >> 2) as usize;
+        self.vec_irq_priority[idx_word].set(val as u8);
+    }
+
+    fn pending_read(&self, offset: u32) -> u32 {
+        let idx_word = (offset >> 2) as usize;
+        self.irq_pending[idx_word].get_all()
+    }
+    // pending bits are read-only
+    fn pending_write(&mut self, _irq_id: u32, _val: u32) {
+        println!("pending bits are read-only");
+    }
+
+    fn context_enbale_read(&self, offset: u32) -> u32 {
+        let context_idx = (offset / ENABLE_PER_HART as u32) as usize;
+        let idx_word = ((offset % ENABLE_PER_HART as u32) >> 2) as usize;
+        self.context[context_idx].enable[idx_word].get_all()
+    }
+    fn context_enbale_write(&mut self, offset: u32, val: u32) {
+        let context_idx = (offset / ENABLE_PER_HART as u32) as usize;
+        let idx_word = ((offset % ENABLE_PER_HART as u32) >> 2) as usize;
+        // The first bit of the first word is reserved and must be zero
+        let val = if idx_word == 0 { val & !1 } else { val };
+        self.context[context_idx].enable[idx_word].set_all(val);
+    }
+
+    fn context_read(&mut self, offset: u32) -> u32 {
+        let context_idx = (offset / CONTEXT_PER_HART as u32) as usize;
+        let idx_word = ((offset % CONTEXT_PER_HART as u32) >> 2) as usize;
+        match idx_word {
+            0 => self.context[context_idx].threshold.get_all(),
+            1 => self.context_claim(context_idx),
+            _ => unreachable!(),
+        }
+    }
+    fn context_write(&mut self, offset: u32, val: u32) {
+        let context_idx = (offset / CONTEXT_PER_HART as u32) as usize;
+        let idx_word = ((offset % CONTEXT_PER_HART as u32) >> 2) as usize;
+        match idx_word {
+            0 => self.context[context_idx].threshold.set_all(val),
+            1 => self.context_complete(context_idx, val),
+            _ => unreachable!(),
+        }
+    }
+
+    fn context_claim(&mut self, context_idx: usize) -> u32 {
+        // 1. Get the highest priority pending interrupt, and clear the pending bit.
+        // 2. Return the interrupt ID
+        // println!("context_claim(context_idx:{})", context_idx);
         let mut irq_id = 0;
         let mut irq_priority = 0;
         let mut irq_pendding = Rc::new(Cell::new(false));
-        self.irq_sources.iter().for_each(|item| {
-            let pending_bit = item.pending.get();
-            let enable_bit = self.get_enable_bit(item.id);
-            if pending_bit & enable_bit {
-                let irq_priority_tmp = self.vec_irq_priority[item.id as usize].get();
-                if irq_priority_tmp > irq_priority {
-                    irq_priority = irq_priority_tmp;
-                    irq_pendding = Rc::clone(&item.pending);
-                    irq_id = item.id;
-                }
-                // Ties between global interrupts of the same priority are broken by the
-                // Interrupt ID; interrupts with the lowest ID have the highest effective priority
-                else if irq_priority_tmp == irq_priority && item.id < irq_id {
-                    irq_pendding = Rc::clone(&item.pending);
-                    irq_id = item.id;
-                }
-            }
-        });
-        // todo! unclear
-        irq_pendding.set(false);
+        let c = self.context.get_mut(context_idx).unwrap();
+
+        self.irq_sources
+            .iter()
+            .filter(|item| item.pending.get() && c.get_enable_by_id(item.id))
+            .for_each(|item| {
+                let priority_tmp = self.vec_irq_priority[item.id as usize].get();
+                match priority_tmp.cmp(&irq_priority) {
+                    Ordering::Greater => {
+                        irq_id = item.id;
+                        irq_priority = priority_tmp;
+                        irq_pendding = item.pending.clone();
+                    }
+                    Ordering::Equal => {
+                        // If two interrupts have the same priority, the one with the lower interrupt ID is selected.
+                        if item.id < irq_id {
+                            irq_id = item.id;
+                            irq_priority = priority_tmp;
+                            irq_pendding = item.pending.clone();
+                        }
+                    }
+                    Ordering::Less => {}
+                };
+            });
+
+        c.claim = irq_id;
+
+        println!("context_claim(context_idx:{}, irq_id:{})", context_idx, irq_id);
         irq_id
     }
-    // todo! unclear
-    fn claim_write(&mut self, irq_id: u32) {
-        self.set_pending_bit(irq_id, false);
-    }
 
-    fn set_enable_bit(&mut self, irq_id: u32, val: bool) {
-        match irq_id {
-            1..=31 => self.irq_enable0_31.set_bool(irq_id, val),
-            32..=63 => self.irq_enable32_63.set_bool(irq_id, val),
-            _ => panic!("irq_id:{} is too large", irq_id),
-        }
-    }
+    fn context_complete(&mut self, _context_idx: usize, _val: u32) {}
 }
 
 impl DeviceBase for SifvePlic {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
-        assert_eq!(len, 4, "plic read len:{}", len);
+        assert_eq!(len, 4, "plic write len:{}", len);
         match addr {
-            PLIC_PRIORITY_START..=PLIC_PRIORITY_END => {
-                let irq_id = (addr - PLIC_PRIORITY_START) / 4;
-                let irq_priority = self.vec_irq_priority[irq_id as usize];
-                irq_priority.get().into()
+            PRIORITY_BASE..=PRIORITY_END => {
+                let offset = (addr - PRIORITY_BASE) as u32;
+                self.priority_read(offset) as u64
             }
-            PLIC_PENDING1 => self.irq_pending0_31.get_all().into(),
-            PLIC_PENDING2 => self.irq_pending32_63.get_all().into(),
-            PLIC_ENABLE1 => self.irq_enable0_31.get_all().into(),
-            PLIC_ENABLE2 => self.irq_enable32_63.get_all().into(),
-            PLIC_THRESHOLD => self.irq_threshold.threshold().into(),
-            PLIC_CLAIM => self.claim_read().into(),
+            PENDING_BASE..=PENDING_END => {
+                let offset = (addr - PENDING_BASE) as u32;
+                self.pending_read(offset) as u64
+            }
+            ENABLE_BASE..=ENABLE_END => {
+                let offset = (addr - ENABLE_BASE) as u32;
+                self.context_enbale_read(offset) as u64
+            }
+            CONTEXT_BASE..=CONTEXT_END => {
+                let offset = (addr - CONTEXT_BASE) as u32;
+                self.context_read(offset) as u64
+            }
             _ => {
-                panic!("plic read addr:0x{:x} len:{}", addr, len);
+                panic!("plic read addr:0x{:x} len:{}", addr, len)
             }
         }
     }
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         assert_eq!(len, 4, "plic write len:{}", len);
         match addr {
-            PLIC_PRIORITY_START..=PLIC_PRIORITY_END => {
-                let irq_id = (addr - PLIC_PRIORITY_START) / 4;
-                if let Some(irq_priority) = self.vec_irq_priority.get_mut(irq_id as usize) {
-                    irq_priority.set(data as u8)
-                }
+            PRIORITY_BASE..=PRIORITY_END => {
+                let offset = (addr - PRIORITY_BASE) as u32;
+                self.priority_write(offset, data as u32);
             }
-            PLIC_ENABLE1 => self.irq_enable0_31.set_all(data as u32),
-            PLIC_ENABLE2 => self.irq_enable32_63.set_all(data as u32),
-            PLIC_THRESHOLD => self.irq_threshold.set_threshold(data as u8),
-            PLIC_CLAIM => self.claim_write(data as u32),
+            PENDING_BASE..=PENDING_END => {
+                let offset = (addr - PENDING_BASE) as u32;
+                self.pending_write(offset, data as u32);
+            }
+            ENABLE_BASE..=ENABLE_END => {
+                let offset = (addr - ENABLE_BASE) as u32;
+                self.context_enbale_write(offset, data as u32);
+            }
+            CONTEXT_BASE..=CONTEXT_END => {
+                let offset = (addr - CONTEXT_BASE) as u32;
+                self.context_write(offset, data as u32);
+            }
             _ => {
                 panic!("plic write addr:0x{:x} data:0x{:x} len:{}", addr, data, len);
             }
@@ -256,33 +392,5 @@ impl DeviceBase for SifvePlic {
     }
     fn get_name(&self) -> &'static str {
         "PLIC"
-    }
-}
-
-#[cfg(test)]
-mod plic_test {
-    use std::{cell::Cell, rc::Rc};
-
-    use crate::device::{
-        device_sifive_plic::{PLIC_PRIORITY_START, PLIC_THRESHOLD},
-        device_trait::DeviceBase,
-    };
-
-    use super::SifvePlic;
-
-    #[test]
-    fn test1() {
-        let uart_irq = Rc::new(Cell::new(false));
-        let iic_irq = Rc::new(Cell::new(false));
-        let mut plic = SifvePlic::new();
-        plic.register_irq_source(1, Rc::clone(&uart_irq));
-        plic.register_irq_source(2, Rc::clone(&iic_irq));
-
-        plic.set_enable_bit(1, true);
-        plic.do_write(PLIC_THRESHOLD, 0, 4);
-        plic.do_write(PLIC_PRIORITY_START + 4, 2, 4);
-
-        uart_irq.set(false);
-        assert!(!plic.plic_external_interrupt());
     }
 }
