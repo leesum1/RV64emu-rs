@@ -35,7 +35,7 @@ pub struct CsrRegs {
     pub satp: CsrShare<SatpIn>,
     pub mtval: CsrShare<u64>,
     pub stval: CsrShare<u64>,
-    pub time: CsrShare<u64>,
+    // pub time: CsrShare<u64>,
     pub cycle: CsrShare<u64>,
     pub instret: CsrShare<u64>,
 }
@@ -126,10 +126,6 @@ impl CsrRegs {
         let mcycle = Counter::new(cycle_share.clone());
         let cycle = Counter::new(cycle_share.clone());
 
-        let time_share = Rc::new(Cell::new(0));
-        let _mtime = Counter::new(time_share.clone());
-        let time = Counter::new(time_share.clone());
-
         let instret_share = Rc::new(Cell::new(0));
         let minstret = Counter::new(instret_share.clone());
         let instret = Counter::new(instret_share.clone());
@@ -172,7 +168,7 @@ impl CsrRegs {
         csr_map.insert(CSR_MCYCLE.into(), mcycle.into());
         csr_map.insert(CSR_CYCLE.into(), cycle.into());
         // csr_map.insert(CSR_MTIME.into(), mtime.into());
-        csr_map.insert(CSR_TIME.into(), time.into());
+        // csr_map.insert(CSR_TIME.into(), time.into());
         csr_map.insert(CSR_MINSTRET.into(), minstret.into());
         csr_map.insert(CSR_INSTRET.into(), instret.into());
         csr_map.insert(CSR_MCOUNTEREN.into(), mcounteren.into());
@@ -193,7 +189,6 @@ impl CsrRegs {
             mtval: mtval_share,
             stval: stval_share,
             satp: satp_share,
-            time: time_share,
             cycle: cycle_share,
             instret: instret_share,
             cur_priv: PrivilegeLevels::Machine,
@@ -214,6 +209,11 @@ impl CsrRegs {
     fn check_csr(&mut self, addr: u64, privi: PrivilegeLevels, access_type: AccessType) -> bool {
         let csr_addr = CsrAddr::from(addr as u16);
         csr_addr.check_privilege(privi, access_type)
+    }
+
+    pub fn add_mtime(&mut self, mtime: CsrShare<u64>) {
+        let time = Counter::new(mtime);
+        self.csr_map.insert(CSR_TIME.into(), time.into());
     }
 
     pub fn read(&mut self, addr: u64, privi: PrivilegeLevels) -> Result<u64, TrapType> {

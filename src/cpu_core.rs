@@ -3,7 +3,7 @@ use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 use crate::{
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
-    csr_regs_define::{XipIn},
+    csr_regs_define::XipIn,
     gpr::Gpr,
     inst::inst_base::PrivilegeLevels,
     inst::{
@@ -40,14 +40,20 @@ unsafe impl Send for CpuCore {}
 impl CpuCore {
     pub fn new(trace_sender: Option<crossbeam_channel::Sender<TraceType>>) -> Self {
         // todo! improve me
-        let csr_regs_u = CsrRegs::new();
+        let mut csr_regs_u = CsrRegs::new();
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
-        let mstatus = csr_regs_u.xstatus.clone();
+        // some csr regs are shared with other modules
+        let xstatus = csr_regs_u.xstatus.clone();
         let satp = csr_regs_u.satp.clone();
-        let mtime = csr_regs_u.time.clone();
+        // let mtime = csr_regs_u.time.clone();
         let xip = csr_regs_u.xip.clone();
 
-        let mut mmu_u = Mmu::new(privi_u.clone(), mstatus, satp, mtime);
+        let mut mmu_u = Mmu::new(privi_u.clone(), xstatus, satp);
+
+        let mtime = mmu_u.bus.clint.instance.add_hart(xip.clone());
+        csr_regs_u.add_mtime(mtime);
+
+        // add plic context for core0 m-mode and s-mode
         mmu_u.bus.plic.instance.add_context(xip.clone(), true);
         mmu_u.bus.plic.instance.add_context(xip, false);
 
@@ -114,8 +120,11 @@ impl CpuCore {
         for _ in 0..num {
             match self.cpu_state {
                 CpuState::Running => {
-                    let fetch_ret = self.inst_fetch();
+                    // Increment the cycle counter
+                    let cycle = self.csr_regs.cycle.get();
+                    self.csr_regs.cycle.set(cycle + 1);
 
+                    let fetch_ret = self.inst_fetch();
                     let exe_ret = match fetch_ret {
                         // op ret
                         Ok(inst_val) => self.step(inst_val as u32),
@@ -130,28 +139,22 @@ impl CpuCore {
 
                     self.check_pending_int();
                     self.handle_interrupt();
-                    // Increment the cycle counter
-                    let cycle = self.csr_regs.cycle.get();
-                    self.csr_regs.cycle.set(cycle + 1);
+                    self.mmu.bus.update();
+
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
                     self.csr_regs.instret.set(instret + 1);
-
-                    self.mmu.bus.update();
                 }
                 _ => break,
             };
         }
     }
     fn check_pending_int(&mut self) {
-        let clint = &self.mmu.bus.clint.instance;
+        let clint = &mut self.mmu.bus.clint.instance;
         let plic = &mut self.mmu.bus.plic.instance;
-        let mut mip = self.csr_regs.xip.get();
-        let irq_clint = clint.is_interrupt();
-        // todo! check me
-        mip.set_mtip(irq_clint);
-        self.csr_regs.xip.set(mip);
+
         plic.tick();
+        clint.tick();
     }
 
     pub fn halt(&mut self) -> usize {
@@ -289,7 +292,7 @@ impl CpuCore {
             if let Some(sender) = &self.trace_sender {
                 sender.send(TraceType::Trap(cause, self.pc, 0)).unwrap();
             };
-            
+
             self.csr_regs.xstatus.set(mstatus);
             self.csr_regs.sepc.set(self.npc);
             self.csr_regs.scause.set(cause.idx().into());

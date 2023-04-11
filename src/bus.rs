@@ -4,7 +4,7 @@ use crate::{
         device_trait::{DeviceBase, DeviceEnume},
     },
     inst::inst_base::{check_aligned, check_area},
-    sifive_clint::DeviceClint,
+    sifive_clint::{Clint, DeviceClint},
 };
 
 pub struct DeviceType {
@@ -24,12 +24,19 @@ pub struct Bus {
 unsafe impl Send for Bus {}
 
 impl Bus {
-    pub fn new(clint: DeviceClint) -> Self {
+    pub fn new() -> Self {
         let plic = DevicePlic {
             start: 0x0C00_0000,
-            len: 0x30_0008,
+            len: 0x0400_0000,
             instance: SifvePlic::new(),
             name: "PLIC",
+        };
+
+        let clint = DeviceClint {
+            start: 0x0200_0000,
+            len: 0x0001_0000,
+            instance: Clint::new(),
+            name: "CLINT",
         };
 
         Bus {
@@ -112,7 +119,6 @@ impl Bus {
     }
 
     pub fn update(&mut self) {
-        self.clint.instance.do_update();
         self.devices
             .iter_mut()
             .for_each(|device| device.instance.do_update());

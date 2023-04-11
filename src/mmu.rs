@@ -4,7 +4,6 @@ use crate::{
     bus::Bus,
     csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
     inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
-    sifive_clint::{Clint, DeviceClint},
     sv39::{Sv39PTE, Sv39Pa, Sv39Va},
     traptype::TrapType,
 };
@@ -30,17 +29,9 @@ impl Mmu {
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: CsrShare<XstatusIn>,
         satp: CsrShare<SatpIn>,
-        mtime: CsrShare<u64>,
     ) -> Self {
-        let clint_u = Clint::new(mtime);
-        let device_clint = DeviceClint {
-            start: 0x2000000,
-            len: 0xBFFF,
-            instance: clint_u,
-            name: "Clint",
-        };
 
-        let bus_u = Bus::new(device_clint);
+        let bus_u = Bus::new();
         Mmu {
             bus: bus_u,
             access_type: AccessType::Load(0),
