@@ -102,6 +102,6 @@ mod test_vga {
             let _evet_dmp = _smuggled_sdl.event_pump();
         });
 
-        _a.join();
+        _a.join().unwrap();
     }
 }

@@ -39,10 +39,6 @@ pub trait Csr {
     fn write(&mut self, _data: u64) {}
     fn read_raw(&self) -> u64;
 
-    // fn check_csr(&mut self, addr: u64, privi: PrivilegeLevels, access_type: AccessType) -> bool {
-    //     let csr_addr = CsrAddr::from(addr);
-    //     csr_addr.check_privilege(privi, access_type)
-    // }
     fn check_permission(
         &self,
         addr: u64,
@@ -51,7 +47,6 @@ pub trait Csr {
     ) -> Result<(), ()> {
         assert!(addr < 4096);
         let csr_addr = CsrAddr::from(addr as u16);
-
         match csr_addr.check_privilege(privi, access_type) {
             true => Ok(()),
             false => Err(()),
@@ -104,6 +99,12 @@ pub struct CsrAddr {
     #[bits(4)]
     _pad: u8,
 }
+
+// CSR address (csr[11:8]) are used to encode the read and
+// write accessibility of the CSRs according to privilege level as shown in Table 2.1. The top two bits
+// (csr[11:10]) indicate whether the register is read/write (00, 01, or 10) or read-only (11). The next
+// two bits (csr[9:8]) encode the lowest privilege level that can access the CSR.
+
 // Attempts to access a non-existent CSR raise an illegal instruction exception. Attempts to access a
 // CSR without appropriate privilege level or to write a read-only register also raise illegal instruction
 // exceptions. A read/write register might also contain some bits that are read-only, in which case
@@ -305,7 +306,7 @@ impl Mstatus {
     pub fn get_mpp_priv(&self) -> PrivilegeLevels {
         PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
     }
-
+    // todo! not sure
     fn update_sd(&mut self) {
         // self.set_sd(self.mie() && self.mie());
     }

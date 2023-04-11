@@ -22,10 +22,6 @@ impl DeviceMouseItem {
             y: 0,
         }
     }
-
-    fn get_positon(&self) -> u64 {
-        ((self.x as u64) << 32) | (self.y as u64)
-    }
 }
 
 pub struct DeviceMouse {

@@ -7,7 +7,7 @@ use crate::csr_regs_define::XipIn;
 use super::device_trait::DeviceBase;
 
 /* ref spike plic */
-const PLIC_MAX_CONTEXTS: usize = 15872;
+const _PLIC_MAX_CONTEXTS: usize = 15872;
 /*
  * The PLIC consists of memory-mapped control registers, with a memory map
  * as follows:
@@ -49,7 +49,7 @@ const PLIC_MAX_CONTEXTS: usize = 15872;
 
 /* Each interrupt source has a priority register associated with it. */
 const PRIORITY_BASE: u64 = 0;
-const PRIORITY_PER_ID: u64 = 4;
+const _PRIORITY_PER_ID: u64 = 4;
 const PRIORITY_END: u64 = PENDING_BASE - 1;
 
 /* Each interrupt source has a pending bit associated with it. */
@@ -282,20 +282,21 @@ impl SifvePlic {
 
     fn context_read(&mut self, offset: u32) -> u32 {
         let context_idx = (offset / CONTEXT_PER_HART as u32) as usize;
-        let idx_word = ((offset % CONTEXT_PER_HART as u32) >> 2) as usize;
-        match idx_word {
-            0 => self.context[context_idx].threshold.get_all(),
-            1 => self.context_claim(context_idx),
-            _ => unreachable!(),
+        let context_offset = (offset % CONTEXT_PER_HART as u32) as u64;
+        match context_offset {
+            CONTEXT_THRESHOLD => self.context[context_idx].threshold.get_all(),
+            CONTEXT_CLAIM => self.context_claim(context_idx),
+            _ => panic!("context_read invalid offset:{}", context_offset),
         }
     }
     fn context_write(&mut self, offset: u32, val: u32) {
         let context_idx = (offset / CONTEXT_PER_HART as u32) as usize;
-        let idx_word = ((offset % CONTEXT_PER_HART as u32) >> 2) as usize;
-        match idx_word {
-            0 => self.context[context_idx].threshold.set_all(val),
-            1 => self.context_complete(context_idx, val),
-            _ => unreachable!(),
+        let context_offset = (offset % CONTEXT_PER_HART as u32) as u64;
+
+        match context_offset {
+            CONTEXT_THRESHOLD => self.context[context_idx].threshold.set_all(val),
+            CONTEXT_CLAIM => self.context_complete(context_idx, val),
+            _ => panic!("context_write invalid offset:{}", context_offset),
         }
     }
 
@@ -333,7 +334,10 @@ impl SifvePlic {
 
         c.claim = irq_id;
 
-        println!("context_claim(context_idx:{}, irq_id:{})", context_idx, irq_id);
+        println!(
+            "context_claim(context_idx:{}, irq_id:{})",
+            context_idx, irq_id
+        );
         irq_id
     }
 

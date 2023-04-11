@@ -319,13 +319,6 @@ impl CpuCore {
         self.mmu.do_write(addr, data, len)
     }
 
-    pub fn get_csr_regs(&mut self) -> &mut CsrRegs {
-        &mut self.csr_regs
-    }
-
-    pub fn get_gp_regs(&mut self) -> &mut Gpr {
-        &mut self.gpr
-    }
 
     // for riscof
     pub fn dump_signature(&mut self, file_name: &str) {
