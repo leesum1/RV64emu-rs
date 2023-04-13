@@ -16,6 +16,8 @@ pub struct DeviceClint {
     pub name: &'static str,
 }
 
+// each hart has a memory maped mtimcmp
+// xip is a shared resource with cpu core
 struct ClintHart {
     mtimecmp: u64,
     xip: CsrShare<XipIn>,

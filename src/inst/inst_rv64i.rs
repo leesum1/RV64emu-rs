@@ -37,6 +37,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
 
+            #[cfg(feature = "rv_debug_trace")]
             if f.is_call() {
                 if let Some(sender) = &cpu.trace_sender {
                     sender.send(TraceType::Call(pc, next_pc)).unwrap();
@@ -63,7 +64,8 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
                 // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
-
+            
+            #[cfg(feature = "rv_debug_trace")]
             if let Some(val) = f.get_jalr_type() {
                 if let Some(sender) = &cpu.trace_sender {
                     match val {

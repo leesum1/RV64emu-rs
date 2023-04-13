@@ -58,17 +58,17 @@ use crate::{
     trace::traces::Traces,
 };
 // /* 各个设备地址 */
-// #define MEM_BASE 0x80000000
-// #define DEVICE_BASE 0xa0000000
-// #define MMIO_BASE 0xa0000000
-// #define SERIAL_PORT     (DEVICE_BASE + 0x00003f8)
-// #define KBD_ADDR        (DEVICE_BASE + 0x0000060)
-// #define RTC_ADDR        (DEVICE_BASE + 0x0000048)
-// #define VGACTL_ADDR     (DEVICE_BASE + 0x0000100)
-// #define AUDIO_ADDR      (DEVICE_BASE + 0x0000200)
-// #define DISK_ADDR       (DEVICE_BASE + 0x0000300)
-// #define FB_ADDR         (MMIO_BASE   + 0x1000000)
-// #define AUDIO_SBUF_ADDR (MMIO_BASE   + 0x1200000)
+// -------------Device Tree MAP-------------
+// name:CLINT           Area:0X02000000-->0X02010000,len:0X00010000
+// name:PLIC            Area:0X0C000000-->0X10000000,len:0X04000000
+// name:DRAM            Area:0X80000000-->0X88000000,len:0X08000000
+// name:UART            Area:0XA00003F8-->0XA00003F9,len:0X00000001
+// name:RTC             Area:0XA0000048-->0XA0000050,len:0X00000008
+// name:VGA_CTL         Area:0XA0000100-->0XA0000108,len:0X00000008
+// name:VGA_FB          Area:0XA1000000-->0XA1075300,len:0X00075300
+// name:KeyBorad_AM     Area:0XA0000060-->0XA0000068,len:0X00000008
+// name:Mouse           Area:0XA0000070-->0XA0000080,len:0X00000010
+// name:Sifive_Uart     Area:0XC0000000-->0XC0001000,len:0X00001000
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -90,7 +90,13 @@ fn main() {
     let signal_term_uart = signal_term;
 
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-    let mut trace_log = Traces::new(trace_rx);
+
+    let trace_log = if cfg!(feature = "rv_debug_trace") {
+        let trace_log = Traces::new(trace_rx);
+        Some(trace_log)
+    } else {
+        None
+    };
 
     let mut cpu = if cfg!(feature = "rv_debug_trace") {
         println!("Enabling debug tracing");
@@ -100,7 +106,7 @@ fn main() {
         CpuCore::new(None)
     };
 
-    // device dram
+    // device dram len:0X08000000
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
     mem.load_binary(&args.img);
     // mem.load_binary("/home/leesum/workhome/opensbi/build/platform/generic/firmware/fw_payload.bin");
@@ -154,10 +160,8 @@ fn main() {
 
     let mut canvas = window.into_canvas().build().expect("canvas err");
     canvas.set_scale(2.0, 2.0).unwrap();
-    /*--------init sdl --------*/
 
     // device vgactl
-
     let vgactl_msg = Rc::new(Cell::new(false));
 
     let vgactl = DeviceVGACTL::new(vgactl_msg.clone());
@@ -253,20 +257,25 @@ fn main() {
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
     // debug trace thread
+    #[cfg(feature = "rv_debug_trace")]
     let trace_thread = thread::spawn(move || {
+        let mut trace1 = trace_log;
+
         while !signal_term_trace.load(Ordering::Relaxed) {
-            trace_log.run();
-            // std::thread::sleep(Duration::from_millis(100));
+            if let Some(r_log) = &mut trace1 {
+                r_log.run();
+            }
         }
     });
+
     // uart thread to get terminal input
-    let sifive_uart_thread = thread::spawn(move || {
+    let _sifive_uart_thread = thread::spawn(move || {
         let stdin = io::stdin();
         let mut handle = stdin.lock().bytes();
         while !signal_term_uart.load(Ordering::Relaxed) {
             let x = handle.next();
             if let Some(Ok(ch)) = x {
-                    sifive_uart_tx.send(ch as i32).unwrap();
+                if sifive_uart_tx.send(ch as i32).is_ok() {}
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -280,8 +289,9 @@ fn main() {
         mouse_sdl_tx,
     );
 
+    #[cfg(feature = "rv_debug_trace")]
     trace_thread.join().unwrap();
-    sifive_uart_thread.join().unwrap();
+    // sifive_uart_thread.join().unwrap();
     cpu_main.join().unwrap();
 }
 

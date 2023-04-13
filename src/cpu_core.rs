@@ -193,7 +193,7 @@ impl CpuCore {
             self.csr_regs.sepc.set(self.pc);
             self.csr_regs.scause.set(cause.into());
             self.csr_regs.stval.set(tval);
-
+            #[cfg(feature = "rv_debug_trace")]
             if let Some(sender) = &self.trace_sender {
                 sender
                     .send(TraceType::Trap(trap_type, self.pc, tval))
@@ -215,7 +215,7 @@ impl CpuCore {
             self.csr_regs.mepc.set(self.pc);
             self.csr_regs.mcause.set(cause.into());
             self.csr_regs.mtval.set(tval);
-
+            #[cfg(feature = "rv_debug_trace")]
             if let Some(sender) = &self.trace_sender {
                 sender
                     .send(TraceType::Trap(trap_type, self.pc, tval))
@@ -265,7 +265,7 @@ impl CpuCore {
             self.csr_regs.mepc.set(self.npc);
             self.csr_regs.mcause.set(cause.idx().into());
             // self.csr_regs.mtval.set(0);
-
+            #[cfg(feature = "rv_debug_trace")]
             if let Some(sender) = &self.trace_sender {
                 sender.send(TraceType::Trap(cause, self.pc, 0)).unwrap();
             };
@@ -288,7 +288,7 @@ impl CpuCore {
             mstatus.set_spie(mstatus.sie());
             // and SIE is set to 0
             mstatus.set_sie(false);
-
+            #[cfg(feature = "rv_debug_trace")]
             if let Some(sender) = &self.trace_sender {
                 sender.send(TraceType::Trap(cause, self.pc, 0)).unwrap();
             };
