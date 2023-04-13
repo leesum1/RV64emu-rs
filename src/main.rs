@@ -386,7 +386,6 @@ mod isa_test {
 
         cpu.cpu_state == CpuState::Stop
     }
-    const TESTS_PATH: &str = "/home/leesum/workhome/riscv-tests/isa/build/bin";
 
     struct TestRet {
         pub name: String,
@@ -408,6 +407,7 @@ mod isa_test {
 
     #[test]
     fn run_arch_tests() {
+        const TESTS_PATH: &str = "ready_to_run/riscv-tests/bin";
         let sikp_files = vec![
             // "rv64si-p-dirty.bin",
             // "rv64si-p-icache-alias.bin",
