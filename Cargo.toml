@@ -20,7 +20,7 @@ bitfield-struct = "0.3.2"
 llvm-sys = "150"
 enum_dispatch = "0.3.11"
 crossbeam-channel = "0.5.7"
-termion = "2.0.1"
+# termion = "2.0.1"
 
 [features]
 # default = ["rv_debug_trace"]
@@ -30,6 +30,6 @@ support_am = []
 
 
 [profile.release]
-# lto = true
+lto = true
 # debug = true
 # opt-level = 2
