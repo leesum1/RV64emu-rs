@@ -17,14 +17,14 @@ ring-channel = "0.11"
 # colored = "2"
 hashbrown = "0.13.2"
 bitfield-struct = "0.3.2"
-llvm-sys = "150"
+# llvm-sys = "150"
 enum_dispatch = "0.3.11"
 crossbeam-channel = "0.5.7"
 # termion = "2.0.1"
 
 [features]
 # default = ["rv_debug_trace"]
-# default = ["support_am"]
+default = ["support_am"]
 rv_debug_trace = []
 support_am = []
 
