@@ -85,12 +85,14 @@ fn main() {
     let args = Args::parse();
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
+    #[allow(unused_variables)]
     let signal_term_trace = signal_term.clone();
     let signal_term_sdl_event = signal_term.clone();
     let signal_term_uart = signal_term;
 
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
 
+    #[allow(unused_variables)]
     let trace_log = if cfg!(feature = "rv_debug_trace") {
         let trace_log = Traces::new(trace_rx);
         Some(trace_log)
@@ -131,6 +133,24 @@ fn main() {
         name: device_name,
     });
 
+    // device sifive_uart
+    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
+
+    let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
+
+    cpu.mmu
+        .bus
+        .plic
+        .instance
+        .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
+
+    cpu.mmu.bus.add_device(DeviceType {
+        start: SIFIVE_UART_BASE,
+        len: 0x1000,
+        instance: device_sifive_uart.into(),
+        name: "Sifive_Uart",
+    });
+
     // device rtc
     let rtc = DeviceRTC::new();
     let device_name = rtc.get_name();
@@ -142,6 +162,74 @@ fn main() {
         name: device_name,
     });
 
+    #[cfg(feature = "device_sdl2")]
+    create_sdl2_devices(&mut cpu, signal_term_sdl_event);
+
+    // show device address map
+    println!("{0}", cpu.mmu.bus);
+
+    // create another thread to simmulate the cpu_core
+    // while the main thread is used to handle sdl events
+    // which will be send to coresponding devices through ring_channel
+    let cpu_main = thread::spawn(move || {
+        // start sim
+        cpu.cpu_state = CpuState::Running;
+        let mut cycle: u128 = 0;
+        while cpu.cpu_state == CpuState::Running {
+            cpu.execute(1);
+            cycle += 1;
+        }
+        println!("total:{cycle}");
+
+        // dump signature for riscof
+        args.signature
+            .map(|x| cpu.dump_signature(&x))
+            .unwrap_or_else(|| println!("no signature"));
+
+        // send signal to stop the trace thread
+        signal_term_cpucore.store(true, Ordering::Relaxed);
+    });
+    // debug trace thread
+    #[cfg(feature = "rv_debug_trace")]
+    let trace_thread = thread::spawn(move || {
+        let mut trace1 = trace_log;
+
+        while !signal_term_trace.load(Ordering::Relaxed) {
+            if let Some(r_log) = &mut trace1 {
+                r_log.run();
+            }
+        }
+    });
+
+    // uart thread to get terminal input
+    let _sifive_uart_thread = thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock().bytes();
+        while !signal_term_uart.load(Ordering::Relaxed) {
+            let x = handle.next();
+            if let Some(Ok(ch)) = x {
+                if sifive_uart_tx.send(ch as i32).is_ok() {}
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    #[cfg(feature = "rv_debug_trace")]
+    trace_thread.join().unwrap();
+    // sifive_uart_thread.join().unwrap();
+    cpu_main.join().unwrap();
+}
+
+// #[cfg(feature = "device_sdl2")]
+fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
+    tx.send(DeviceKbItem {
+        scancode: val,
+        is_keydown: keydown,
+    })
+    .expect("Key event send error");
+}
+#[cfg(feature = "device_sdl2")]
+fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
@@ -150,6 +238,7 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let event_system = sdl_context.event().expect("fail");
+    let event_system: &'static sdl2::EventSubsystem = Box::leak(Box::new(event_system));
 
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
@@ -215,72 +304,6 @@ fn main() {
         name: "Mouse",
     });
 
-    // device sifive_uart
-    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
-
-    let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
-
-    cpu.mmu
-        .bus
-        .plic
-        .instance
-        .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
-
-    cpu.mmu.bus.add_device(DeviceType {
-        start: SIFIVE_UART_BASE,
-        len: 0x1000,
-        instance: device_sifive_uart.into(),
-        name: "Sifive_Uart",
-    });
-    // show device address map
-    println!("{0}", cpu.mmu.bus);
-
-    // create another thread to simmulate the cpu_core
-    // while the main thread is used to handle sdl events
-    // which will be send to coresponding devices through ring_channel
-    let cpu_main = thread::spawn(move || {
-        // start sim
-        cpu.cpu_state = CpuState::Running;
-        let mut cycle: u128 = 0;
-        while cpu.cpu_state == CpuState::Running {
-            cpu.execute(1);
-            cycle += 1;
-        }
-        println!("total:{cycle}");
-
-        // dump signature for riscof
-        args.signature
-            .map(|x| cpu.dump_signature(&x))
-            .unwrap_or_else(|| println!("no signature"));
-
-        // send signal to stop the trace thread
-        signal_term_cpucore.store(true, Ordering::Relaxed);
-    });
-    // debug trace thread
-    #[cfg(feature = "rv_debug_trace")]
-    let trace_thread = thread::spawn(move || {
-        let mut trace1 = trace_log;
-
-        while !signal_term_trace.load(Ordering::Relaxed) {
-            if let Some(r_log) = &mut trace1 {
-                r_log.run();
-            }
-        }
-    });
-
-    // uart thread to get terminal input
-    let _sifive_uart_thread = thread::spawn(move || {
-        let stdin = io::stdin();
-        let mut handle = stdin.lock().bytes();
-        while !signal_term_uart.load(Ordering::Relaxed) {
-            let x = handle.next();
-            if let Some(Ok(ch)) = x {
-                if sifive_uart_tx.send(ch as i32).is_ok() {}
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-    });
-    // the main thread to handle sdl events
     handle_sdl_event(
         signal_term_sdl_event,
         event_system,
@@ -288,66 +311,54 @@ fn main() {
         kb_sdl_tx,
         mouse_sdl_tx,
     );
-
-    #[cfg(feature = "rv_debug_trace")]
-    trace_thread.join().unwrap();
-    // sifive_uart_thread.join().unwrap();
-    cpu_main.join().unwrap();
 }
 
-fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
-    tx.send(DeviceKbItem {
-        scancode: val,
-        is_keydown: keydown,
-    })
-    .expect("Key event send error");
-}
 
 fn handle_sdl_event(
     signal_term: Arc<AtomicBool>,
-    static_event: sdl2::EventSubsystem,
+    static_event: &'static sdl2::EventSubsystem,
     mut kb_am_tx: RingSender<DeviceKbItem>,
     mut kb_sdl_tx: RingSender<Keycode>,
     mut mouse_sdl_tx: RingSender<DeviceMouseItem>,
 ) {
-    // thread::spawn(move || -> ! {
-    let _event_system = static_event;
-    let _sdl_context = _event_system.sdl();
-    let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-    while !signal_term.load(Ordering::Relaxed) {
-        let mouse_state = event_pump.mouse_state();
+    thread::spawn(move || {
+        let _event_system = static_event;
+        let _sdl_context = _event_system.sdl();
+        let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
+        while !signal_term.load(Ordering::Relaxed) {
+            let mouse_state = event_pump.mouse_state();
 
-        mouse_sdl_tx
-            .send(DeviceMouseItem {
-                x: (mouse_state.x() / 2) as u32,
-                y: (mouse_state.y() / 2) as u32,
-                mouse_btn_state: mouse_state.to_sdl_state(),
-            })
-            .expect("Mouse event send error");
+            mouse_sdl_tx
+                .send(DeviceMouseItem {
+                    x: (mouse_state.x() / 2) as u32,
+                    y: (mouse_state.y() / 2) as u32,
+                    mouse_btn_state: mouse_state.to_sdl_state(),
+                })
+                .expect("Mouse event send error");
 
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => process::exit(0),
-                Event::KeyUp {
-                    scancode: Some(val),
-                    ..
-                } => send_key_event(&mut kb_am_tx, val, false),
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => process::exit(0),
+                    Event::KeyUp {
+                        scancode: Some(val),
+                        ..
+                    } => send_key_event(&mut kb_am_tx, val, false),
 
-                Event::KeyDown {
-                    scancode: Some(val),
-                    keycode: Some(sdl_key_code),
-                    ..
-                } => {
-                    send_key_event(&mut kb_am_tx, val, true);
-                    kb_sdl_tx.send(sdl_key_code).unwrap();
+                    Event::KeyDown {
+                        scancode: Some(val),
+                        keycode: Some(sdl_key_code),
+                        ..
+                    } => {
+                        send_key_event(&mut kb_am_tx, val, true);
+                        kb_sdl_tx.send(sdl_key_code).unwrap();
+                    }
+
+                    _ => (),
                 }
-
-                _ => (),
             }
+            std::thread::sleep(Duration::from_millis(100));
         }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    // });
+    });
 }
 
 #[cfg(test)]

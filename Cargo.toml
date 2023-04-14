@@ -25,6 +25,7 @@ crossbeam-channel = "0.5.7"
 [features]
 # default = ["rv_debug_trace"]
 default = ["support_am"]
+device_sdl2 = []
 rv_debug_trace = []
 support_am = []
 
