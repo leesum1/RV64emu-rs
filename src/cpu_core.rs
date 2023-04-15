@@ -4,6 +4,7 @@ use crate::{
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
     csr_regs_define::XipIn,
+    difftest::difftest_trait::{Difftest},
     gpr::Gpr,
     inst::inst_base::PrivilegeLevels,
     inst::{
@@ -319,7 +320,6 @@ impl CpuCore {
         self.mmu.do_write(addr, data, len)
     }
 
-
     // for riscof
     pub fn dump_signature(&mut self, file_name: &str) {
         let fd = File::create(file_name);
@@ -361,6 +361,46 @@ impl CpuCore {
             }
         }
         cmd.character_device_write();
+    }
+}
+
+impl Difftest for CpuCore {
+    fn set_regs(&mut self, regs: &[u64; 32]) {
+        for idx in 0..32 {
+            self.gpr.write(idx, regs[idx as usize]);
+        }
+    }
+    fn get_regs(&mut self) -> [u64; 32] {
+        let mut regs = [0u64; 32];
+        for idx in 0..32 {
+            regs[idx as usize] = self.gpr.read(idx);
+        }
+        regs
+    }
+    fn set_csr(&mut self, csr: u64, val: u64) {
+        self.csr_regs.write_raw(csr, val);
+    }
+
+    fn get_csr(&mut self, csr: u64) -> u64 {
+        self.csr_regs.read_raw(csr)
+    }
+
+    fn set_mem(&mut self, paddr: u64, data: u64, len: usize) {
+        let _ret = self.mmu.bus.write(paddr, data, len);
+    }
+
+    fn get_mem(&mut self, paddr: u64, len: usize) -> u64 {
+        self.mmu.bus.read(paddr, len).map_or(0, |x| x)
+    }
+
+    fn get_pc(&mut self) -> u64 {
+        self.npc
+    }
+    fn set_pc(&mut self, pc: u64) {
+        self.npc = pc;
+    }
+    fn raise_intr(&mut self, irq: u64) {
+        todo!()
     }
 }
 

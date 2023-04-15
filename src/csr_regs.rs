@@ -206,11 +206,6 @@ impl CsrRegs {
         assert!(addr < 4096); // The size of a CSR is 4KB
         self.cur_priv = privi; // Update the current privilege level
 
-        // Check if the CSR is accessible
-        // if !self.check_csr(addr, privi, AccessType::Load(0)) {
-        //     return Err(TrapType::IllegalInstruction(addr));
-        // };
-
         // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
         let csr = match self.csr_map.get(&addr) {
             Some(csr) => csr,
@@ -233,22 +228,6 @@ impl CsrRegs {
         assert!(addr < 4096); // The size of a CSR is 4KB
         self.cur_priv = privi; // Update the current privilege level
 
-        // // Check if the CSR is accessible
-        // if !self.check_csr(addr, privi, AccessType::Store(0)) {
-        //     return Err(TrapType::IllegalInstruction(addr));
-        // };
-
-        // match self.csr_map.get_mut(&addr) {
-        //     Some(csr) => {
-        //         csr.write(data);
-        //         Ok(())
-        //     }
-        //     None => {
-        //         // panic!("csr:{addr:x}")
-        //         Err(TrapType::IllegalInstruction(addr))
-        //     }
-        // }
-
         // Get the CSR with address addr from the CSR map. If it does not exist, return an illegal instruction trap.
         let csr = match self.csr_map.get_mut(&addr) {
             Some(csr) => csr,
@@ -266,5 +245,28 @@ impl CsrRegs {
         // Return the value of the CSR.
         csr.write(data);
         Ok(())
+    }
+
+    pub fn write_raw(&mut self, addr: u64, data: u64) {
+        assert!(addr < 4096); // The size of a CSR is 4KB
+
+        // Get the CSR with address addr from the CSR map. If it does not exist, return
+        let csr = match self.csr_map.get_mut(&addr) {
+            Some(csr) => csr,
+            None => return,
+        };
+
+        csr.write(data);
+    }
+
+    pub fn read_raw(&mut self, addr: u64) -> u64 {
+        assert!(addr < 4096); // The size of a CSR is 4KB
+
+        // Get the CSR with address addr from the CSR map. If it does not exist, return 0
+        let csr = match self.csr_map.get(&addr) {
+            Some(csr) => csr,
+            None => return 0,
+        };
+        csr.read()
     }
 }

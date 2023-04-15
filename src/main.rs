@@ -4,6 +4,7 @@ mod cpu_icache;
 mod csr_regs;
 mod csr_regs_define;
 mod device;
+mod difftest;
 mod gpr;
 mod inst;
 mod inst_decode;
