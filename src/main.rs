@@ -13,6 +13,7 @@ mod sv39;
 mod trace;
 mod traptype;
 
+#[allow(unused_imports)]
 use std::{
     cell::Cell,
     io::{self, Read},
@@ -23,14 +24,23 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::{self},
+    thread,
     time::Duration,
 };
 
 use clap::Parser;
 
+#[cfg(feature = "device_sdl2")]
+use crate::device::{
+    device_kb::{DeviceKB, DeviceKbItem},
+    device_mouse::{DeviceMouse, DeviceMouseItem},
+    device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
+    device_vga::DeviceVGA,
+    device_vgactl::DeviceVGACTL,
+};
+#[cfg(feature = "device_sdl2")]
 use ring_channel::*;
-
+#[cfg(feature = "device_sdl2")]
 use sdl2::{
     event::Event,
     keyboard::{Keycode, Scancode},
@@ -41,19 +51,12 @@ use crate::{
     cpu_core::{CpuCore, CpuState},
     device::{
         device_dram::DeviceDram,
-        device_kb::{DeviceKB, DeviceKbItem},
-        device_mouse::{DeviceMouse, DeviceMouseItem},
         device_rtc::DeviceRTC,
         device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
-        device_trait::{
-            FB_ADDR, KBD_ADDR, MEM_BASE, MOUSE_ADDR, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE,
-            VGACTL_ADDR,
-        },
+        device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE},
         device_uart::DeviceUart,
-        device_vga::DeviceVGA,
-        device_vgactl::DeviceVGACTL,
     },
     trace::traces::Traces,
 };
@@ -168,27 +171,6 @@ fn main() {
     // show device address map
     println!("{0}", cpu.mmu.bus);
 
-    // create another thread to simmulate the cpu_core
-    // while the main thread is used to handle sdl events
-    // which will be send to coresponding devices through ring_channel
-    let cpu_main = thread::spawn(move || {
-        // start sim
-        cpu.cpu_state = CpuState::Running;
-        let mut cycle: u128 = 0;
-        while cpu.cpu_state == CpuState::Running {
-            cpu.execute(1);
-            cycle += 1;
-        }
-        println!("total:{cycle}");
-
-        // dump signature for riscof
-        args.signature
-            .map(|x| cpu.dump_signature(&x))
-            .unwrap_or_else(|| println!("no signature"));
-
-        // send signal to stop the trace thread
-        signal_term_cpucore.store(true, Ordering::Relaxed);
-    });
     // debug trace thread
     #[cfg(feature = "rv_debug_trace")]
     let trace_thread = thread::spawn(move || {
@@ -200,7 +182,6 @@ fn main() {
             }
         }
     });
-
     // uart thread to get terminal input
     let _sifive_uart_thread = thread::spawn(move || {
         let stdin = io::stdin();
@@ -214,13 +195,35 @@ fn main() {
         }
     });
 
+    // create another thread to simmulate the cpu_core
+    // while the main thread is used to handle sdl events
+    // which will be send to coresponding devices through ring_channel
+    // let cpu_main = thread::spawn(move || {
+    // start sim
+    cpu.cpu_state = CpuState::Running;
+    let mut cycle: u128 = 0;
+    while cpu.cpu_state == CpuState::Running {
+        cpu.execute(1);
+        cycle += 1;
+    }
+    println!("total:{cycle}");
+
+    // dump signature for riscof
+    args.signature
+        .map(|x| cpu.dump_signature(&x))
+        .unwrap_or_else(|| println!("no signature"));
+
+    // send signal to stop the trace thread
+    signal_term_cpucore.store(true, Ordering::Relaxed);
+    // });
+
     #[cfg(feature = "rv_debug_trace")]
     trace_thread.join().unwrap();
     // sifive_uart_thread.join().unwrap();
-    cpu_main.join().unwrap();
+    // cpu_main.join().unwrap();
 }
 
-// #[cfg(feature = "device_sdl2")]
+#[cfg(feature = "device_sdl2")]
 fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
     tx.send(DeviceKbItem {
         scancode: val,
@@ -312,8 +315,7 @@ fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>
         mouse_sdl_tx,
     );
 }
-
-
+#[cfg(feature = "device_sdl2")]
 fn handle_sdl_event(
     signal_term: Arc<AtomicBool>,
     static_event: &'static sdl2::EventSubsystem,
