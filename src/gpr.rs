@@ -101,6 +101,8 @@ impl fmt::Display for Gpr {
 mod test_gpr {
     use std::str::FromStr;
 
+    use log::warn;
+
     use crate::gpr::Gpr;
     use crate::gpr::GprName;
 
@@ -139,7 +141,7 @@ mod test_gpr {
         assert_eq!(x0, 0);
         assert_eq!(x1, 1);
         assert_eq!(x10, 10);
-        println!("{gpr}");
+        warn!("{gpr}");
     }
 
     #[test]

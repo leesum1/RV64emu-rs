@@ -38,6 +38,8 @@ impl DeviceBase for DeviceRTC {
 #[cfg(test)]
 mod test_rtc {
 
+    use log::warn;
+
     use crate::device::device_trait::DeviceBase;
 
     use super::DeviceRTC;
@@ -51,13 +53,13 @@ mod test_rtc {
 
         let t = (high << 32) + low;
         assert_eq!(t, rtc.rtc_time);
-        println!("{t}");
+        warn!("{t}");
         std::thread::sleep(std::time::Duration::from_millis(100));
         let low = rtc.do_read(0, 4);
         let high = rtc.do_read(4, 4);
 
         let t = (high << 32) + low;
         assert_eq!(t, rtc.rtc_time);
-        println!("{t}");
+        warn!("{t}");
     }
 }

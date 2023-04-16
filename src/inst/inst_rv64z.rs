@@ -58,13 +58,13 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 mstatus.set_mprv(false);
             }
 
-            // println!("MRET:mstatus_now:{mstatus_val:x}");
+            // warn!("MRET:mstatus_now:{mstatus_val:x}");
             cpu.csr_regs.xstatus.set(mstatus);
-            // println!("MRET:mstatus_now2:{mstatus_val:x}");
+            // warn!("MRET:mstatus_now2:{mstatus_val:x}");
 
             // let mepc_val = cpu.csr_regs.read_raw(CSR_MEPC.into());
             let mepc = cpu.csr_regs.mepc.get();
-            // println!("mret->{mepc_val:x}");
+            // warn!("mret->{mepc_val:x}");
             cpu.npc = mepc;
 
             Ok(())
@@ -109,12 +109,12 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
 
             // cpu.csr_regs.write_raw(CSR_MSTATUS.into(), mstatus.into());
             cpu.csr_regs.xstatus.set(mstatus);
-            // println!("MRET:mstatus_now2:{mstatus_val:x}");
+            // warn!("MRET:mstatus_now2:{mstatus_val:x}");
 
             // xRET sets the pc to the value stored in the xepc register.
             // let sepc_val = cpu.csr_regs.read_raw(CSR_SEPC.into());
             let sepc = cpu.csr_regs.sepc.get();
-            // println!("sret->{sepc_val:x}");
+            // warn!("sret->{sepc_val:x}");
             cpu.npc = sepc;
 
             Ok(())
@@ -147,7 +147,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 PrivilegeLevels::Supervisor
             };
 
-            // println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
+            // warn!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
 
             if !require_priv.check_priv(cur_priv) {
                 Err(TrapType::IllegalInstruction(inst.into()))
@@ -179,7 +179,7 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
             let rs1_data = cpu.gpr.read(f.rs1);
 
             let csr_wb_data = t & !rs1_data;
-            // println!("CSRRC:{csr_wb_data:x}");
+            // warn!("CSRRC:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
@@ -235,9 +235,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 Err(trap_type) => return Err(trap_type),
             };
             let rs1_data = cpu.gpr.read(f.rs1);
-            // println!("CSRRW_pre:{t:x}");
+            // warn!("CSRRW_pre:{t:x}");
             let csr_wb_data = rs1_data;
-            // println!("CSRRW_now:{csr_wb_data:x}");
+            // warn!("CSRRW_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
@@ -263,11 +263,11 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 Err(trap_type) => return Err(trap_type),
             };
             let zimm = f.rs1;
-            // println!("CSRRCI_zimm:{zimm:x}");
-            // println!("CSRRCI_pre:{t:x}");
+            // warn!("CSRRCI_zimm:{zimm:x}");
+            // warn!("CSRRCI_pre:{t:x}");
 
             let csr_wb_data = t & !zimm;
-            // println!("CSRRCI_now:{csr_wb_data:x}");
+            // warn!("CSRRCI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
@@ -293,9 +293,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 Err(trap_type) => return Err(trap_type),
             };
             let zimm = f.rs1;
-            // println!("CSRRSI_pre:{t:x}");
+            // warn!("CSRRSI_pre:{t:x}");
             let csr_wb_data = t | zimm;
-            // println!("CSRRSI_now:{csr_wb_data:x}");
+            // warn!("CSRRSI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {
@@ -322,9 +322,9 @@ pub const INSTRUCTIONS_Z: [Instruction; 14] = [
                 Err(trap_type) => return Err(trap_type),
             };
             let zimm = f.rs1;
-            // println!("CSRRWI_pre:{t:x}");
+            // warn!("CSRRWI_pre:{t:x}");
             let csr_wb_data = zimm;
-            // println!("CSRRWI_now:{csr_wb_data:x}");
+            // warn!("CSRRWI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
                 if let Err(trap_type) = csr_ret {

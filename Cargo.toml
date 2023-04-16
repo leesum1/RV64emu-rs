@@ -20,6 +20,7 @@ bitfield-struct = "0.3.2"
 # llvm-sys = "150"
 enum_dispatch = "0.3.11"
 crossbeam-channel = "0.5.7"
+log = "0.4.17"
 # termion = "2.0.1"
 
 [features]

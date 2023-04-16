@@ -548,6 +548,7 @@ dependencies = [
  "crossbeam-channel",
  "enum_dispatch",
  "hashbrown",
+ "log",
  "ring-channel",
  "sdl2",
  "strum",

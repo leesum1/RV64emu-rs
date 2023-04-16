@@ -44,7 +44,7 @@ mod test_gpr {
         let hello = "hello\n";
 
         for s in hello.chars() {
-            // println!("byte:{}",s as u32);
+            // warn!("byte:{}",s as u32);
             uart.do_write(0, s as u64, 1);
         }
     }

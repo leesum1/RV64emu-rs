@@ -1,5 +1,7 @@
 use std::{fs, vec};
 
+use log::warn;
+
 use crate::device::device_trait::DeviceBase;
 
 pub struct DeviceDram {
@@ -27,7 +29,7 @@ impl DeviceDram {
         };
 
         let text_size = text.len();
-        println!("load binary : {file_name}, size: {text_size}");
+        warn!("load binary : {file_name}, size: {text_size}");
         self.data[0..text_size].copy_from_slice(&text[..text_size]);
     }
 }
@@ -81,7 +83,7 @@ mod tests_dram {
         let result = dram.do_read(addr, 4);
         assert_eq!(result, data);
         let result = dram.do_read(addr, 8);
-        // println!("{:x}\n{:x}", result, data1);
+        // warn!("{:x}\n{:x}", result, data1);
         assert_eq!(result as u128, data1);
     }
 }

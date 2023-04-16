@@ -1,6 +1,7 @@
 use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
 use bitfield_struct::bitfield;
+use log::warn;
 
 use crate::csr_regs_define::XipIn;
 
@@ -243,7 +244,7 @@ impl SifvePlic {
                 pending_bit && enable_bit && priority > threshold
             });
             // if int_flag {
-            //     println!("int_flag is true");
+            //     warn!("int_flag is true");
             // }
             c.update_xip(int_flag);
         }
@@ -264,7 +265,7 @@ impl SifvePlic {
     }
     // pending bits are read-only
     fn pending_write(&mut self, _irq_id: u32, _val: u32) {
-        println!("pending bits are read-only");
+        warn!("pending bits are read-only");
     }
 
     fn context_enbale_read(&self, offset: u32) -> u32 {
@@ -303,7 +304,7 @@ impl SifvePlic {
     fn context_claim(&mut self, context_idx: usize) -> u32 {
         // 1. Get the highest priority pending interrupt, and clear the pending bit.
         // 2. Return the interrupt ID
-        // println!("context_claim(context_idx:{})", context_idx);
+        // warn!("context_claim(context_idx:{})", context_idx);
         let mut irq_id = 0;
         let mut irq_priority = 0;
         let mut irq_pendding = Rc::new(Cell::new(false));
@@ -334,7 +335,7 @@ impl SifvePlic {
 
         c.claim = irq_id;
 
-        println!(
+        warn!(
             "context_claim(context_idx:{}, irq_id:{})",
             context_idx, irq_id
         );

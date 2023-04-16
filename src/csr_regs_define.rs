@@ -112,7 +112,7 @@ pub struct CsrAddr {
 impl CsrAddr {
     pub fn check_privilege(&self, privi: PrivilegeLevels, access_type: AccessType) -> bool {
         let has_privilege = (privi as u8) >= self.privilege();
-        // println!("privi:{:?},{}", privi, has_privilege);
+        // warn!("privi:{:?},{}", privi, has_privilege);
         match access_type {
             AccessType::Store(_) => self.not_read_only() && has_privilege,
             _ => has_privilege,
@@ -788,7 +788,7 @@ impl Csr for Satp {
     //         PrivilegeLevels::Supervisor
     //     };
 
-    //     // println!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
+    //     // warn!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
 
     //     if !require_priv.check_priv(cur_priv) {
     //         Err(())
@@ -810,7 +810,7 @@ impl Csr for Satp {
         } else {
             PrivilegeLevels::Supervisor
         };
-        // println!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
+        // warn!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
         match require_priv.check_priv(privi) {
             true => Ok(()),
             false => Err(()),

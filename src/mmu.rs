@@ -75,8 +75,8 @@ impl Mmu {
         let pte_size = self.get_ptesize();
 
         let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
-        // println!("va:{:?}", self.stap);
-        // println!("va:{:?}", self.va);
+        // warn!("va:{:?}", self.stap);
+        // warn!("va:{:?}", self.va);
         // assert_eq!(self.stap.ppn() * 4096, self.a);
         // todo! PMA or PMP check
         let pte_data = self.bus.read(pte_addr, pte_size as usize).unwrap();

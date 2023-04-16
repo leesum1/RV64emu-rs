@@ -30,6 +30,7 @@ use std::{
 };
 
 use clap::Parser;
+use log::warn;
 
 #[cfg(feature = "device_sdl2")]
 use crate::device::{
@@ -105,10 +106,10 @@ fn main() {
     };
 
     let mut cpu = if cfg!(feature = "rv_debug_trace") {
-        println!("Enabling debug tracing");
+        warn!("Enabling debug tracing");
         CpuCore::new(Some(trace_tx))
     } else {
-        println!("Disabling debug tracing");
+        warn!("Disabling debug tracing");
         CpuCore::new(None)
     };
 
@@ -170,7 +171,7 @@ fn main() {
     create_sdl2_devices(&mut cpu, signal_term_sdl_event);
 
     // show device address map
-    println!("{0}", cpu.mmu.bus);
+    warn!("{0}", cpu.mmu.bus);
 
     // debug trace thread
     #[cfg(feature = "rv_debug_trace")]
@@ -207,12 +208,12 @@ fn main() {
         cpu.execute(1);
         cycle += 1;
     }
-    println!("total:{cycle}");
+    warn!("total:{cycle}");
 
     // dump signature for riscof
     args.signature
         .map(|x| cpu.dump_signature(&x))
-        .unwrap_or_else(|| println!("no signature"));
+        .unwrap_or_else(|| warn!("no signature"));
 
     // send signal to stop the trace thread
     signal_term_cpucore.store(true, Ordering::Relaxed);
@@ -368,6 +369,8 @@ fn handle_sdl_event(
 mod isa_test {
     use std::{fs, path::Path};
 
+    use log::warn;
+
     use crate::{
         bus::DeviceType,
         cpu_core::{CpuCore, CpuState},
@@ -396,7 +399,7 @@ mod isa_test {
             cycle += 1;
             cpu.check_to_host();
         }
-        println!("total:{cycle}");
+        warn!("total:{cycle}");
 
         cpu.cpu_state == CpuState::Stop
     }
@@ -416,7 +419,7 @@ mod isa_test {
         // handle_fault:0000000000003000
         let path = "/home/leesum/workhome/riscv-tests/benchmarks/dhrystone.bin";
         let ret = start_test(path);
-        println!("{ret}");
+        warn!("{ret}");
     }
 
     #[test]
@@ -456,11 +459,11 @@ mod isa_test {
         tests_ret
             .iter()
             .filter(|item| item.ret)
-            .for_each(|x| println!("{:40}{}", x.name, x.ret));
+            .for_each(|x| warn!("{:40}{}", x.name, x.ret));
         tests_ret
             .iter()
             .filter(|item| !item.ret)
-            .for_each(|x| println!("{:40}{}", x.name, x.ret));
+            .for_each(|x| warn!("{:40}{}", x.name, x.ret));
 
         // tests_ret.iter().for_each(|x| {
         //     assert!(x.ret);

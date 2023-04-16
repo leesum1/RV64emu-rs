@@ -867,10 +867,12 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 ];
 #[cfg(test)]
 mod test_rv64i {
+    use log::warn;
+
 
     #[test]
     fn tset1() {
         let x = 1 < 2;
-        println!("x:{}", x as u64);
+        warn!("x:{}", x as u64);
     }
 }

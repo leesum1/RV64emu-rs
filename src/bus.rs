@@ -1,3 +1,5 @@
+use log::warn;
+
 use crate::{
     device::{
         device_sifive_plic::{DevicePlic, SifvePlic},
@@ -52,7 +54,7 @@ impl Bus {
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
         if !check_aligned(addr, len as u64) {
-            println!("bus read:{:x},{:x}", addr, len);
+            warn!("bus read:{:x},{:x}", addr, len);
             return Err(());
         }
 
@@ -64,7 +66,7 @@ impl Bus {
             } else if check_area(self.plic.start, self.plic.len, addr) {
                 Ok(self.plic.instance.do_read(addr - self.plic.start, len))
             } else {
-                println!("can not find device,read addr{addr:X}");
+                warn!("can not find device,read addr{addr:X}");
                 Err(())
             }
         };
@@ -101,7 +103,7 @@ impl Bus {
                     .instance
                     .do_write(addr - self.plic.start, data, len))
             } else {
-                println!("can not find device,read addr{addr:X}");
+                warn!("can not find device,read addr{addr:X}");
                 Err(())
             }
         };

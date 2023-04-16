@@ -1,5 +1,7 @@
 use std::{cell::Cell, fs::File, io::Write, rc::Rc};
 
+use log::warn;
+
 use crate::{
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
@@ -111,7 +113,7 @@ impl CpuCore {
                 (i.operation)(self, inst, self.pc) // return
             }
             None => {
-                println!("inst err,pc:{:X},inst:{:x}", self.pc, inst);
+                warn!("inst err,pc:{:X},inst:{:x}", self.pc, inst);
                 Err(TrapType::IllegalInstruction(inst.into()))
             }
         }
@@ -162,9 +164,9 @@ impl CpuCore {
         let a0 = self.gpr.read_by_name("a0");
 
         if let 0 = a0 {
-            println!("GOOD TRAP");
+            warn!("GOOD TRAP");
         } else {
-            println!("BAD TRAP");
+            warn!("BAD TRAP");
         }
         self.cpu_state = CpuState::Stop;
         a0 as usize
@@ -240,7 +242,7 @@ impl CpuCore {
         if mip_mie_val == 0 {
             return;
         }
-        // println!("mip_mie_val:{:?}", XieIn::from(mip_mie_val));
+        // warn!("mip_mie_val:{:?}", XieIn::from(mip_mie_val));
         let mut mstatus = self.csr_regs.xstatus.get();
 
         let mideleg = self.csr_regs.mideleg.get();
@@ -328,7 +330,7 @@ impl CpuCore {
         let sig_end = self.gpr.read_by_name("a2");
 
         fd.map_or_else(
-            |err| println!("{err}"),
+            |err| warn!("{err}"),
             |mut file| {
                 for i in (sig_start..sig_end).step_by(4) {
                     let tmp_data = self.mmu.bus.read(i, 4).unwrap();
@@ -357,7 +359,7 @@ impl CpuCore {
             // fail
             else {
                 self.cpu_state = CpuState::Abort;
-                println!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
+                warn!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
             }
         }
         cmd.character_device_write();
@@ -408,6 +410,8 @@ impl Difftest for CpuCore {
 mod tests_cpu {
     use std::{fs::read_dir, path::Path};
 
+    use log::warn;
+
     use crate::{bus::DeviceType, device::device_dram::DeviceDram};
 
     use super::{CpuCore, CpuState};
@@ -439,7 +443,7 @@ mod tests_cpu {
                 break;
             }
         }
-        println!("total:{cycle}");
+        warn!("total:{cycle}");
         let a0_val = cpu.gpr.read_by_name("a0");
         assert_eq!(a0_val, 0);
     }
@@ -456,7 +460,7 @@ mod tests_cpu {
                 if ext == "bin" {
                     run_once(path.to_str().unwrap());
                     let f_name = path.file_name().unwrap().to_str().unwrap();
-                    println!("{f_name}:  OK");
+                    warn!("{f_name}:  OK");
                 }
             }
         }
