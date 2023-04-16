@@ -1,7 +1,7 @@
-use crate::{inst::inst_base::*};
+use crate::inst::inst_base::*;
 
 pub struct LrScReservation {
-    pub(crate) val: u64,
+    pub val: u64,
 }
 
 impl LrScReservation {
@@ -36,7 +36,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Err(trap_type) => return Err(trap_type),
             };
 
-            cpu.lr_sc_set.set(rs1_data);
+            cpu.lr_sc_reservation_set(rs1_data);
             cpu.gpr.write(f.rd, r_data as u64);
 
             Ok(())
@@ -54,7 +54,17 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
                 Err(trap_type) => return Err(trap_type),
             };
 
-            cpu.lr_sc_set.set(rs1_data);
+            cpu.lr_sc_reservation_set(rs1_data);
+
+            cpu.mmu
+                .bus
+                .lock()
+                .unwrap()
+                .lr_sc_set
+                .lock()
+                .unwrap()
+                .set(rs1_data);
+
             cpu.gpr.write(f.rd, r_data);
 
             Ok(())
@@ -70,7 +80,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            if cpu.lr_sc_set.check_and_clear(rs1_data) {
+            if cpu.lr_sc_reservation_check_and_clear(rs1_data) {
                 match cpu.write(rs1_data, rs2_data, 4, AccessType::Store(rs1_data)) {
                     Ok(_) => {}
                     Err(trap_type) => return Err(trap_type),
@@ -92,7 +102,7 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
 
-            if cpu.lr_sc_set.check_and_clear(rs1_data) {
+            if cpu.lr_sc_reservation_check_and_clear(rs1_data) {
                 // todo!
                 match cpu.write(rs1_data, rs2_data, 8, AccessType::Store(rs1_data)) {
                     Ok(_) => {}
@@ -123,7 +133,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             };
 
             // no err happenes here
-            cpu.write(rs1_data, rs2_data, 4, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, rs2_data, 4, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp as u32 as i32 as i64 as u64);
 
             Ok(())
@@ -141,10 +152,10 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
-
             };
             // no err happenes here
-            cpu.write(rs1_data, rs2_data, 8, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, rs2_data, 8, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -166,7 +177,6 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
-
             };
             // no err happenes here
             cpu.write(rs1_data, tmp ^ rs2_data, 4, AccessType::Amo(rs1_data))
@@ -188,7 +198,6 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
-
             };
             // no err happenes here
             cpu.write(rs1_data, tmp ^ rs2_data, 8, AccessType::Amo(rs1_data))
@@ -283,7 +292,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp.min(rs2_data);
             // no err happenes here
-            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -374,7 +384,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp.max(rs2_data);
             // no err happenes here
-            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -468,7 +479,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
 
             let amo_write = tmp & rs2_data;
             // no err happenes here
-            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())
@@ -517,7 +529,8 @@ pub const INSTRUCTIONS_A: [Instruction; 22] = [
             let amo_write = tmp.wrapping_add(rs2_data);
 
             // no err happenes here
-            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data)).unwrap();
+            cpu.write(rs1_data, amo_write, 8, AccessType::Amo(rs1_data))
+                .unwrap();
             cpu.gpr.write(f.rd, tmp);
 
             Ok(())

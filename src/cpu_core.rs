@@ -1,12 +1,19 @@
-use std::{cell::Cell, fs::File, io::Write, rc::Rc};
+use std::{
+    cell::Cell,
+    fs::File,
+    io::Write,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use log::warn;
 
 use crate::{
+    bus::Bus,
     cpu_icache::CpuIcache,
     csr_regs::CsrRegs,
     csr_regs_define::XipIn,
-    difftest::difftest_trait::{Difftest},
+    difftest::difftest_trait::Difftest,
     gpr::Gpr,
     inst::inst_base::PrivilegeLevels,
     inst::{
@@ -25,6 +32,77 @@ pub enum CpuState {
     Stop,
     Abort,
 }
+pub struct CpuCoreBuild {
+    hart_id: usize,
+    shared_bus: Arc<Mutex<Bus>>,
+    boot_pc: u64,
+    smode: bool,
+    trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
+}
+impl CpuCoreBuild {
+    pub fn new(shared_bus: Arc<Mutex<Bus>>) -> Self {
+        CpuCoreBuild {
+            hart_id: 0,
+            shared_bus,
+            boot_pc: 0x8000_0000,
+            trace_sender: None,
+            smode: true,
+        }
+    }
+    pub fn with_boot_pc(&mut self, boot_pc: u64) -> &mut Self {
+        self.boot_pc = boot_pc;
+        self
+    }
+    pub fn with_trace(&mut self, trace_sender: crossbeam_channel::Sender<TraceType>) -> &mut Self {
+        self.trace_sender = Some(trace_sender);
+        self
+    }
+    pub fn with_hart_id(&mut self, hart_id: usize) -> &mut Self {
+        self.hart_id = hart_id;
+        self
+    }
+    pub fn with_smode(&mut self, smode: bool) -> &mut Self {
+        self.smode = smode;
+        self
+    }
+
+    pub fn build(&self) -> CpuCore {
+        let mut csr_regs_u = CsrRegs::new(self.hart_id);
+        let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
+        // some csr regs are shared with other modules
+        let xstatus = csr_regs_u.xstatus.clone();
+        let satp = csr_regs_u.satp.clone();
+        // let mtime = csr_regs_u.time.clone();
+        let xip = csr_regs_u.xip.clone();
+
+        let mmu_u = Mmu::new(self.shared_bus.clone(), privi_u.clone(), xstatus, satp);
+        {
+            let mut bus_u = mmu_u.bus.lock().unwrap();
+            let mtime = bus_u.clint.instance.add_hart(xip.clone());
+            csr_regs_u.add_mtime(mtime);
+            // add plic context for core0 m-mode and s-mode
+            bus_u.plic.instance.add_context(xip.clone(), true);
+            if self.smode {
+                bus_u.plic.instance.add_context(xip, false);
+            }
+        }
+
+        let share_lr_sc_set = mmu_u.bus.lock().unwrap().lr_sc_set.clone();
+
+        CpuCore {
+            gpr: Gpr::new(),
+            csr_regs: csr_regs_u,
+            mmu: mmu_u,
+            decode: InstDecode::new(),
+            pc: self.boot_pc,
+            npc: self.boot_pc,
+            cur_priv: privi_u,
+            lr_sc_set: share_lr_sc_set,
+            cpu_state: CpuState::Stop,
+            cpu_icache: CpuIcache::new(),
+        }
+    }
+}
 
 pub struct CpuCore {
     pub gpr: Gpr,
@@ -34,47 +112,15 @@ pub struct CpuCore {
     pub pc: u64,
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
-    pub lr_sc_set: LrScReservation, // for rv64a inst
+    // todo! move to bus
+    pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
+    #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 unsafe impl Send for CpuCore {}
 impl CpuCore {
-    pub fn new(trace_sender: Option<crossbeam_channel::Sender<TraceType>>) -> Self {
-        // todo! improve me
-        let mut csr_regs_u = CsrRegs::new();
-        let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
-        // some csr regs are shared with other modules
-        let xstatus = csr_regs_u.xstatus.clone();
-        let satp = csr_regs_u.satp.clone();
-        // let mtime = csr_regs_u.time.clone();
-        let xip = csr_regs_u.xip.clone();
-
-        let mut mmu_u = Mmu::new(privi_u.clone(), xstatus, satp);
-
-        let mtime = mmu_u.bus.clint.instance.add_hart(xip.clone());
-        csr_regs_u.add_mtime(mtime);
-
-        // add plic context for core0 m-mode and s-mode
-        mmu_u.bus.plic.instance.add_context(xip.clone(), true);
-        mmu_u.bus.plic.instance.add_context(xip, false);
-
-        CpuCore {
-            gpr: (Gpr::new()),
-            decode: InstDecode::new(),
-            mmu: mmu_u,
-            pc: 0x8000_0000,
-            npc: 0x8000_0000,
-            lr_sc_set: LrScReservation::new(),
-            cpu_state: CpuState::Stop,
-            csr_regs: csr_regs_u,
-            cpu_icache: CpuIcache::new(),
-            cur_priv: privi_u,
-            trace_sender,
-        }
-    }
-
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
         self.npc += 4;
@@ -142,7 +188,7 @@ impl CpuCore {
 
                     self.check_pending_int();
                     self.handle_interrupt();
-                    self.mmu.bus.update();
+                    self.mmu.bus.lock().unwrap().update();
 
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
@@ -153,11 +199,10 @@ impl CpuCore {
         }
     }
     fn check_pending_int(&mut self) {
-        let clint = &mut self.mmu.bus.clint.instance;
-        let plic = &mut self.mmu.bus.plic.instance;
-
-        plic.tick();
-        clint.tick();
+        // todo! improve me
+        let mut bus_u = self.mmu.bus.lock().unwrap();
+        bus_u.clint.instance.tick();
+        bus_u.plic.instance.tick();
     }
 
     pub fn halt(&mut self) -> usize {
@@ -322,6 +367,16 @@ impl CpuCore {
         self.mmu.do_write(addr, data, len)
     }
 
+    pub fn lr_sc_reservation_set(&mut self, addr: u64) {
+        self.lr_sc_set.lock().unwrap().set(addr);
+    }
+    pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
+        self.lr_sc_set.lock().unwrap().check_and_clear(addr)
+    }
+    pub fn lr_sc_reservation_clear(&mut self) {
+        self.lr_sc_set.lock().unwrap().clear();
+    }
+
     // for riscof
     pub fn dump_signature(&mut self, file_name: &str) {
         let fd = File::create(file_name);
@@ -332,8 +387,9 @@ impl CpuCore {
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {
+                let mut bus_u = self.mmu.bus.lock().unwrap();
                 for i in (sig_start..sig_end).step_by(4) {
-                    let tmp_data = self.mmu.bus.read(i, 4).unwrap();
+                    let tmp_data = bus_u.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
                 }
             },
@@ -347,9 +403,11 @@ impl CpuCore {
     // if non-zero data is written.
     // End code 1 seems to mean pass.
     pub fn check_to_host(&mut self) {
-        let data = self.mmu.bus.read(0x8000_1000, 8).unwrap();
+        let mut bus_u = self.mmu.bus.lock().unwrap();
+
+        let data = bus_u.read(0x8000_1000, 8).unwrap();
         // !! must clear mem
-        self.mmu.bus.write(0x8000_1000, 0, 8).unwrap();
+        bus_u.write(0x8000_1000, 0, 8).unwrap();
 
         let cmd = FesvrCmd::from(data);
         if let Some(pass) = cmd.syscall_device() {
@@ -388,11 +446,16 @@ impl Difftest for CpuCore {
     }
 
     fn set_mem(&mut self, paddr: u64, data: u64, len: usize) {
-        let _ret = self.mmu.bus.write(paddr, data, len);
+        let _ret = self.mmu.bus.lock().unwrap().write(paddr, data, len);
     }
 
     fn get_mem(&mut self, paddr: u64, len: usize) -> u64 {
-        self.mmu.bus.read(paddr, len).map_or(0, |x| x)
+        self.mmu
+            .bus
+            .lock()
+            .unwrap()
+            .read(paddr, len)
+            .map_or(0, |x| x)
     }
 
     fn get_pc(&mut self) -> u64 {
@@ -401,25 +464,40 @@ impl Difftest for CpuCore {
     fn set_pc(&mut self, pc: u64) {
         self.npc = pc;
     }
-    fn raise_intr(&mut self, irq: u64) {
+    fn raise_intr(&mut self, _irq: u64) {
         todo!()
     }
 }
 
 #[cfg(test)]
 mod tests_cpu {
-    use std::{fs::read_dir, path::Path};
+    use std::{
+        fs::read_dir,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
 
     use log::warn;
 
-    use crate::{bus::DeviceType, device::device_dram::DeviceDram};
+    use crate::{
+        bus::{Bus, DeviceType},
+        cpu_core::{self, CpuCoreBuild},
+        device::device_dram::DeviceDram,
+    };
 
     use super::{CpuCore, CpuState};
 
     fn run_once(file_name: &str) {
         // let file_name =
         //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
-        let mut cpu = CpuCore::new(None);
+        let bus_u = Arc::new(Mutex::new(Bus::new()));
+        // let mut cpu = CpuCore::new(bus_u, None);
+        let mut cpu = CpuCoreBuild::new(bus_u)
+            .with_boot_pc(0x8000_0000)
+            .with_hart_id(0)
+            .with_smode(true)
+            .build();
+
         let mut dr = DeviceDram::new(128 * 1024 * 1024);
         dr.load_binary(file_name);
 
@@ -430,7 +508,10 @@ mod tests_cpu {
             name: "DRAM",
         };
 
-        cpu.mmu.bus.add_device(dram_u);
+        {
+            let mut bus_u = cpu.mmu.bus.lock().unwrap();
+            bus_u.add_device(dram_u);
+        }
 
         cpu.cpu_state = CpuState::Running;
 

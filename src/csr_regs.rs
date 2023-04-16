@@ -35,14 +35,13 @@ pub struct CsrRegs {
     pub satp: CsrShare<SatpIn>,
     pub mtval: CsrShare<u64>,
     pub stval: CsrShare<u64>,
-    // pub time: CsrShare<u64>,
     pub cycle: CsrShare<u64>,
     pub instret: CsrShare<u64>,
 }
 unsafe impl Send for CsrRegs {}
 
 impl CsrRegs {
-    pub fn new() -> Self {
+    pub fn new(hart_id: usize) -> Self {
         let misa_val = Misa::new()
             .with_i(true)
             .with_m(true)
@@ -70,10 +69,10 @@ impl CsrRegs {
 
         // read only
         let misa = misa_val;
-        let mhartid = ReadOnlyCSR(0);
-        let marchid = ReadOnlyCSR(0);
-        let mvendorid = ReadOnlyCSR(0);
-        let mimpid = ReadOnlyCSR(0);
+        let mhartid = ReadOnlyCSR(hart_id as u64);
+        let marchid = CommonCSR::new_noshare(0);
+        let mvendorid = CommonCSR::new_noshare(0);
+        let mimpid = CommonCSR::new_noshare(0);
         // important csrs
         let xstatus_share = Rc::new(Cell::new(mstatus_val));
         let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_mask.into());

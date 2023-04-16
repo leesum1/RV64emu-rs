@@ -1,4 +1,8 @@
-use std::{cell::Cell, rc::Rc};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{
     bus::Bus,
@@ -9,7 +13,7 @@ use crate::{
 };
 
 pub struct Mmu {
-    pub bus: Bus,
+    pub bus: Arc<Mutex<Bus>>,
     pub access_type: AccessType,
     mstatus: CsrShare<XstatusIn>,
     satp: CsrShare<SatpIn>,
@@ -26,14 +30,13 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(
+        bus: Arc<Mutex<Bus>>,
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: CsrShare<XstatusIn>,
         satp: CsrShare<SatpIn>,
     ) -> Self {
-
-        let bus_u = Bus::new();
         Mmu {
-            bus: bus_u,
+            bus,
             access_type: AccessType::Load(0),
             mstatus,
             satp,
@@ -79,7 +82,12 @@ impl Mmu {
         // warn!("va:{:?}", self.va);
         // assert_eq!(self.stap.ppn() * 4096, self.a);
         // todo! PMA or PMP check
-        let pte_data = self.bus.read(pte_addr, pte_size as usize).unwrap();
+        let pte_data = self
+            .bus
+            .lock()
+            .unwrap()
+            .read(pte_addr, pte_size as usize)
+            .unwrap();
         self.pte = Sv39PTE::from(pte_data);
         Ok(())
     }
@@ -282,6 +290,8 @@ impl Mmu {
             self.pa = Sv39Pa::from(addr);
             return self
                 .bus
+                .lock()
+                .unwrap()
                 .read(addr, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
@@ -292,6 +302,8 @@ impl Mmu {
         self.page_table_walk()?; // err return
                                  //read the data from the physical address
         self.bus
+            .lock()
+            .unwrap()
             .read(self.pa.into(), len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
@@ -305,6 +317,8 @@ impl Mmu {
         if self.no_mmu() {
             return self
                 .bus
+                .lock()
+                .unwrap()
                 .write(addr, data, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
@@ -312,6 +326,8 @@ impl Mmu {
         self.va = Sv39Va::from(addr);
         self.page_table_walk()?; // err return
         self.bus
+            .lock()
+            .unwrap()
             .write(self.pa.into(), data, len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
@@ -319,4 +335,6 @@ impl Mmu {
     pub fn update_access_type(&mut self, access_type: AccessType) {
         self.access_type = access_type;
     }
+
+
 }

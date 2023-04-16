@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use log::warn;
 
 use crate::{
@@ -5,7 +7,10 @@ use crate::{
         device_sifive_plic::{DevicePlic, SifvePlic},
         device_trait::{DeviceBase, DeviceEnume},
     },
-    inst::inst_base::{check_aligned, check_area},
+    inst::{
+        inst_base::{check_aligned, check_area},
+        inst_rv64a::LrScReservation,
+    },
     sifive_clint::{Clint, DeviceClint},
 };
 
@@ -22,7 +27,9 @@ pub struct Bus {
     pub clint: DeviceClint,
     pub plic: DevicePlic,
     pub devices: Vec<DeviceType>,
+    pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
 }
+
 unsafe impl Send for Bus {}
 
 impl Bus {
@@ -45,6 +52,7 @@ impl Bus {
             devices: vec![],
             clint,
             plic,
+            lr_sc_set: Arc::new(Mutex::new(LrScReservation::new())),
         }
     }
 

@@ -14,6 +14,7 @@ mod sv39;
 mod trace;
 mod traptype;
 
+use std::sync::Mutex;
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
@@ -49,8 +50,8 @@ use sdl2::{
 };
 
 use crate::{
-    bus::DeviceType,
-    cpu_core::{CpuCore, CpuState},
+    bus::{Bus, DeviceType},
+    cpu_core::{CpuCore, CpuCoreBuild, CpuState},
     device::{
         device_dram::DeviceDram,
         device_rtc::DeviceRTC,
@@ -92,9 +93,10 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
     #[allow(unused_variables)]
     let signal_term_trace = signal_term.clone();
+    #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
     let signal_term_uart = signal_term;
-
+    #[allow(unused_variables)]
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
 
     #[allow(unused_variables)]
@@ -104,14 +106,21 @@ fn main() {
     } else {
         None
     };
+    let bus_u = Arc::new(Mutex::new(Bus::new()));
 
-    let mut cpu = if cfg!(feature = "rv_debug_trace") {
-        warn!("Enabling debug tracing");
-        CpuCore::new(Some(trace_tx))
-    } else {
-        warn!("Disabling debug tracing");
-        CpuCore::new(None)
-    };
+    #[cfg(not(feature = "rv_debug_trace"))]
+    let mut cpu = CpuCoreBuild::new(bus_u.clone())
+        .with_boot_pc(0x8000_0000)
+        .with_hart_id(0)
+        .with_smode(true)
+        .build();
+    #[cfg(feature = "rv_debug_trace")]
+    let mut cpu = CpuCoreBuild::new(bus_u.clone())
+        .with_boot_pc(0x8000_0000)
+        .with_hart_id(0)
+        .with_trace(trace_tx)
+        .with_smode(true)
+        .build();
 
     // device dram len:0X08000000
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
@@ -120,7 +129,7 @@ fn main() {
 
     let device_name = mem.get_name();
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem.into(),
@@ -131,7 +140,7 @@ fn main() {
     let uart = DeviceUart::new();
     let device_name = uart.get_name();
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart.into(),
@@ -143,13 +152,14 @@ fn main() {
 
     let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
 
-    cpu.mmu
-        .bus
+    bus_u
+        .lock()
+        .unwrap()
         .plic
         .instance
         .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: SIFIVE_UART_BASE,
         len: 0x1000,
         instance: device_sifive_uart.into(),
@@ -160,7 +170,7 @@ fn main() {
     let rtc = DeviceRTC::new();
     let device_name = rtc.get_name();
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
         instance: rtc.into(),
@@ -171,7 +181,7 @@ fn main() {
     create_sdl2_devices(&mut cpu, signal_term_sdl_event);
 
     // show device address map
-    warn!("{0}", cpu.mmu.bus);
+    warn!("{0}", bus_u.lock().unwrap());
 
     // debug trace thread
     #[cfg(feature = "rv_debug_trace")]
@@ -235,6 +245,7 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
 }
 #[cfg(feature = "device_sdl2")]
 fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>) {
+    let bus_u = cpu.mmu.bus.clone();
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
@@ -261,7 +272,7 @@ fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>
     let vgactl = DeviceVGACTL::new(vgactl_msg.clone());
 
     let device_name = vgactl.get_name();
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
         instance: vgactl.into(),
@@ -271,7 +282,7 @@ fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>
     // device vga
     let vga = DeviceVGA::new(canvas, vgactl_msg);
     let device_name = vga.get_name();
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
         instance: vga.into(),
@@ -291,7 +302,7 @@ fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>
     let device_kb = DeviceKB::new(kb_am_rx, kb_sdl_rx);
     let device_name = device_kb.get_name();
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
         instance: device_kb.into(),
@@ -302,7 +313,7 @@ fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>
         ring_channel(NonZeroUsize::new(1).unwrap());
     let device_mouse = DeviceMouse::new(mouse_sdl_rx);
 
-    cpu.mmu.bus.add_device(DeviceType {
+    bus_u.lock().unwrap().add_device(DeviceType {
         start: MOUSE_ADDR,
         len: 16,
         instance: device_mouse.into(),
@@ -367,25 +378,35 @@ fn handle_sdl_event(
 
 #[cfg(test)]
 mod isa_test {
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
 
     use log::warn;
 
     use crate::{
-        bus::DeviceType,
-        cpu_core::{CpuCore, CpuState},
+        bus::{Bus, DeviceType},
+        cpu_core::{CpuCore, CpuCoreBuild, CpuState},
         device::device_dram::DeviceDram,
         device::device_trait::{DeviceBase, MEM_BASE},
     };
 
     fn start_test(img: &str) -> bool {
-        let mut cpu = CpuCore::new(None);
+        let bus_u = Arc::new(Mutex::new(Bus::new()));
+
+        let mut cpu = CpuCoreBuild::new(bus_u.clone())
+            .with_boot_pc(0x8000_0000)
+            .with_hart_id(0)
+            .with_smode(true)
+            .build();
 
         // device dram
         let mut mem = DeviceDram::new(128 * 1024 * 1024);
         mem.load_binary(img);
         let device_name = mem.get_name();
-        cpu.mmu.bus.add_device(DeviceType {
+        bus_u.lock().unwrap().add_device(DeviceType {
             start: MEM_BASE,
             len: mem.capacity as u64,
             instance: mem.into(),
@@ -459,11 +480,11 @@ mod isa_test {
         tests_ret
             .iter()
             .filter(|item| item.ret)
-            .for_each(|x| warn!("{:40}{}", x.name, x.ret));
+            .for_each(|x| println!("{:40}{}", x.name, x.ret));
         tests_ret
             .iter()
             .filter(|item| !item.ret)
-            .for_each(|x| warn!("{:40}{}", x.name, x.ret));
+            .for_each(|x| println!("{:40}{}", x.name, x.ret));
 
         // tests_ret.iter().for_each(|x| {
         //     assert!(x.ret);
