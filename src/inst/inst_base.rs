@@ -5,7 +5,6 @@ use std::{
 };
 
 use bitfield_struct::bitfield;
-use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
 
 use crate::{cpu_core::CpuCore, traptype::TrapType};
 
@@ -746,8 +745,6 @@ pub const CSR_MHPMCOUNTER29H: u16 = 0xb9d;
 pub const CSR_MHPMCOUNTER30H: u16 = 0xb9e;
 pub const CSR_MHPMCOUNTER31H: u16 = 0xb9f;
 
-
-
 // #[derive(Clone, Copy)]
 pub struct Instruction {
     pub mask: u32,
@@ -923,9 +920,7 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
     }
 }
 
-#[derive(
-    EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq, PartialOrd, Clone, Copy,
-)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum PrivilegeLevels {
     User = 0,
     Supervisor = 1,

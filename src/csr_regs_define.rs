@@ -213,7 +213,14 @@ impl XstatusIn {
         }
     }
     pub fn get_mpp_priv(&self) -> PrivilegeLevels {
-        PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
+        // PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
+        match self.mpp() {
+            0b00 => PrivilegeLevels::User,
+            0b01 => PrivilegeLevels::Supervisor,
+            // 0b10 => PrivilegeLevels::Hypervisor,
+            0b11 => PrivilegeLevels::Machine,
+            _ => panic!("invalid mpp value"),
+        }
     }
 }
 
@@ -247,78 +254,6 @@ impl Csr for Xstatus {
     }
 }
 
-#[bitfield(u64)]
-pub struct Mstatus {
-    _wpri0: bool,
-    pub sie: bool,
-    _wpri1: bool,
-    pub mie: bool,
-    _wpri2: bool,
-    pub spie: bool,
-    pub ube: bool,
-    pub mpie: bool,
-    pub spp: bool,
-    #[bits(2)]
-    pub vs: u8,
-    #[bits(2)]
-    pub mpp: u8,
-    #[bits(2)]
-    pub fs: u8,
-    #[bits(2)]
-    pub xs: u8,
-    pub mprv: bool,
-    pub sum: bool,
-    pub mxr: bool,
-    pub tvm: bool,
-    pub tw: bool,
-    pub tsr: bool,
-    #[bits(9)]
-    _wpri3: u16,
-    #[bits(2)]
-    pub uxl: u8,
-    #[bits(2)]
-    pub sxl: u8,
-    pub sbe: bool,
-    pub mbe: bool,
-    #[bits(25)]
-    _wpri4: u32,
-    pub sd: bool,
-}
-
-impl Csr for Mstatus {
-    fn write(&mut self, data: u64) {
-        self.0 = data
-    }
-    fn read_raw(&self) -> u64 {
-        self.0
-    }
-}
-
-impl Mstatus {
-    // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise
-    // 0: user mode 1: s mode
-    pub fn get_spp_priv(&self) -> PrivilegeLevels {
-        match self.spp() {
-            true => PrivilegeLevels::Supervisor,
-            false => PrivilegeLevels::User,
-        }
-    }
-    pub fn get_mpp_priv(&self) -> PrivilegeLevels {
-        PrivilegeLevels::from_repr(self.mpp().into()).unwrap()
-    }
-    // todo! not sure
-    fn update_sd(&mut self) {
-        // self.set_sd(self.mie() && self.mie());
-    }
-
-    fn get_write_mask() -> u64 {
-        0x88C0_0000_0000_0000
-    }
-
-    fn get_read_mask() -> u64 {
-        0x88C0_0000_0000_0000
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TvecMode {

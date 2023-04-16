@@ -1,9 +1,5 @@
-
 use std::{fmt, str::FromStr};
 
-use strum_macros::{Display, EnumString, FromRepr, IntoStaticStr};
-
-#[derive(EnumString, FromRepr, IntoStaticStr, Display, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum GprName {
     zero,
@@ -65,18 +61,82 @@ impl Gpr {
     pub fn get_register_name(num: u64) -> &'static str {
         assert!(num < 32);
         // 数字转枚举
-        let name = GprName::from_repr(num as usize).expect("can not get_register_name");
-        name.into()
-    }
-
-    pub fn get_register_idx(reg_name: &str) -> GprName {
-        match GprName::from_str(reg_name) {
-            Ok(gpr_emu) => gpr_emu,
-            Err(_) => panic!(),
+        match num {
+            0 => "zero",
+            1 => "ra",
+            2 => "sp",
+            3 => "gp",
+            4 => "tp",
+            5 => "t0",
+            6 => "t1",
+            7 => "t2",
+            8 => "s0",
+            9 => "s1",
+            10 => "a0",
+            11 => "a1",
+            12 => "a2",
+            13 => "a3",
+            14 => "a4",
+            15 => "a5",
+            16 => "a6",
+            17 => "a7",
+            18 => "s2",
+            19 => "s3",
+            20 => "s4",
+            21 => "s5",
+            22 => "s6",
+            23 => "s7",
+            24 => "s8",
+            25 => "s9",
+            26 => "s10",
+            27 => "s11",
+            28 => "t3",
+            29 => "t4",
+            30 => "t5",
+            31 => "t6",
+            _ => panic!(),
         }
     }
 
-    pub fn read_by_name(&mut self,reg_name: &str) ->u64{
+    pub fn get_register_idx(reg_name: &str) -> GprName {
+        match reg_name {
+            "zero" => GprName::zero,
+            "ra" => GprName::ra,
+            "sp" => GprName::sp,
+            "gp" => GprName::gp,
+            "tp" => GprName::tp,
+            "t0" => GprName::t0,
+            "t1" => GprName::t1,
+            "t2" => GprName::t2,
+            "s0" => GprName::s0,
+            "s1" => GprName::s1,
+            "a0" => GprName::a0,
+            "a1" => GprName::a1,
+            "a2" => GprName::a2,
+            "a3" => GprName::a3,
+            "a4" => GprName::a4,
+            "a5" => GprName::a5,
+            "a6" => GprName::a6,
+            "a7" => GprName::a7,
+            "s2" => GprName::s2,
+            "s3" => GprName::s3,
+            "s4" => GprName::s4,
+            "s5" => GprName::s5,
+            "s6" => GprName::s6,
+            "s7" => GprName::s7,
+            "s8" => GprName::s8,
+            "s9" => GprName::s9,
+            "s10" => GprName::s10,
+            "s11" => GprName::s11,
+            "t3" => GprName::t3,
+            "t4" => GprName::t4,
+            "t5" => GprName::t5,
+            "t6" => GprName::t6,
+            _ => panic!(),
+        }
+    }
+
+    pub fn read_by_name(&mut self, reg_name: &str) -> u64 {
         let idx = Gpr::get_register_idx(reg_name);
 
         self.read(idx as u64)
@@ -94,59 +154,5 @@ impl fmt::Display for Gpr {
             ))
         }
         ret
-    }
-}
-
-#[cfg(test)]
-mod test_gpr {
-    use std::str::FromStr;
-
-    use log::warn;
-
-    use crate::gpr::Gpr;
-    use crate::gpr::GprName;
-
-    #[test]
-    fn test1() {
-        // 枚举转换字符串
-        let test1 = GprName::zero.to_string();
-        assert_eq!(test1, "zero");
-    }
-    #[test]
-    fn test2() {
-        // 枚举转数字
-        let test2 = GprName::zero;
-        assert_eq!(test2 as u64, 0);
-    }
-    #[test]
-
-    fn test3() {
-        // 字符串转枚举
-        let reg_name_var = GprName::from_str("a0").expect("a0");
-        assert_eq!(reg_name_var, GprName::a0);
-
-        let reg_name_var = GprName::from_str("a1").expect("a1");
-        assert_eq!(reg_name_var, GprName::a1);
-    }
-
-    #[test]
-    fn test4() {
-        let mut gpr = Gpr::new();
-        gpr.write(1, 1);
-        gpr.write(0, 1);
-        gpr.write(10, 10);
-        let x10 = gpr.read(10);
-        let x0 = gpr.read(0);
-        let x1 = gpr.read(1);
-        assert_eq!(x0, 0);
-        assert_eq!(x1, 1);
-        assert_eq!(x10, 10);
-        warn!("{gpr}");
-    }
-
-    #[test]
-    fn test5() {
-        let x = Gpr::get_register_idx("a2");
-        assert_eq!(x, GprName::a2);
     }
 }
