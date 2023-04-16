@@ -93,19 +93,31 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
     #[allow(unused_variables)]
     let signal_term_trace = signal_term.clone();
+    let signal_term_trace1 = signal_term.clone();
+
     #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
     let signal_term_uart = signal_term;
     #[allow(unused_variables)]
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
+    let (trace_tx1, trace_rx1) = crossbeam_channel::bounded(8096);
 
     #[allow(unused_variables)]
     let trace_log = if cfg!(feature = "rv_debug_trace") {
-        let trace_log = Traces::new(trace_rx);
+        let trace_log = Traces::new(0, trace_rx);
         Some(trace_log)
     } else {
         None
     };
+
+    #[allow(unused_variables)]
+    let trace_log1 = if cfg!(feature = "rv_debug_trace") {
+        let trace_log1 = Traces::new(1, trace_rx1);
+        Some(trace_log1)
+    } else {
+        None
+    };
+
     let bus_u = Arc::new(Mutex::new(Bus::new()));
 
     #[cfg(not(feature = "rv_debug_trace"))]
@@ -119,6 +131,20 @@ fn main() {
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_trace(trace_tx)
+        .with_smode(true)
+        .build();
+
+    #[cfg(not(feature = "rv_debug_trace"))]
+    let mut cpu1 = CpuCoreBuild::new(bus_u.clone())
+        .with_boot_pc(0x8000_0000)
+        .with_hart_id(1)
+        .with_smode(true)
+        .build();
+    #[cfg(feature = "rv_debug_trace")]
+    let mut cpu1 = CpuCoreBuild::new(bus_u.clone())
+        .with_boot_pc(0x8000_0000)
+        .with_hart_id(1)
+        .with_trace(trace_tx1)
         .with_smode(true)
         .build();
 
@@ -194,6 +220,19 @@ fn main() {
             }
         }
     });
+
+    // debug trace thread
+    #[cfg(feature = "rv_debug_trace")]
+    let trace_thread1 = thread::spawn(move || {
+        let mut trace1 = trace_log1;
+
+        while !signal_term_trace1.load(Ordering::Relaxed) {
+            if let Some(r_log) = &mut trace1 {
+                r_log.run();
+            }
+        }
+    });
+
     // uart thread to get terminal input
     let _sifive_uart_thread = thread::spawn(move || {
         let stdin = io::stdin();
@@ -210,29 +249,54 @@ fn main() {
     // create another thread to simmulate the cpu_core
     // while the main thread is used to handle sdl events
     // which will be send to coresponding devices through ring_channel
-    // let cpu_main = thread::spawn(move || {
-    // start sim
-    cpu.cpu_state = CpuState::Running;
-    let mut cycle: u128 = 0;
-    while cpu.cpu_state == CpuState::Running {
-        cpu.execute(1);
-        cycle += 1;
-    }
-    warn!("total:{cycle}");
+    let cpu_main = thread::spawn(move || {
+        // start sim
+        cpu.cpu_state = CpuState::Running;
+        let mut cycle: u128 = 0;
+        while cpu.cpu_state == CpuState::Running {
+            cpu.execute(1);
+            cycle += 1;
+        }
+        warn!("total:{cycle}");
 
-    // dump signature for riscof
-    args.signature
-        .map(|x| cpu.dump_signature(&x))
-        .unwrap_or_else(|| warn!("no signature"));
+        // dump signature for riscof
+        args.signature
+            .map(|x| cpu.dump_signature(&x))
+            .unwrap_or_else(|| warn!("no signature"));
 
-    // send signal to stop the trace thread
-    signal_term_cpucore.store(true, Ordering::Relaxed);
+        // send signal to stop the trace thread
+        signal_term_cpucore.store(true, Ordering::Relaxed);
+    });
+
+    let cpu_main1 = thread::spawn(move || {
+        // start sim
+        cpu1.cpu_state = CpuState::Running;
+        let mut cycle: u128 = 0;
+        while cpu1.cpu_state == CpuState::Running {
+            cpu1.execute(1);
+            cycle += 1;
+
+            // bus_u.lock().unwrap().update();
+            if cycle % 128 == 0 {
+                bus_u.lock().unwrap().update();
+                bus_u.lock().unwrap().clint.instance.tick();
+                bus_u.lock().unwrap().plic.instance.tick();
+            }
+        }
+        warn!("total:{cycle}");
+    });
+
+    // let bus_thread = thread::spawn(move || loop {
+    //     bus_u.lock().unwrap().update();
+    //     bus_u.lock().unwrap().clint.instance.tick();
+    //     bus_u.lock().unwrap().plic.instance.tick();
+    //     std::thread::sleep(Duration::from_millis(20));
     // });
 
     #[cfg(feature = "rv_debug_trace")]
     trace_thread.join().unwrap();
     // sifive_uart_thread.join().unwrap();
-    // cpu_main.join().unwrap();
+    cpu_main.join().unwrap();
 }
 
 #[cfg(feature = "device_sdl2")]

@@ -110,7 +110,7 @@ impl Clint {
 
     fn mtime_inc(&mut self) {
         let mut mitme = self.mitme.get();
-        mitme += 1;
+        mitme += 128;
         self.mitme.set(mitme);
     }
 

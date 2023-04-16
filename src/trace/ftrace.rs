@@ -6,8 +6,9 @@ pub struct Ftrace {
 }
 
 impl Ftrace {
-    pub fn new() -> Self {
-        let fd = File::create("/tmp/rv64emu_ftrace_logs").unwrap();
+    pub fn new(hart_id:usize) -> Self {
+        let path = format!("/tmp/rv64emu_ftrace_logs_{}",hart_id);
+        let fd = File::create(path).unwrap();
         Ftrace {
             log_file: fd,
             cur_deepth: 0,

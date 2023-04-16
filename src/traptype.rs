@@ -1,8 +1,9 @@
+use core::fmt;
 
 const INTERRUPT_BIT: u64 = 0x8000000000000000_u64;
 
 #[repr(u64)]
-#[derive( Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TrapType {
     InstructionAddressMisaligned(u64),
     InstructionAccessFault(u64),
@@ -27,6 +28,36 @@ pub enum TrapType {
     UserExternalInterrupt,
     SupervisorExternalInterrupt,
     MachineExternalInterrupt,
+}
+
+impl fmt::Display for TrapType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrapType::InstructionAddressMisaligned(_) => write!(f, "InstructionAddressMisaligned"),
+            TrapType::InstructionAccessFault(_) => write!(f, "InstructionAccessFault"),
+            TrapType::IllegalInstruction(_) => write!(f, "IllegalInstruction"),
+            TrapType::Breakpoint(_) => write!(f, "Breakpoint"),
+            TrapType::LoadAddressMisaligned(_) => write!(f, "LoadAddressMisaligned"),
+            TrapType::LoadAccessFault(_) => write!(f, "LoadAccessFault"),
+            TrapType::StoreAddressMisaligned(_) => write!(f, "StoreAddressMisaligned"),
+            TrapType::StoreAccessFault(_) => write!(f, "StoreAccessFault"),
+            TrapType::EnvironmentCallFromUMode => write!(f, "EnvironmentCallFromUMode"),
+            TrapType::EnvironmentCallFromSMode => write!(f, "EnvironmentCallFromSMode"),
+            TrapType::EnvironmentCallFromMMode => write!(f, "EnvironmentCallFromMMode"),
+            TrapType::InstructionPageFault(_) => write!(f, "InstructionPageFault"),
+            TrapType::LoadPageFault(_) => write!(f, "LoadPageFault"),
+            TrapType::StorePageFault(_) => write!(f, "StorePageFault"),
+            TrapType::UserSoftwareInterrupt => write!(f, "UserSoftwareInterrupt"),
+            TrapType::SupervisorSoftwareInterrupt => write!(f, "SupervisorSoftwareInterrupt"),
+            TrapType::MachineSoftwareInterrupt => write!(f, "MachineSoftwareInterrupt"),
+            TrapType::UserTimerInterrupt => write!(f, "UserTimerInterrupt"),
+            TrapType::SupervisorTimerInterrupt => write!(f, "SupervisorTimerInterrupt"),
+            TrapType::MachineTimerInterrupt => write!(f, "MachineTimerInterrupt"),
+            TrapType::UserExternalInterrupt => write!(f, "UserExternalInterrupt"),
+            TrapType::SupervisorExternalInterrupt => write!(f, "SupervisorExternalInterrupt"),
+            TrapType::MachineExternalInterrupt => write!(f, "MachineExternalInterrupt"),
+        }
+    }
 }
 
 impl TrapType {

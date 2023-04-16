@@ -28,6 +28,7 @@ pub struct Bus {
     pub plic: DevicePlic,
     pub devices: Vec<DeviceType>,
     pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
+    pub amo_mutex: Arc<Mutex<()>>,             // for rv64a inst
 }
 
 unsafe impl Send for Bus {}
@@ -53,6 +54,7 @@ impl Bus {
             clint,
             plic,
             lr_sc_set: Arc::new(Mutex::new(LrScReservation::new())),
+            amo_mutex: Arc::new(Mutex::new(())),
         }
     }
 

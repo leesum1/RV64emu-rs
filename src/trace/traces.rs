@@ -19,12 +19,13 @@ pub struct Traces {
 }
 
 impl Traces {
-    pub fn new(receiver: crossbeam_channel::Receiver<TraceType>) -> Self {
+    pub fn new(hart_id:usize,receiver: crossbeam_channel::Receiver<TraceType>) -> Self {
+
         Traces {
             #[cfg(feature = "rv_debug_trace")]
-            itrace: Itrace::new(),
+            itrace: Itrace::new(hart_id),
             #[cfg(feature = "rv_debug_trace")]
-            ftrace: Ftrace::new(),
+            ftrace: Ftrace::new(hart_id),
             receiver,
         }
     }

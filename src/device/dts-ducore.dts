@@ -1,0 +1,114 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <0x2>;
+	#size-cells = <0x2>;
+	compatible = "riscv-virtio";
+	model = "riscv-virtio,qemu";
+
+	aliases {
+		serial0 = &uart0;
+	};
+	chosen {
+		bootargs = "console=hvc0 earlycon=sbi";
+		// bootargs = "console=ttyS0";
+		stdout-path = "serial0"; // chose a system console
+	};
+
+	my_clk: clock {
+    	#clock-cells = <0>;
+    	compatible = "fixed-clock";
+    	clock-frequency = <100000000>;
+	};
+
+	uart0: uart@c0000000 {
+		compatible = "sifive,fu540-c000-uart", "sifive,uart0";
+		reg = <0x0 0xc0000000 0x0 0x1000>;
+		interrupt-parent = <&PLIC>;
+		interrupts = <0xa>;
+		clocks = <&my_clk>;
+		status = "okay";
+	};
+	cpus {
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+		timebase-frequency = <10000000>;
+
+		CPU0:cpu@0 {
+			device_type = "cpu";
+			reg = <0x00>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64ima";
+			mmu-type = "riscv,sv39"; // sv39
+      		clock-frequency = <1000000000>;
+
+			// a hart is also an interrupt-controller
+			// some interrupt will directly connect to a hart
+			// such as soft irq and time irq and ext irq
+			//
+        	CPU0_INTC: interrupt-controller {                                                                    
+        		#address-cells = <2>;
+        		#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+            };
+
+		};
+		CPU1:cpu@1 {
+			device_type = "cpu";
+			reg = <0x00>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv64ima";
+			mmu-type = "riscv,sv39"; // sv39
+      		clock-frequency = <1000000000>;
+
+			// a hart is also an interrupt-controller
+			// some interrupt will directly connect to a hart
+			// such as soft irq and time irq and ext irq
+			//
+        	CPU1_INTC: interrupt-controller {                                                                    
+        		#address-cells = <2>;
+        		#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+            };
+
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x8000000>;
+	};
+
+	soc {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		compatible = "simple-bus";
+		ranges;
+
+		PLIC:interrupt-controller@c000000 {
+			#interrupt-cells = <0x1>;
+			#address-cells = <0x0>;
+			reg = <0x0 0xc000000 0x0 0x4000000>;
+			interrupts-extended = <&CPU0_INTC 0xb &CPU0_INTC 0x9
+								   &CPU1_INTC 0xb &CPU1_INTC 0x9>;
+			interrupt-controller;
+			compatible = "riscv,plic0";
+			riscv,ndev = <0x35>;
+		};
+
+		clint@2000000 {
+			// connect to cpu0
+			// 0x3: soft irq
+			// 0x7: mtime irq
+			interrupts-extended = <&CPU0_INTC 0x3 &CPU0_INTC 0x7
+								   &CPU1_INTC 0x3 &CPU1_INTC 0x7
+								   >;
+			reg = <0x0 0x2000000 0x0 0x10000>;
+			compatible = "riscv,clint0";
+		};
+	};
+};

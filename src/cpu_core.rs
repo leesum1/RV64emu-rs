@@ -88,7 +88,7 @@ impl CpuCoreBuild {
         }
 
         let share_lr_sc_set = mmu_u.bus.lock().unwrap().lr_sc_set.clone();
-
+        let share_amp = mmu_u.bus.lock().unwrap().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
@@ -100,6 +100,8 @@ impl CpuCoreBuild {
             lr_sc_set: share_lr_sc_set,
             cpu_state: CpuState::Stop,
             cpu_icache: CpuIcache::new(),
+            trace_sender: self.trace_sender.clone(),
+            amo_mutex: share_amp,
         }
     }
 }
@@ -114,9 +116,10 @@ pub struct CpuCore {
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
     // todo! move to bus
     pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
+    pub amo_mutex: Arc<Mutex<()>>,
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
-    #[cfg(feature = "rv_debug_trace")]
+
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 unsafe impl Send for CpuCore {}
@@ -188,7 +191,7 @@ impl CpuCore {
 
                     self.check_pending_int();
                     self.handle_interrupt();
-                    self.mmu.bus.lock().unwrap().update();
+                    // self.mmu.bus.lock().unwrap().update();
 
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
@@ -200,9 +203,9 @@ impl CpuCore {
     }
     fn check_pending_int(&mut self) {
         // todo! improve me
-        let mut bus_u = self.mmu.bus.lock().unwrap();
-        bus_u.clint.instance.tick();
-        bus_u.plic.instance.tick();
+        // let mut bus_u = self.mmu.bus.lock().unwrap();
+        // bus_u.clint.instance.tick();
+        // bus_u.plic.instance.tick();
     }
 
     pub fn halt(&mut self) -> usize {
@@ -481,11 +484,11 @@ mod tests_cpu {
 
     use crate::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild},
+        cpu_core::CpuCoreBuild,
         device::device_dram::DeviceDram,
     };
 
-    use super::{CpuState};
+    use super::CpuState;
 
     fn run_once(file_name: &str) {
         // let file_name =

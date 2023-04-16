@@ -21,7 +21,7 @@ pub struct Itrace {
 unsafe impl Send for Itrace {}
 
 impl Itrace {
-    pub fn new() -> Self {
+    pub fn new(hart_id:usize) -> Self {
         let disasm: *mut LLVMOpaqueDisasmContext = unsafe {
             LLVMInitializeRISCVTargetInfo();
             LLVMInitializeRISCVTarget();
@@ -45,7 +45,8 @@ impl Itrace {
             panic!("Itrace init fail");
         };
 
-        let fd = File::create("/tmp/rv64emu_itrace_logs").unwrap();
+        let path = format!("/tmp/rv64emu_itrace_logs_{}",hart_id);
+        let fd = File::create(path).unwrap();
 
         Itrace {
             disasm,
