@@ -1,7 +1,7 @@
 use std::{
     cell::Cell,
     rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use crate::{

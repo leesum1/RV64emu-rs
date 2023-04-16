@@ -24,6 +24,8 @@ log = "0.4.17"
 [features]
 # default = ["rv_debug_trace"]
 # default = ["support_am"]
+# default = ["device_sdl2"]
+
 device_sdl2 = []
 rv_debug_trace = []
 support_am = []

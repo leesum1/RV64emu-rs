@@ -1,4 +1,4 @@
-use crate::{inst::inst_base::*, trace::traces::TraceType, traptype::TrapType};
+use crate::{inst::inst_base::*, traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [

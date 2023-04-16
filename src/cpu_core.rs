@@ -481,11 +481,11 @@ mod tests_cpu {
 
     use crate::{
         bus::{Bus, DeviceType},
-        cpu_core::{self, CpuCoreBuild},
+        cpu_core::{CpuCoreBuild},
         device::device_dram::DeviceDram,
     };
 
-    use super::{CpuCore, CpuState};
+    use super::{CpuState};
 
     fn run_once(file_name: &str) {
         // let file_name =

@@ -4,7 +4,7 @@ use hashbrown::HashMap;
 
 use crate::{
     csr_regs_define::{
-        CommonCSR, Counter, Csr, CsrAddr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg,
+        CommonCSR, Counter, Csr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg,
         MidelegIn, Misa, ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn,
         Xstatus, XstatusIn, Xtvec, XtvecIn,
     },

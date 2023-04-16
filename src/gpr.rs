@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{fmt};
 
 #[allow(non_camel_case_types)]
 pub enum GprName {

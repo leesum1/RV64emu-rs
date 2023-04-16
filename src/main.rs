@@ -388,7 +388,7 @@ mod isa_test {
 
     use crate::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCore, CpuCoreBuild, CpuState},
+        cpu_core::{CpuCoreBuild, CpuState},
         device::device_dram::DeviceDram,
         device::device_trait::{DeviceBase, MEM_BASE},
     };
