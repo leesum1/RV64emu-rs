@@ -1,4 +1,4 @@
-use crate::{inst::inst_base::*, traptype::TrapType};
+use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_Z: [Instruction; 14] = [

@@ -1,4 +1,4 @@
-use crate::traptype::TrapType;
+use crate::rv64core::traptype::TrapType;
 
 #[cfg(feature = "rv_debug_trace")]
 use super::{ftrace::Ftrace, itrace::Itrace};
@@ -20,7 +20,6 @@ pub struct Traces {
 
 impl Traces {
     pub fn new(hart_id:usize,receiver: crossbeam_channel::Receiver<TraceType>) -> Self {
-
         Traces {
             #[cfg(feature = "rv_debug_trace")]
             itrace: Itrace::new(hart_id),
@@ -29,9 +28,8 @@ impl Traces {
             receiver,
         }
     }
-
+    #[cfg(feature = "rv_debug_trace")]
     pub fn run(&mut self) {
-        #[cfg(feature = "rv_debug_trace")]
         while !self.receiver.is_empty() {
             match self.receiver.recv() {
                 Ok(TraceType::Itrace(pc, inst)) => {

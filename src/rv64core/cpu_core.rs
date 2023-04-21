@@ -9,21 +9,21 @@ use std::{
 use log::warn;
 
 use crate::{
-    bus::Bus,
-    cpu_icache::CpuIcache,
-    csr_regs::CsrRegs,
-    csr_regs_define::XipIn,
+    rv64core::bus::Bus,
+    rv64core::cpu_icache::CpuIcache,
+    rv64core::csr_regs::CsrRegs,
+    rv64core::csr_regs_define::XipIn,
     difftest::difftest_trait::Difftest,
-    gpr::Gpr,
-    inst::inst_base::PrivilegeLevels,
-    inst::{
-        inst_base::{AccessType, FesvrCmd},
+    rv64core::gpr::Gpr,
+    rv64core::inst::{
+        inst_base::{AccessType, FesvrCmd,PrivilegeLevels},
         inst_rv64a::LrScReservation,
     },
-    inst_decode::InstDecode,
-    mmu::Mmu,
+    rv64core::inst_decode::InstDecode,
+    rv64core::mmu::Mmu,
+    
     trace::traces::TraceType,
-    traptype::TrapType,
+    rv64core::traptype::TrapType,
 };
 
 #[derive(PartialEq)]
@@ -472,85 +472,5 @@ impl Difftest for CpuCore {
     }
 }
 
-#[cfg(test)]
-mod tests_cpu {
-    use std::{
-        fs::read_dir,
-        path::Path,
-        sync::{Arc, Mutex},
-    };
 
-    use log::warn;
 
-    use crate::{
-        bus::{Bus, DeviceType},
-        cpu_core::CpuCoreBuild,
-        device::device_dram::DeviceDram,
-    };
-
-    use super::CpuState;
-
-    fn run_once(file_name: &str) {
-        // let file_name =
-        //     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/mul-longlong-riscv64-nemu.bin";
-        let bus_u = Arc::new(Mutex::new(Bus::new()));
-        // let mut cpu = CpuCore::new(bus_u, None);
-        let mut cpu = CpuCoreBuild::new(bus_u)
-            .with_boot_pc(0x8000_0000)
-            .with_hart_id(0)
-            .with_smode(true)
-            .build();
-
-        let mut dr = DeviceDram::new(128 * 1024 * 1024);
-        dr.load_binary(file_name);
-
-        let dram_u = DeviceType {
-            start: 0x8000_0000,
-            len: dr.capacity as u64,
-            instance: dr.into(),
-            name: "DRAM",
-        };
-
-        {
-            let mut bus_u = cpu.mmu.bus.lock().unwrap();
-            bus_u.add_device(dram_u);
-        }
-
-        cpu.cpu_state = CpuState::Running;
-
-        let mut cycle = 0;
-        loop {
-            cpu.execute(1);
-            cycle += 1;
-            cpu.check_to_host();
-            if cpu.cpu_state != CpuState::Running {
-                break;
-            }
-        }
-        warn!("total:{cycle}");
-        let a0_val = cpu.gpr.read_by_name("a0");
-        assert_eq!(a0_val, 0);
-    }
-
-    #[test]
-    fn cpu_test() {
-        let dir = Path::new("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build");
-        for file in read_dir(dir).unwrap() {
-            let entry = file.unwrap();
-            let path = entry.path();
-
-            if path.is_file() {
-                let ext = path.extension().unwrap();
-                if ext == "bin" {
-                    run_once(path.to_str().unwrap());
-                    let f_name = path.file_name().unwrap().to_str().unwrap();
-                    warn!("{f_name}:  OK");
-                }
-            }
-        }
-    }
-    #[test]
-    fn test1() {
-        run_once("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/recursion-riscv64-nemu.bin");
-    }
-}

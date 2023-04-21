@@ -3,19 +3,19 @@ use std::{cell::Cell, rc::Rc};
 use hashbrown::HashMap;
 
 use crate::{
-    csr_regs_define::{
+    rv64core::csr_regs_define::{
         CommonCSR, Counter, Csr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg,
         MidelegIn, Misa, ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn,
         Xstatus, XstatusIn, Xtvec, XtvecIn,
     },
-    inst::inst_base::{
+    rv64core::inst::inst_base::{
         AccessType, PrivilegeLevels, CSR_CYCLE, CSR_INSTRET, CSR_MARCHID, CSR_MCAUSE,
         CSR_MCOUNTEREN, CSR_MCYCLE, CSR_MEDELEG, CSR_MEPC, CSR_MHARTID, CSR_MIDELEG, CSR_MIE,
         CSR_MIMPID, CSR_MINSTRET, CSR_MIP, CSR_MISA, CSR_MSCRATCH, CSR_MSTATUS, CSR_MTVAL,
         CSR_MTVEC, CSR_MVENDORID, CSR_SATP, CSR_SCAUSE, CSR_SCOUNTEREN, CSR_SEPC, CSR_SIE, CSR_SIP,
         CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, CSR_TSELECT, MASK_ALL,
     },
-    traptype::TrapType,
+    rv64core::traptype::TrapType,
 };
 
 pub struct CsrRegs {

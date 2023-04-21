@@ -5,11 +5,11 @@ use std::{
 };
 
 use crate::{
-    bus::Bus,
-    csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
-    inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
-    sv39::{Sv39PTE, Sv39Pa, Sv39Va},
-    traptype::TrapType,
+    rv64core::bus::Bus,
+    rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
+    rv64core::inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
+    rv64core::sv39::{Sv39PTE, Sv39Pa, Sv39Va},
+    rv64core::traptype::TrapType,
 };
 
 pub struct Mmu {
@@ -335,6 +335,4 @@ impl Mmu {
     pub fn update_access_type(&mut self, access_type: AccessType) {
         self.access_type = access_type;
     }
-
-
 }

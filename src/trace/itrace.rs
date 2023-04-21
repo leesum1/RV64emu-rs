@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::Write;
 use std::ptr;
 
-use crate::traptype::TrapType;
+use crate::rv64core::traptype::TrapType;
 
 pub struct Itrace {
     disasm: *mut LLVMOpaqueDisasmContext,

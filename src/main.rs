@@ -1,18 +1,8 @@
-mod bus;
-mod cpu_core;
-mod cpu_icache;
-mod csr_regs;
-mod csr_regs_define;
 mod device;
 mod difftest;
-mod gpr;
-mod inst;
-mod inst_decode;
-mod mmu;
-mod sifive_clint;
-mod sv39;
+
+mod rv64core;
 mod trace;
-mod traptype;
 
 use std::sync::Mutex;
 #[allow(unused_imports)]
@@ -50,8 +40,6 @@ use sdl2::{
 };
 
 use crate::{
-    bus::{Bus, DeviceType},
-    cpu_core::{CpuCore, CpuCoreBuild, CpuState},
     device::{
         device_dram::DeviceDram,
         device_rtc::DeviceRTC,
@@ -61,6 +49,8 @@ use crate::{
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE},
         device_uart::DeviceUart,
     },
+    rv64core::bus::{Bus, DeviceType},
+    rv64core::cpu_core::{CpuCoreBuild, CpuState},
     trace::traces::Traces,
 };
 // /* 各个设备地址 */
@@ -93,13 +83,16 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
     #[allow(unused_variables)]
     let signal_term_trace = signal_term.clone();
+    #[allow(unused_variables)]
     let signal_term_trace1 = signal_term.clone();
 
     #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
+    #[allow(unused_variables)]
     let signal_term_uart = signal_term;
     #[allow(unused_variables)]
     let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
+    #[allow(unused_variables)]
     let (trace_tx1, trace_rx1) = crossbeam_channel::bounded(8096);
 
     #[allow(unused_variables)]
@@ -252,9 +245,18 @@ fn main() {
     let cpu_main = thread::spawn(move || {
         // start sim
         cpu.cpu_state = CpuState::Running;
+        cpu1.cpu_state = CpuState::Running;
+
         let mut cycle: u128 = 0;
         while cpu.cpu_state == CpuState::Running {
             cpu.execute(1);
+            cpu1.execute(1);
+
+            if cycle % 128 == 0 {
+                bus_u.lock().unwrap().update();
+                bus_u.lock().unwrap().clint.instance.tick();
+                bus_u.lock().unwrap().plic.instance.tick();
+            }
             cycle += 1;
         }
         warn!("total:{cycle}");
@@ -268,23 +270,23 @@ fn main() {
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
 
-    let cpu_main1 = thread::spawn(move || {
-        // start sim
-        cpu1.cpu_state = CpuState::Running;
-        let mut cycle: u128 = 0;
-        while cpu1.cpu_state == CpuState::Running {
-            cpu1.execute(1);
-            cycle += 1;
+    // let cpu_main1 = thread::spawn(move || {
+    //     // start sim
+    //     cpu1.cpu_state = CpuState::Running;
+    //     let mut cycle: u128 = 0;
+    //     while cpu1.cpu_state == CpuState::Running {
+    //         cpu1.execute(1);
+    //         cycle += 1;
 
-            // bus_u.lock().unwrap().update();
-            if cycle % 128 == 0 {
-                bus_u.lock().unwrap().update();
-                bus_u.lock().unwrap().clint.instance.tick();
-                bus_u.lock().unwrap().plic.instance.tick();
-            }
-        }
-        warn!("total:{cycle}");
-    });
+    //         // bus_u.lock().unwrap().update();
+    //         if cycle % 128 == 0 {
+    //             bus_u.lock().unwrap().update();
+    //             bus_u.lock().unwrap().clint.instance.tick();
+    //             bus_u.lock().unwrap().plic.instance.tick();
+    //         }
+    //     }
+    //     warn!("total:{cycle}");
+    // });
 
     // let bus_thread = thread::spawn(move || loop {
     //     bus_u.lock().unwrap().update();
@@ -451,10 +453,10 @@ mod isa_test {
     use log::warn;
 
     use crate::{
-        bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild, CpuState},
         device::device_dram::DeviceDram,
         device::device_trait::{DeviceBase, MEM_BASE},
+        rv64core::bus::{Bus, DeviceType},
+        rv64core::cpu_core::{CpuCoreBuild, CpuState},
     };
 
     fn start_test(img: &str) -> bool {

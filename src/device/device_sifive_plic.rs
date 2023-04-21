@@ -3,7 +3,7 @@ use std::{cell::Cell, cmp::Ordering, rc::Rc};
 use bitfield_struct::bitfield;
 use log::warn;
 
-use crate::csr_regs_define::XipIn;
+use crate::rv64core::csr_regs_define::XipIn;
 
 use super::device_trait::DeviceBase;
 

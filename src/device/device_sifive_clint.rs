@@ -1,4 +1,5 @@
-use crate::csr_regs_define::{CsrShare, XipIn};
+use crate::rv64core::csr_regs_define::{CsrShare, XipIn};
+
 
 const MSIP_BASE: u64 = 0x0;
 const MSIP_PER_HART: u64 = 0x4;
@@ -46,7 +47,7 @@ impl ClintHart {
 
     pub fn mtimecmp_write(&mut self, data: u64) {
         self.mtimecmp = data;
-    }
+    } 
 }
 
 pub struct Clint {

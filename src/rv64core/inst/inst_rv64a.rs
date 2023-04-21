@@ -1,4 +1,4 @@
-use crate::inst::inst_base::*;
+use crate::rv64core::inst::inst_base::*;
 
 pub struct LrScReservation {
     pub val: u64,

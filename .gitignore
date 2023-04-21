@@ -3,4 +3,3 @@
 lcov.info
 *.svg
 perf.data*
-src/device/devicetree.dtb

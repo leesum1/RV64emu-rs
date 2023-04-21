@@ -5,13 +5,12 @@ use log::warn;
 use crate::{
     device::{
         device_sifive_plic::{DevicePlic, SifvePlic},
-        device_trait::{DeviceBase, DeviceEnume},
+        device_trait::{DeviceBase, DeviceEnume}, device_sifive_clint::{DeviceClint, Clint},
     },
-    inst::{
+    rv64core::inst::{
         inst_base::{check_aligned, check_area},
         inst_rv64a::LrScReservation,
     },
-    sifive_clint::{Clint, DeviceClint},
 };
 
 pub struct DeviceType {

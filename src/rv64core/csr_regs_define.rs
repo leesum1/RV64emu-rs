@@ -4,8 +4,8 @@ use bitfield_struct::bitfield;
 use enum_dispatch::enum_dispatch;
 
 use crate::{
-    inst::inst_base::{AccessType, PrivilegeLevels},
-    traptype::TrapType,
+    rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
+    rv64core::traptype::TrapType,
 };
 
 pub type CsrShare<T> = Rc<Cell<T>>;

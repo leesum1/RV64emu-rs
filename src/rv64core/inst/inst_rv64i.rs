@@ -1,4 +1,4 @@
-use crate::{inst::inst_base::*, traptype::TrapType, trace::traces::TraceType};
+use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType, trace::traces::TraceType};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [
@@ -64,7 +64,7 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
                 // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
-            
+
             #[cfg(feature = "rv_debug_trace")]
             if let Some(val) = f.get_jalr_type() {
                 if let Some(sender) = &cpu.trace_sender {
@@ -868,7 +868,6 @@ pub const INSTRUCTIONS_I: [Instruction; 49] = [
 #[cfg(test)]
 mod test_rv64i {
     use log::warn;
-
 
     #[test]
     fn tset1() {

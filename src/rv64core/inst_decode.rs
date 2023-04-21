@@ -1,6 +1,6 @@
 use hashbrown::HashMap;
 
-use crate::{
+use crate::rv64core::{
     inst::inst_base::Instruction, inst::inst_rv64a::INSTRUCTIONS_A,
     inst::inst_rv64i::INSTRUCTIONS_I, inst::inst_rv64m::INSTRUCTIONS_M,
     inst::inst_rv64z::INSTRUCTIONS_Z,
