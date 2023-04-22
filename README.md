@@ -45,7 +45,7 @@ cargo run --release --features=device_sdl2 -- --img ./ready_to_run/rtthread.bin
 ```
 run `Linux`
 ```bash
-cargo run release -- --img ./ready_to_run/linux.bin
+cargo run --release -- --img ./ready_to_run/linux.bin
 ```
 ## Test
 **test with `riscv-tests`**

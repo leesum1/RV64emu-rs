@@ -12,7 +12,7 @@ impl DeviceUart {
 
 impl DeviceBase for DeviceUart {
     fn do_read(&mut self, _addr: u64, _len: usize) -> u64 {
-        panic!();
+        panic!("This uart is write only");
     }
 
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
@@ -26,7 +26,7 @@ impl DeviceBase for DeviceUart {
         c as u64
     }
 
-    fn get_name(& self) -> &'static str {
+    fn get_name(&self) -> &'static str {
         "UART"
     }
 }

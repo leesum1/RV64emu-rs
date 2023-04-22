@@ -962,8 +962,9 @@ impl AccessType {
         }
     }
 }
-unsafe impl Send for PrivilegeLevels {}
+
 impl PrivilegeLevels {
+    // check if another_priv >= self
     pub fn check_priv(&self, another_priv: PrivilegeLevels) -> bool {
         (another_priv as u64) >= (*self as u64)
     }
@@ -971,18 +972,6 @@ impl PrivilegeLevels {
 
 pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;
 pub const MASK_NONE: u64 = !MASK_ALL;
-
-pub fn get_field(reg: u64, mask: u64) -> u64 {
-    (reg & mask) / (mask & !(mask << 1))
-    // let shift = mask.trailing_zeros();
-    // (reg & mask) >> shift
-}
-
-pub fn set_field(reg: u64, mask: u64, val: u64) -> u64 {
-    (reg & !mask) | ((val * (mask & !(mask << 1))) & mask)
-    // let shift = mask.trailing_zeros();
-    // (reg & !mask) | ((val << shift) & mask)
-}
 
 pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
     (addr >= start) && (addr < (start + len))

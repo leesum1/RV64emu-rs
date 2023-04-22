@@ -88,7 +88,7 @@ impl CpuCoreBuild {
         }
 
         let share_lr_sc_set = mmu_u.bus.lock().unwrap().lr_sc_set.clone();
-        let share_amp = mmu_u.bus.lock().unwrap().amo_mutex.clone();
+        let share_amo = mmu_u.bus.lock().unwrap().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
@@ -101,7 +101,7 @@ impl CpuCoreBuild {
             cpu_state: CpuState::Stop,
             cpu_icache: CpuIcache::new(),
             trace_sender: self.trace_sender.clone(),
-            amo_mutex: share_amp,
+            amo_mutex: share_amo,
         }
     }
 }
