@@ -47,3 +47,9 @@ impl InstDecode {
         self.hash_get(inst_i).copied()
     }
 }
+
+impl Default for InstDecode {
+    fn default() -> Self {
+        Self::new()
+    }
+}

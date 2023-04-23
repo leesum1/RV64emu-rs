@@ -58,7 +58,7 @@ impl DeviceBase for DeviceVGA {
         let data_bytes = data.to_le_bytes();
         self.pix_buf[(addr as usize)..(addr as usize + len)].copy_from_slice(&data_bytes[..(len)]);
 
-        data
+        data   
     }
 
     fn do_update(&mut self) {

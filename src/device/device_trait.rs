@@ -1,21 +1,15 @@
-// /* 各个设备地址 */
-// #define MEM_BASE 0x80000000
-// #define DEVICE_BASE 0xa0000000
-// #define MMIO_BASE 0xa0000000
-// #define SERIAL_PORT     (DEVICE_BASE + 0x00003f8)
-// #define KBD_ADDR        (DEVICE_BASE + 0x0000060)
-// #define RTC_ADDR        (DEVICE_BASE + 0x0000048)
-// #define VGACTL_ADDR     (DEVICE_BASE + 0x0000100)
-// #define AUDIO_ADDR      (DEVICE_BASE + 0x0000200)
-// #define DISK_ADDR       (DEVICE_BASE + 0x0000300)
-// #define FB_ADDR         (MMIO_BASE   + 0x1000000)
-// #define AUDIO_SBUF_ADDR (MMIO_BASE   + 0x1200000)
-
+#![allow(dead_code)]
 use enum_dispatch::enum_dispatch;
+use super::{
+    device_dram::DeviceDram, device_rtc::DeviceRTC, device_sifive_uart::DeviceSifiveUart,
+    device_uart::DeviceUart,
+};
 
-
-
-use super::{device_dram::DeviceDram, device_uart::DeviceUart, device_rtc::DeviceRTC, device_kb::DeviceKB, device_mouse::DeviceMouse, device_vgactl::DeviceVGACTL, device_vga::DeviceVGA, device_sifive_uart::DeviceSifiveUart};
+#[cfg(feature = "device_sdl2")]
+use super::{
+    device_kb::DeviceKB, device_mouse::DeviceMouse, device_vga::DeviceVGA,
+    device_vgactl::DeviceVGACTL,
+};
 
 pub const SIFIVE_UART_BASE: u64 = 0xc0000000;
 
@@ -28,8 +22,6 @@ pub const MOUSE_ADDR: u64 = DEVICE_BASE + 0x0000070;
 pub const FB_ADDR: u64 = DEVICE_BASE + 0x1000000;
 pub const VGACTL_ADDR: u64 = DEVICE_BASE + 0x0000100;
 
-
-
 #[enum_dispatch(DeviceEnume)]
 pub trait DeviceBase {
     fn do_read(&mut self, addr: u64, len: usize) -> u64;
@@ -38,15 +30,18 @@ pub trait DeviceBase {
     fn do_update(&mut self) {}
 }
 
-
 #[enum_dispatch]
 pub enum DeviceEnume {
     DeviceDram,
     DeviceUart,
     DeviceRTC,
+    DeviceSifiveUart,
+    #[cfg(feature = "device_sdl2")]
     DeviceKB,
+    #[cfg(feature = "device_sdl2")]
     DeviceMouse,
+    #[cfg(feature = "device_sdl2")]
     DeviceVGACTL,
+    #[cfg(feature = "device_sdl2")]
     DeviceVGA,
-    DeviceSifiveUart
 }

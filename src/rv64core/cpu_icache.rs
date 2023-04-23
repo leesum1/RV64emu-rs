@@ -23,3 +23,9 @@ impl CpuIcache {
         self.inst_hash.clear();
     }
 }
+
+impl Default for CpuIcache {
+    fn default() -> Self {
+        Self::new()
+    }
+}

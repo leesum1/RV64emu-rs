@@ -345,6 +345,12 @@ impl SifvePlic {
     fn context_complete(&mut self, _context_idx: usize, _val: u32) {}
 }
 
+impl Default for SifvePlic {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeviceBase for SifvePlic {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
         assert_eq!(len, 4, "plic write len:{}", len);

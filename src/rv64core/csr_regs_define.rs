@@ -8,6 +8,8 @@ use crate::{
     rv64core::traptype::TrapType,
 };
 
+use super::inst::inst_base::RVerr;
+
 pub type CsrShare<T> = Rc<Cell<T>>;
 
 #[enum_dispatch]
@@ -44,12 +46,12 @@ pub trait Csr {
         addr: u64,
         privi: PrivilegeLevels,
         access_type: AccessType,
-    ) -> Result<(), ()> {
+    ) -> Result<(), RVerr> {
         assert!(addr < 4096);
         let csr_addr = CsrAddr::from(addr as u16);
         match csr_addr.check_privilege(privi, access_type) {
             true => Ok(()),
-            false => Err(()),
+            false => Err(RVerr::CsrNotPermit),
         }
     }
 }
@@ -253,7 +255,6 @@ impl Csr for Xstatus {
         self.inner.get().into()
     }
 }
-
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TvecMode {
@@ -737,7 +738,7 @@ impl Csr for Satp {
         _addr: u64,
         privi: PrivilegeLevels,
         _access_type: AccessType,
-    ) -> Result<(), ()> {
+    ) -> Result<(), RVerr> {
         let tvm = self.xstatus.get().tvm();
 
         let require_priv = if tvm {
@@ -748,7 +749,7 @@ impl Csr for Satp {
         // warn!("satp:cur_priv:{:?},require_priv:{:?}", privi, require_priv);
         match require_priv.check_priv(privi) {
             true => Ok(()),
-            false => Err(()),
+            false => Err(RVerr::CsrNotPermit),
         }
     }
 }

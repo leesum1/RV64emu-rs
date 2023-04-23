@@ -22,6 +22,12 @@ impl LrScReservation {
     }
 }
 
+impl Default for LrScReservation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_A: [Instruction; 22] = [
     Instruction {

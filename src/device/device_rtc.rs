@@ -1,5 +1,3 @@
-
-
 use super::device_trait::DeviceBase;
 use chrono::prelude::*;
 
@@ -10,6 +8,12 @@ pub struct DeviceRTC {
 impl DeviceRTC {
     pub fn new() -> Self {
         DeviceRTC { rtc_time: 0 }
+    }
+}
+
+impl Default for DeviceRTC {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

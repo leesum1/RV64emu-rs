@@ -1,8 +1,4 @@
-mod device;
-mod difftest;
-
-mod rv64core;
-mod trace;
+extern crate riscv64_emu;
 
 use std::sync::Mutex;
 #[allow(unused_imports)]
@@ -23,24 +19,28 @@ use std::{
 use clap::Parser;
 use log::warn;
 
-#[cfg(feature = "device_sdl2")]
-use crate::device::{
-    device_kb::{DeviceKB, DeviceKbItem},
-    device_mouse::{DeviceMouse, DeviceMouseItem},
-    device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
-    device_vga::DeviceVGA,
-    device_vgactl::DeviceVGACTL,
-};
-#[cfg(feature = "device_sdl2")]
-use ring_channel::*;
-#[cfg(feature = "device_sdl2")]
-use sdl2::{
-    event::Event,
-    keyboard::{Keycode, Scancode},
-};
+cfg_if::cfg_if! {
+    if #[cfg(feature = "device_sdl2")]{
+        use riscv64_emu::device::{
+            device_kb::{DeviceKB, DeviceKbItem},
+            device_mouse::{DeviceMouse, DeviceMouseItem},
+            device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
+            device_vga::DeviceVGA,
+            device_vgactl::DeviceVGACTL,
+        };
+        use sdl2::{
+            event::Event,
+            keyboard::{Keycode, Scancode},
+        };
+        use ring_channel::*;
+        use riscv64_emu::rv64core::cpu_core::CpuCore;
+    }
+}
 
+#[cfg(feature = "rv_debug_trace")]
+use crate::trace::traces::Traces;
 use crate::{
-    device::{
+    riscv64_emu::device::{
         device_dram::DeviceDram,
         device_rtc::DeviceRTC,
         device_sifive_plic::SIFIVE_UART_IRQ,
@@ -49,10 +49,10 @@ use crate::{
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE},
         device_uart::DeviceUart,
     },
-    rv64core::bus::{Bus, DeviceType},
-    rv64core::cpu_core::{CpuCoreBuild, CpuState},
-    trace::traces::Traces,
+    riscv64_emu::rv64core::bus::{Bus, DeviceType},
+    riscv64_emu::rv64core::cpu_core::{CpuCoreBuild, CpuState},
 };
+
 // /* 各个设备地址 */
 // -------------Device Tree MAP-------------
 // name:CLINT           Area:0X02000000-->0X02010000,len:0X00010000
@@ -72,6 +72,9 @@ struct Args {
     #[arg(long, value_name = "FILE")]
     /// IMG bin ready to run
     img: String,
+    #[arg(long, value_name = "FILE")]
+    /// IMG bin th the flash
+    xipflash: Option<String>,
     #[arg(short, long, value_name = "FILE")]
     /// Write torture test signature to FILE
     signature: Option<String>,
@@ -90,26 +93,15 @@ fn main() {
     let signal_term_sdl_event = signal_term.clone();
     #[allow(unused_variables)]
     let signal_term_uart = signal_term;
-    #[allow(unused_variables)]
-    let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-    #[allow(unused_variables)]
-    let (trace_tx1, trace_rx1) = crossbeam_channel::bounded(8096);
 
-    #[allow(unused_variables)]
-    let trace_log = if cfg!(feature = "rv_debug_trace") {
-        let trace_log = Traces::new(0, trace_rx);
-        Some(trace_log)
-    } else {
-        None
-    };
-
-    #[allow(unused_variables)]
-    let trace_log1 = if cfg!(feature = "rv_debug_trace") {
-        let trace_log1 = Traces::new(1, trace_rx1);
-        Some(trace_log1)
-    } else {
-        None
-    };
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "rv_debug_trace")]{
+            let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
+            let (trace_tx1, trace_rx1) = crossbeam_channel::bounded(8096);
+            let mut trace_log0 = Traces::new(0, trace_rx);
+            let mut trace_log1 = Traces::new(0, trace_rx1);
+        }
+    }
 
     let bus_u = Arc::new(Mutex::new(Bus::new()));
 
@@ -153,6 +145,18 @@ fn main() {
         len: mem.capacity as u64,
         instance: mem.into(),
         name: device_name,
+    });
+
+    // device dram len:0X08000000
+    let mut falsh = DeviceDram::new(8 * 1024 * 1024);
+    if let Some(xipflash) = &args.xipflash {
+        falsh.load_binary(xipflash);
+    }
+    bus_u.lock().unwrap().add_device(DeviceType {
+        start: 0x2000_0000,
+        len: falsh.capacity as u64,
+        instance: falsh.into(),
+        name: "flash",
     });
 
     // device uart
@@ -205,24 +209,16 @@ fn main() {
     // debug trace thread
     #[cfg(feature = "rv_debug_trace")]
     let trace_thread = thread::spawn(move || {
-        let mut trace1 = trace_log;
-
         while !signal_term_trace.load(Ordering::Relaxed) {
-            if let Some(r_log) = &mut trace1 {
-                r_log.run();
-            }
+            trace_log0.run();
         }
     });
 
     // debug trace thread
     #[cfg(feature = "rv_debug_trace")]
     let trace_thread1 = thread::spawn(move || {
-        let mut trace1 = trace_log1;
-
         while !signal_term_trace1.load(Ordering::Relaxed) {
-            if let Some(r_log) = &mut trace1 {
-                r_log.run();
-            }
+            trace_log1.run();
         }
     });
 
@@ -250,7 +246,7 @@ fn main() {
         let mut cycle: u128 = 0;
         while cpu.cpu_state == CpuState::Running {
             cpu.execute(1);
-            cpu1.execute(1);
+            // cpu1.execute(1);
 
             if cycle % 128 == 0 {
                 bus_u.lock().unwrap().update();
@@ -269,31 +265,6 @@ fn main() {
         // send signal to stop the trace thread
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
-
-    // let cpu_main1 = thread::spawn(move || {
-    //     // start sim
-    //     cpu1.cpu_state = CpuState::Running;
-    //     let mut cycle: u128 = 0;
-    //     while cpu1.cpu_state == CpuState::Running {
-    //         cpu1.execute(1);
-    //         cycle += 1;
-
-    //         // bus_u.lock().unwrap().update();
-    //         if cycle % 128 == 0 {
-    //             bus_u.lock().unwrap().update();
-    //             bus_u.lock().unwrap().clint.instance.tick();
-    //             bus_u.lock().unwrap().plic.instance.tick();
-    //         }
-    //     }
-    //     warn!("total:{cycle}");
-    // });
-
-    // let bus_thread = thread::spawn(move || loop {
-    //     bus_u.lock().unwrap().update();
-    //     bus_u.lock().unwrap().clint.instance.tick();
-    //     bus_u.lock().unwrap().plic.instance.tick();
-    //     std::thread::sleep(Duration::from_millis(20));
-    // });
 
     #[cfg(feature = "rv_debug_trace")]
     trace_thread.join().unwrap();
@@ -441,4 +412,3 @@ fn handle_sdl_event(
         }
     });
 }
-

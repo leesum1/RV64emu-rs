@@ -10,6 +10,12 @@ impl DeviceUart {
     }
 }
 
+impl Default for DeviceUart {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeviceBase for DeviceUart {
     fn do_read(&mut self, _addr: u64, _len: usize) -> u64 {
         panic!("This uart is write only");

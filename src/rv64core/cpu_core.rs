@@ -9,22 +9,23 @@ use std::{
 use log::warn;
 
 use crate::{
+    difftest::difftest_trait::Difftest,
     rv64core::bus::Bus,
     rv64core::cpu_icache::CpuIcache,
     rv64core::csr_regs::CsrRegs,
     rv64core::csr_regs_define::XipIn,
-    difftest::difftest_trait::Difftest,
     rv64core::gpr::Gpr,
     rv64core::inst::{
-        inst_base::{AccessType, FesvrCmd,PrivilegeLevels},
+        inst_base::{AccessType, FesvrCmd, PrivilegeLevels},
         inst_rv64a::LrScReservation,
     },
     rv64core::inst_decode::InstDecode,
     rv64core::mmu::Mmu,
-    
-    trace::traces::TraceType,
     rv64core::traptype::TrapType,
 };
+
+#[cfg(feature = "rv_debug_trace")]
+use crate::trace::traces::TraceType;
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -37,6 +38,7 @@ pub struct CpuCoreBuild {
     shared_bus: Arc<Mutex<Bus>>,
     boot_pc: u64,
     smode: bool,
+    #[cfg(feature = "rv_debug_trace")]
     trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 impl CpuCoreBuild {
@@ -45,6 +47,7 @@ impl CpuCoreBuild {
             hart_id: 0,
             shared_bus,
             boot_pc: 0x8000_0000,
+            #[cfg(feature = "rv_debug_trace")]
             trace_sender: None,
             smode: true,
         }
@@ -53,6 +56,7 @@ impl CpuCoreBuild {
         self.boot_pc = boot_pc;
         self
     }
+    #[cfg(feature = "rv_debug_trace")]
     pub fn with_trace(&mut self, trace_sender: crossbeam_channel::Sender<TraceType>) -> &mut Self {
         self.trace_sender = Some(trace_sender);
         self
@@ -100,6 +104,7 @@ impl CpuCoreBuild {
             lr_sc_set: share_lr_sc_set,
             cpu_state: CpuState::Stop,
             cpu_icache: CpuIcache::new(),
+            #[cfg(feature = "rv_debug_trace")]
             trace_sender: self.trace_sender.clone(),
             amo_mutex: share_amo,
         }
@@ -119,7 +124,7 @@ pub struct CpuCore {
     pub amo_mutex: Arc<Mutex<()>>,
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
-
+    #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 unsafe impl Send for CpuCore {}
@@ -128,30 +133,34 @@ impl CpuCore {
         self.pc = self.npc;
         self.npc += 4;
 
-        // // first lookup icache
-        // let icache_data = self.cpu_icache.get_inst(self.pc);
-        // // if icache hit return, else load inst from mem and push into icache
-        // let fetch_ret = match icache_data {
-        //     Some(icache_inst) => Ok(icache_inst as u64),
-        //     None => self.read(self.pc, 4, AccessType::Fetch(self.pc)),
-        // };
+        // first lookup icache
+        // if icache hit ,than return,
+        // else load inst from mem and push into icache
+        #[cfg(feature = "inst_cache")]
+        match self.cpu_icache.get_inst(self.pc) {
+            Some(icache_inst) => {
+                self.cpu_icache.insert_inst(self.pc, icache_inst);
+                Ok(icache_inst as u64)
+            }
+            None => self.read(self.pc, 4, AccessType::Fetch(self.pc)),
+        }
 
-        // if let Ok(inst) = fetch_ret {
-        //     self.cpu_icache.insert_inst(self.pc, inst as u32)
-        // }
-        // fetch_ret
+        #[cfg(not(feature = "inst_cache"))]
         self.read(self.pc, 4, AccessType::Fetch(self.pc))
     }
 
     pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
-        // let fast_decode = self.decode.fast_path(inst);
-        // let inst_op = if fast_decode.is_some() {
-        //     fast_decode
-        // } else {
-        //     self.decode.slow_path(inst)
-        // };
 
-        let inst_op = self.decode.slow_path(inst);
+        
+        let inst_op = if cfg!(feature = "decode_cache") {
+            let decode_cache_hit = self.decode.fast_path(inst);
+            match decode_cache_hit {
+                Some(operation) => Some(operation),
+                None => self.decode.slow_path(inst),
+            }
+        } else {
+            self.decode.slow_path(inst)
+        };
 
         match inst_op {
             Some(i) => {
@@ -189,7 +198,6 @@ impl CpuCore {
                         continue;
                     }
 
-                    self.check_pending_int();
                     self.handle_interrupt();
                     // self.mmu.bus.lock().unwrap().update();
 
@@ -201,13 +209,8 @@ impl CpuCore {
             };
         }
     }
-    fn check_pending_int(&mut self) {
-        // todo! improve me
-        // let mut bus_u = self.mmu.bus.lock().unwrap();
-        // bus_u.clint.instance.tick();
-        // bus_u.plic.instance.tick();
-    }
 
+    #[cfg(feature = "support_am")]
     pub fn halt(&mut self) -> usize {
         let a0 = self.gpr.read_by_name("a0");
 
@@ -376,9 +379,9 @@ impl CpuCore {
     pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
         self.lr_sc_set.lock().unwrap().check_and_clear(addr)
     }
-    pub fn lr_sc_reservation_clear(&mut self) {
-        self.lr_sc_set.lock().unwrap().clear();
-    }
+    // pub fn lr_sc_reservation_clear(&mut self) {
+    //     self.lr_sc_set.lock().unwrap().clear();
+    // }
 
     // for riscof
     pub fn dump_signature(&mut self, file_name: &str) {
@@ -471,6 +474,3 @@ impl Difftest for CpuCore {
         todo!()
     }
 }
-
-
-

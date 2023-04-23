@@ -143,6 +143,12 @@ impl Gpr {
     }
 }
 
+impl Default for Gpr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl fmt::Display for Gpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut ret: fmt::Result = Ok(());

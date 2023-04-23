@@ -13,6 +13,8 @@ use crate::{
     },
 };
 
+use super::inst::inst_base::RVerr;
+
 pub struct DeviceType {
     pub start: u64,
     pub len: u64,
@@ -61,22 +63,22 @@ impl Bus {
         self.devices.push(device);
     }
 
-    pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, ()> {
+    pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, RVerr> {
         if !check_aligned(addr, len as u64) {
             warn!("bus read:{:x},{:x}", addr, len);
-            return Err(());
+            return Err(RVerr::AddrMisalign);
         }
 
         // special devices
         // such as clint
-        let mut special_device = || -> Result<u64, ()> {
+        let mut special_device = || -> Result<u64, RVerr> {
             if check_area(self.clint.start, self.clint.len, addr) {
                 Ok(self.clint.instance.do_read(addr - self.clint.start, len))
             } else if check_area(self.plic.start, self.plic.len, addr) {
                 Ok(self.plic.instance.do_read(addr - self.plic.start, len))
             } else {
                 warn!("can not find device,read addr{addr:X}");
-                Err(())
+                Err(RVerr::NotFindDevice)
             }
         };
 
@@ -95,12 +97,12 @@ impl Bus {
         }
     }
 
-    pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, ()> {
+    pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
         if !check_aligned(addr, len as u64) {
-            return Err(());
+            return Err(RVerr::AddrMisalign);
         }
 
-        let mut special_device = || -> Result<u64, ()> {
+        let mut special_device = || -> Result<u64, RVerr> {
             if check_area(self.clint.start, self.clint.len, addr) {
                 Ok(self
                     .clint
@@ -113,7 +115,7 @@ impl Bus {
                     .do_write(addr - self.plic.start, data, len))
             } else {
                 warn!("can not find device,read addr{addr:X}");
-                Err(())
+                Err(RVerr::NotFindDevice)
             }
         };
 
@@ -133,6 +135,12 @@ impl Bus {
         self.devices
             .iter_mut()
             .for_each(|device| device.instance.do_update());
+    }
+}
+
+impl Default for Bus {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

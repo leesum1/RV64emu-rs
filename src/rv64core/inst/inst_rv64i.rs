@@ -1,4 +1,7 @@
-use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType, trace::traces::TraceType};
+use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
+
+#[cfg(feature = "rv_debug_trace")]
+use crate::trace::traces::TraceType;
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: [Instruction; 49] = [
