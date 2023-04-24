@@ -108,14 +108,14 @@ impl Clint {
         0
     }
 
-    fn mtime_inc(&mut self) {
+    fn mtime_inc(&mut self, inc: usize) {
         let mut mitme = self.mitme.get();
-        mitme += 128;
+        mitme += inc as u64;
         self.mitme.set(mitme);
     }
 
-    pub fn tick(&mut self) {
-        self.mtime_inc();
+    pub fn tick(&mut self, inc: usize) {
+        self.mtime_inc(inc);
         for hart in self.harts.iter_mut() {
             let level = self.mitme.get() >= hart.mtimecmp;
             let mut xip = hart.xip.get();
