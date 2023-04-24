@@ -1,10 +1,13 @@
 use std::{
     cell::Cell,
-    io::{self, Write},
+    io::{self, stdin, Read, Write},
     rc::Rc,
+    thread,
+    time::Duration,
 };
 
 use bitfield_struct::bitfield;
+
 
 use crate::device::device_trait::DeviceBase;
 
@@ -86,7 +89,7 @@ impl SifiveUartIN {
         }
     }
 }
-type Rxfifo = crossbeam_channel::Receiver<i32>;
+type Rxfifo = crossbeam_channel::Receiver<u8>;
 pub struct DeviceSifiveUart {
     regs: Box<SifiveUartIN>,
     pub irq_pending: Rc<Cell<bool>>,
@@ -95,10 +98,26 @@ pub struct DeviceSifiveUart {
 }
 
 impl DeviceSifiveUart {
-    pub fn new(rxbuf: Rxfifo) -> Self {
+    pub fn new() -> Self {
+        let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded::<u8>(64);
+
+        thread::spawn(move || loop {
+            let mut buf = [0; 1];
+            if let Ok(n) = stdin().read(&mut buf) {
+                if n > 1 {
+                    panic!("Read {} characters into a 1 byte buffer", n);
+                }
+                if n == 1 {
+                    sifive_uart_tx.send(buf[0]).unwrap();
+                }
+                // Nothing needs to be sent for n == 0
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        });
+
         DeviceSifiveUart {
             regs: Box::new(SifiveUartIN::new()),
-            rxfifo: rxbuf,
+            rxfifo: sifive_uart_rx,
             irq_pending: Rc::new(Cell::new(false)),
         }
     }
@@ -112,12 +131,15 @@ impl DeviceSifiveUart {
         let empty = self.rxfifo.is_empty();
         let data = self.rxfifo.try_recv().map_or(0, |x| x as u64);
         self.regs.rxdata = Rxdata::new().with_empty(empty).with_data(data as u8);
+        // debug!("sifive_uart: get_rxdata: {:?}", self.regs.rxdata);
         self.regs.rxdata.0
     }
     pub fn get_txdata(&mut self) -> u32 {
         // there is no txfifo, so it is always empty
         // when write to txdata, use put_char to print
+
         self.regs.txdata.set_full(false);
+        // debug!("sifive_uart: get_txdata: {:?}", self.regs.txdata);
         self.regs.txdata.0
     }
 }
@@ -144,7 +166,10 @@ impl DeviceBase for DeviceSifiveUart {
             TXDATA => self.put_char(data),
             TXCTRL => self.regs.txctrl.0 = data as u32,
             RXCTRL => self.regs.rxctrl.0 = data as u32,
-            IE => self.regs.ie.0 = data as u32,
+            IE => {
+                // debug!("sifive_uart: IE: {:#x}", data);
+                self.regs.ie.0 = data as u32
+            }
             RXDATA | IP => {} // read only
             DIV => self.regs.div = data as u32,
             _ => panic!("sifive_uart: unknown addr: {:#x}", addr),
@@ -159,13 +184,21 @@ impl DeviceBase for DeviceSifiveUart {
 
     fn do_update(&mut self) {
         let rxwm_pending = self.rxfifo.len() > self.regs.rxctrl.rxcnt().into();
-        self.regs.ip.set_rxwm(rxwm_pending);
-        // no txfifo, so txwm is always false
-        let txwm_pending = false;
-        self.regs.ip.set_txwm(txwm_pending);
+        // println!(
+        //     "rxfifo len: {}, rxctrl rxcnt: {}",
+        //     self.rxfifo.len(),
+        //     self.regs.rxctrl.rxcnt()
+        // );
 
+        self.regs.ip.set_rxwm(rxwm_pending);
+        // no txfifo, so txwm is always true
+        let txwm_pending = true;
+        self.regs.ip.set_txwm(txwm_pending);
+ 
         // update irq_pending
         let has_irq = (self.regs.ip.0 & self.regs.ie.0).ne(&0);
+        // println!("ie:{:?}", self.regs.ie);
+        // debug!("sifive_uart: irq_pending: {}", has_irq);
         self.irq_pending.set(has_irq);
     }
 }
