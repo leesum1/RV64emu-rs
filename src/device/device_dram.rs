@@ -1,6 +1,6 @@
 use std::{fs, vec};
 
-use log::warn;
+use log::info;
 
 use crate::device::device_trait::DeviceBase;
 
@@ -29,7 +29,7 @@ impl DeviceDram {
         };
 
         let text_size = text.len();
-        warn!("load binary : {file_name}, size: {text_size}");
+        info!("load binary : {file_name}, size: {text_size}");
         self.data[0..text_size].copy_from_slice(&text[..text_size]);
     }
 }

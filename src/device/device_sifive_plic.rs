@@ -286,7 +286,12 @@ impl SifvePlic {
         let context_offset = (offset % CONTEXT_PER_HART as u32) as u64;
         match context_offset {
             CONTEXT_THRESHOLD => self.context[context_idx].threshold.get_all(),
-            CONTEXT_CLAIM => self.context_claim(context_idx),
+            CONTEXT_CLAIM => {
+                // debug!("context_read(context_idx:{})", context_idx);
+                // println!("context_read(context_idx:{})", context_idx);
+
+                self.context_claim(context_idx)
+            }
             _ => panic!("context_read invalid offset:{}", context_offset),
         }
     }
@@ -296,7 +301,10 @@ impl SifvePlic {
 
         match context_offset {
             CONTEXT_THRESHOLD => self.context[context_idx].threshold.set_all(val),
-            CONTEXT_CLAIM => self.context_complete(context_idx, val),
+            CONTEXT_CLAIM => {
+                // debug!("context_write(context_idx:{}, val:{})", context_idx, val);
+                self.context_complete(context_idx, val)
+            }
             _ => panic!("context_write invalid offset:{}", context_offset),
         }
     }
@@ -335,10 +343,10 @@ impl SifvePlic {
 
         c.claim = irq_id;
 
-        warn!(
-            "context_claim(context_idx:{}, irq_id:{})",
-            context_idx, irq_id
-        );
+        // warn!(
+        //     "context_claim(context_idx:{}, irq_id:{})",
+        //     context_idx, irq_id
+        // );
         irq_id
     }
 
@@ -354,6 +362,7 @@ impl Default for SifvePlic {
 impl DeviceBase for SifvePlic {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
         assert_eq!(len, 4, "plic write len:{}", len);
+        // debug!("plic read addr:0x{:x} len:{}", addr, len);
         match addr {
             PRIORITY_BASE..=PRIORITY_END => {
                 let offset = (addr - PRIORITY_BASE) as u32;

@@ -1,5 +1,6 @@
+use std::time::SystemTime;
+
 use super::device_trait::DeviceBase;
-use chrono::prelude::*;
 
 pub struct DeviceRTC {
     pub rtc_time: u64,
@@ -22,7 +23,10 @@ impl DeviceBase for DeviceRTC {
         assert_eq!(len, 4);
         match addr {
             0 => {
-                self.rtc_time = Local::now().timestamp_micros() as u64;
+                self.rtc_time = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_micros() as u64;
                 self.rtc_time as u32 as u64
             }
             4 => self.rtc_time >> 32,
