@@ -17,7 +17,7 @@ use std::{
 };
 
 use clap::Parser;
-use log::warn;
+use log::{debug, LevelFilter};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
@@ -38,7 +38,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "rv_debug_trace")]
-use crate::trace::traces::Traces;
+use crate::riscv64_emu::trace::traces::Traces;
 use crate::{
     riscv64_emu::device::{
         device_dram::DeviceDram,
@@ -73,65 +73,31 @@ struct Args {
     /// IMG bin ready to run
     img: String,
     #[arg(long, value_name = "FILE")]
-    /// IMG bin th the flash
+    /// optional:IMG bin th the flash
     xipflash: Option<String>,
+    /// optional:Number of harts
+    #[arg(short, long, value_name = "USIZE")]
+    num_harts: Option<usize>,
     #[arg(short, long, value_name = "FILE")]
-    /// Write torture test signature to FILE
+    /// optional:Write torture test signature to FILE
     signature: Option<String>,
 }
 
 fn main() {
+    simple_logger::SimpleLogger::new()
+        .with_level(LevelFilter::Debug)
+        .init()
+        .unwrap();
     let args = Args::parse();
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
-    #[allow(unused_variables)]
-    let signal_term_trace = signal_term.clone();
-    #[allow(unused_variables)]
-    let signal_term_trace1 = signal_term.clone();
 
     #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
     #[allow(unused_variables)]
-    let signal_term_uart = signal_term;
+    let signal_term_uart = signal_term.clone();
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "rv_debug_trace")]{
-            let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-            let (trace_tx1, trace_rx1) = crossbeam_channel::bounded(8096);
-            let mut trace_log0 = Traces::new(0, trace_rx);
-            let mut trace_log1 = Traces::new(0, trace_rx1);
-        }
-    }
-
-    let bus_u = Arc::new(Mutex::new(Bus::new()));
-
-    #[cfg(not(feature = "rv_debug_trace"))]
-    let mut cpu = CpuCoreBuild::new(bus_u.clone())
-        .with_boot_pc(0x8000_0000)
-        .with_hart_id(0)
-        .with_smode(true)
-        .build();
-    #[cfg(feature = "rv_debug_trace")]
-    let mut cpu = CpuCoreBuild::new(bus_u.clone())
-        .with_boot_pc(0x8000_0000)
-        .with_hart_id(0)
-        .with_trace(trace_tx)
-        .with_smode(true)
-        .build();
-
-    #[cfg(not(feature = "rv_debug_trace"))]
-    let mut cpu1 = CpuCoreBuild::new(bus_u.clone())
-        .with_boot_pc(0x8000_0000)
-        .with_hart_id(1)
-        .with_smode(true)
-        .build();
-    #[cfg(feature = "rv_debug_trace")]
-    let mut cpu1 = CpuCoreBuild::new(bus_u.clone())
-        .with_boot_pc(0x8000_0000)
-        .with_hart_id(1)
-        .with_trace(trace_tx1)
-        .with_smode(true)
-        .build();
+    let bus_u: Arc<Mutex<Bus>> = Arc::new(Mutex::new(Bus::new()));
 
     // device dram len:0X08000000
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
@@ -147,7 +113,7 @@ fn main() {
         name: device_name,
     });
 
-    // device dram len:0X08000000
+    // device flash len:0X01000000
     let mut falsh = DeviceDram::new(8 * 1024 * 1024);
     if let Some(xipflash) = &args.xipflash {
         falsh.load_binary(xipflash);
@@ -170,10 +136,7 @@ fn main() {
         name: device_name,
     });
 
-    // device sifive_uart
-    let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded(64);
-
-    let device_sifive_uart = DeviceSifiveUart::new(sifive_uart_rx);
+    let device_sifive_uart = DeviceSifiveUart::new();
 
     bus_u
         .lock()
@@ -201,74 +164,114 @@ fn main() {
     });
 
     #[cfg(feature = "device_sdl2")]
-    create_sdl2_devices(&mut cpu, signal_term_sdl_event);
+    create_sdl2_devices(bus_u.clone(), signal_term_sdl_event);
 
     // show device address map
-    warn!("{0}", bus_u.lock().unwrap());
+    debug!("{0}", bus_u.lock().unwrap());
 
-    // debug trace thread
-    #[cfg(feature = "rv_debug_trace")]
-    let trace_thread = thread::spawn(move || {
-        while !signal_term_trace.load(Ordering::Relaxed) {
-            trace_log0.run();
-        }
-    });
+    let hart_num = match args.num_harts {
+        Some(num) => num,
+        None => 1,
+    };
 
-    // debug trace thread
-    #[cfg(feature = "rv_debug_trace")]
-    let trace_thread1 = thread::spawn(move || {
-        while !signal_term_trace1.load(Ordering::Relaxed) {
-            trace_log1.run();
-        }
-    });
-
-    // uart thread to get terminal input
-    let _sifive_uart_thread = thread::spawn(move || {
-        let stdin = io::stdin();
-        let mut handle = stdin.lock().bytes();
-        while !signal_term_uart.load(Ordering::Relaxed) {
-            let x = handle.next();
-            if let Some(Ok(ch)) = x {
-                if sifive_uart_tx.send(ch as i32).is_ok() {}
+    let mut hart_vec = Vec::new();
+    #[allow(unused_mut)]
+    let mut trace_handle: Vec<thread::JoinHandle<()>> = Vec::new();
+    // create hart according to the number of harts
+    for hart_id in 0..hart_num {
+        cfg_if::cfg_if! {
+                if #[cfg(feature = "rv_debug_trace")] {
+                let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
+                let cpu: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                    .with_boot_pc(0x8000_0000)
+                    .with_hart_id(hart_id)
+                    .with_trace(trace_tx)
+                    .with_smode(true)
+                    .build();
+                hart_vec.push(cpu);
+                let mut trace_log = Traces::new(0, trace_rx);
+                let term_sig_trace = signal_term.clone();
+                let trace_thread = thread::spawn(move || {
+                    while !term_sig_trace.load(Ordering::Relaxed) {
+                        trace_log.run();
+                    }
+                });
+                trace_handle.push(trace_thread);
+            } else {
+                let hart: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                    .with_boot_pc(0x8000_0000)
+                    .with_hart_id(hart_id)
+                    .with_smode(true)
+                    .build();
+                hart_vec.push(hart);
             }
-            std::thread::sleep(Duration::from_millis(100));
+        };
+    }
+
+    #[cfg(feature = "expr_mutithread")]
+    for mut hart in hart_vec {
+        let cpu_siganl = signal_term_cpucore.clone();
+        thread::spawn(move || {
+            hart.cpu_state = CpuState::Running;
+
+            while hart.cpu_state == CpuState::Running {
+                hart.execute(1000);
+            }
+            cpu_siganl.store(true, Ordering::Relaxed);
+        });
+    }
+
+    #[cfg(feature = "expr_mutithread")]
+    let bus_thread = thread::spawn(move || {
+        while !signal_term.load(Ordering::Relaxed) {
+            {
+                bus_u.lock().unwrap().update();
+                bus_u.lock().unwrap().clint.instance.tick(5000 / 100);
+                bus_u.lock().unwrap().plic.instance.tick();
+            }
+            thread::sleep(Duration::from_millis(50));
         }
     });
 
-    // create another thread to simmulate the cpu_core
+    // create another thread to simmulate the harts
     // while the main thread is used to handle sdl events
-    // which will be send to coresponding devices through ring_channel
+    // which will be send to the coresponding devices through ring_channel
+    #[cfg(not(feature = "expr_mutithread"))]
     let cpu_main = thread::spawn(move || {
         // start sim
-        cpu.cpu_state = CpuState::Running;
-        cpu1.cpu_state = CpuState::Running;
+        hart_vec.iter_mut().for_each(|x| {
+            x.cpu_state = CpuState::Running;
+        });
 
-        let mut cycle: u128 = 0;
-        while cpu.cpu_state == CpuState::Running {
-            cpu.execute(1);
-            // cpu1.execute(1);
+        let mut cycle: u64 = 0;
 
-            if cycle % 128 == 0 {
+        // if all harts are in running state, then continue to execute
+        while hart_vec
+            .iter()
+            .all(|hart| hart.cpu_state == CpuState::Running)
+        {
+            hart_vec.iter_mut().for_each(|hart| {
+                hart.execute(1);
+            });
+            if cycle % 5000 == 0 {
                 bus_u.lock().unwrap().update();
-                bus_u.lock().unwrap().clint.instance.tick();
+                bus_u.lock().unwrap().clint.instance.tick(5000 / 100);
                 bus_u.lock().unwrap().plic.instance.tick();
             }
             cycle += 1;
         }
-        warn!("total:{cycle}");
-
-        // dump signature for riscof
-        args.signature
-            .map(|x| cpu.dump_signature(&x))
-            .unwrap_or_else(|| warn!("no signature"));
-
+        println!("total:{cycle}");
         // send signal to stop the trace thread
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
 
-    #[cfg(feature = "rv_debug_trace")]
-    trace_thread.join().unwrap();
-    // sifive_uart_thread.join().unwrap();
+    for handle in trace_handle {
+        handle.join().unwrap();
+    }
+
+    #[cfg(feature = "expr_mutithread")]
+    bus_thread.join().unwrap();
+    #[cfg(not(feature = "expr_mutithread"))]
     cpu_main.join().unwrap();
 }
 
@@ -281,8 +284,7 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
     .expect("Key event send error");
 }
 #[cfg(feature = "device_sdl2")]
-fn create_sdl2_devices(cpu: &mut CpuCore, signal_term_sdl_event: Arc<AtomicBool>) {
-    let bus_u = cpu.mmu.bus.clone();
+fn create_sdl2_devices(bus_u: Arc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicBool>) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
