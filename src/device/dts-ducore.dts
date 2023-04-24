@@ -4,21 +4,24 @@
 	#address-cells = <0x2>;
 	#size-cells = <0x2>;
 	compatible = "riscv-virtio";
-	model = "riscv-virtio,qemu";
+	model = "rv64-emu-rs";
 
 	aliases {
 		serial0 = &uart0;
 	};
 	chosen {
-		bootargs = "console=hvc0 earlycon=sbi";
-		// bootargs = "console=ttyS0";
+		// use sbicall (getchar and putchar) as console
+		// bootargs = "console=hvc0 earlycon=sbi";
+		// use sifive uart as console (enable)
+		bootargs = "earlycon console=ttySIF0";
+
 		stdout-path = "serial0"; // chose a system console
 	};
 
 	my_clk: clock {
     	#clock-cells = <0>;
     	compatible = "fixed-clock";
-    	clock-frequency = <100000000>;
+    	clock-frequency = <1000000000>;
 	};
 
 	uart0: uart@c0000000 {
@@ -28,6 +31,7 @@
 		interrupts = <0xa>;
 		clocks = <&my_clk>;
 		status = "okay";
+
 	};
 	cpus {
 		#address-cells = <0x1>;
@@ -57,7 +61,7 @@
 		};
 		CPU1:cpu@1 {
 			device_type = "cpu";
-			reg = <0x00>;
+			reg = <0x01>;
 			status = "okay";
 			compatible = "riscv";
 			riscv,isa = "rv64ima";
