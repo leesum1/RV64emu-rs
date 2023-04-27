@@ -8,6 +8,8 @@ const MTIMECMP_BASE: u64 = 0x4000;
 const MTIMECMP_PER_HART: u64 = 0x8;
 const MTIMECMP_END: u64 = MTIME_BASE - 1;
 const MTIME_BASE: u64 = 0xBFF8;
+const MTIME_BASE_END: u64 = 0xBFF8+7;
+
 
 pub struct DeviceClint {
     pub start: u64,
@@ -47,6 +49,12 @@ impl ClintHart {
     pub fn mtimecmp_write(&mut self, data: u64) {
         self.mtimecmp = data;
     }
+    pub fn mtimecmph_read(&self) -> u64 {
+        self.mtimecmp >> 32
+    }
+    pub fn mtimecmph_write(&mut self, data: u64) {
+        self.mtimecmp = (self.mtimecmp & 0xffffffff) | (data << 32);
+    }
 }
 
 pub struct Clint {
@@ -74,12 +82,24 @@ impl Clint {
                 let hart = &self.harts[hart_id as usize];
                 hart.msip_read()
             }
-            (MTIMECMP_BASE..=MTIMECMP_END, 8) => {
+            (MTIMECMP_BASE..=MTIMECMP_END, _) => {
                 let hart_id = (addr - MTIMECMP_BASE) / MTIMECMP_PER_HART;
+                let is_mtimecmph = (addr - MTIMECMP_BASE) % MTIMECMP_PER_HART == 4;
                 let hart = &self.harts[hart_id as usize];
-                hart.mtimecmp_read()
+
+                match is_mtimecmph {
+                    true => hart.mtimecmph_read(),
+                    false => hart.mtimecmp_read(),
+                }
             }
-            (MTIME_BASE, 8) => self.mitme.get(),
+            (MTIME_BASE..=MTIME_BASE_END, _) => {
+                let is_mtimeh = addr == MTIME_BASE + 4;
+                let mitme: u64 = self.mitme.get();
+                match is_mtimeh {
+                    true => mitme >> 32,
+                    false => mitme,
+                }
+            },
             _ => {
                 panic!("clint read:{:x},{:x}", addr, len);
             }
@@ -93,10 +113,14 @@ impl Clint {
                 let hart = &mut self.harts[hart_id as usize];
                 hart.msip_write(data);
             }
-            (MTIMECMP_BASE..=MTIMECMP_END, 8) => {
+            (MTIMECMP_BASE..=MTIMECMP_END, _) => {
                 let hart_id = (addr - MTIMECMP_BASE) / MTIMECMP_PER_HART;
+                let is_mtimecmph = (addr - MTIMECMP_BASE) % MTIMECMP_PER_HART == 4;
                 let hart = &mut self.harts[hart_id as usize];
-                hart.mtimecmp_write(data);
+                match is_mtimecmph {
+                    true => hart.mtimecmph_write(data),
+                    false => hart.mtimecmp_write(data),
+                }
             }
             (MTIME_BASE, 8) => {
                 self.mitme.set(data);
