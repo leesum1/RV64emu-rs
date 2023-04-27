@@ -41,7 +41,7 @@ cargo run --release --features=device_sdl2,support_am -- --img ./ready_to_run/co
 ```
 run `RT-thread`
 ```bash
-cargo run --release --features=device_sdl2,support_am -- --img ./ready_to_run/rtthread.bin
+cargo run --release --features=device_sdl2,support_am,caches -- --img ./ready_to_run/rtthread.bin
 ```
 run `Linux`
 ```bash

@@ -1,6 +1,5 @@
 extern crate riscv64_emu;
 
-use std::sync::Mutex;
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
@@ -15,9 +14,14 @@ use std::{
     thread,
     time::Duration,
 };
+use std::{
+    io::{stdin, Write},
+    sync::Mutex,
+};
 
 use clap::Parser;
-use log::{debug, LevelFilter};
+use log::{debug, info, LevelFilter};
+use riscv64_emu::device::device_16550a::Device16550aUART;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
@@ -70,13 +74,16 @@ use crate::{
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(long, value_name = "FILE")]
-    /// IMG bin ready to run
-    img: String,
+    /// IMG bin copy to ram
+    img: Option<String>,
     #[arg(long, value_name = "FILE")]
-    /// optional:IMG bin th the flash
+    /// IMG bin copy to xipflash
     xipflash: Option<String>,
-    /// optional:Number of harts
+    #[arg(long, value_name = "HEX")]
+    /// the first instruction address,default:0x80000000
+    boot_pc: Option<String>,
     #[arg(short, long, value_name = "USIZE")]
+    /// Number of harts,default:1
     num_harts: Option<usize>,
     #[arg(short, long, value_name = "FILE")]
     /// optional:Write torture test signature to FILE
@@ -101,42 +108,83 @@ fn main() {
 
     // device dram len:0X08000000
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
-    mem.load_binary(&args.img);
-    // mem.load_binary("/home/leesum/workhome/opensbi/build/platform/generic/firmware/fw_payload.bin");
 
-    let device_name = mem.get_name();
-
+    if let Some(ram_img) = args.img {
+        mem.load_binary(&ram_img);
+    }
     bus_u.lock().unwrap().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem.into(),
-        name: device_name,
+        name: "RAM",
+    });
+
+    // device dtcm
+    let dtcm = DeviceDram::new(128 * 1024 * 1024);
+    bus_u.lock().unwrap().add_device(DeviceType {
+        start: 0x9000_0000,
+        len: dtcm.capacity as u64,
+        instance: dtcm.into(),
+        name: "DTCM",
     });
 
     // device flash len:0X01000000
-    let mut falsh = DeviceDram::new(8 * 1024 * 1024);
+    let mut falsh = DeviceDram::new(128 * 1024 * 1024);
     if let Some(xipflash) = &args.xipflash {
         falsh.load_binary(xipflash);
     }
     bus_u.lock().unwrap().add_device(DeviceType {
-        start: 0x2000_0000,
+        start: 0x3000_0000,
         len: falsh.capacity as u64,
         instance: falsh.into(),
-        name: "flash",
+        name: "XIPFLASH",
+    });
+
+    let (uart_getc_tx, uart_getc_rx) = crossbeam_channel::bounded::<u8>(64);
+    let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(1024);
+    thread::spawn(move || loop {
+        let mut buf = [0; 1];
+        if let Ok(n) = stdin().read(&mut buf) {
+            if n > 1 {
+                panic!("Read {} characters into a 1 byte buffer", n);
+            }
+            if n == 1 {
+                uart_getc_tx.send(buf[0]).unwrap();
+            }
+            // Nothing needs to be sent for n == 0
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    });
+
+    thread::spawn(move || loop {
+        uart_putc_rx.try_iter().for_each(|c| {
+            print!("{}", c as char);
+        });
+        io::stdout().flush().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
     });
 
     // device uart
     let uart = DeviceUart::new();
-    let device_name = uart.get_name();
 
     bus_u.lock().unwrap().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart.into(),
-        name: device_name,
+        name: "AM_UART",
+    });
+    // device 16650_uart
+    let device_16650_uart = Device16550aUART::new(uart_putc_tx.clone(), uart_getc_rx.clone());
+
+    bus_u.lock().unwrap().add_device(DeviceType {
+        start: 0x1000_0000,
+        len: 0x1000,
+        instance: device_16650_uart.into(),
+        name: "16550a_uart",
     });
 
-    let device_sifive_uart = DeviceSifiveUart::new();
+    // device sifive_uart
+    let device_sifive_uart = DeviceSifiveUart::new(uart_putc_tx.clone(), uart_getc_rx.clone());
 
     bus_u
         .lock()
@@ -174,6 +222,17 @@ fn main() {
         None => 1,
     };
 
+    let boot_pc = if let Some(x) = args.boot_pc.as_ref() {
+        u64::from_str_radix(
+            x.trim_start_matches(|c| c == '0' || c == 'x' || c == 'X'),
+            16,
+        )
+        .unwrap()
+    } else {
+        0x8000_0000
+    };
+
+    info!("boot_pc:0x{:x}", boot_pc);
     let mut hart_vec = Vec::new();
     #[allow(unused_mut)]
     let mut trace_handle: Vec<thread::JoinHandle<()>> = Vec::new();
@@ -183,7 +242,7 @@ fn main() {
                 if #[cfg(feature = "rv_debug_trace")] {
                 let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
                 let cpu: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
-                    .with_boot_pc(0x8000_0000)
+                    .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_trace(trace_tx)
                     .with_smode(true)
@@ -199,7 +258,7 @@ fn main() {
                 trace_handle.push(trace_thread);
             } else {
                 let hart: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
-                    .with_boot_pc(0x8000_0000)
+                    .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_smode(true)
                     .build();
@@ -251,14 +310,13 @@ fn main() {
             .all(|hart| hart.cpu_state == CpuState::Running)
         {
             hart_vec.iter_mut().for_each(|hart| {
-                hart.execute(1);
-            });
-            if cycle % 5000 == 0 {
+                hart.execute(5000);
                 bus_u.lock().unwrap().update();
                 bus_u.lock().unwrap().clint.instance.tick(5000 / 100);
                 bus_u.lock().unwrap().plic.instance.tick();
-            }
-            cycle += 1;
+            });
+            // not accurate, but enough for now
+            cycle += 5000;
         }
         println!("total:{cycle}");
         // send signal to stop the trace thread

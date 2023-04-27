@@ -2,7 +2,7 @@
 use enum_dispatch::enum_dispatch;
 use super::{
     device_dram::DeviceDram, device_rtc::DeviceRTC, device_sifive_uart::DeviceSifiveUart,
-    device_uart::DeviceUart,
+    device_uart::DeviceUart, device_16550a::Device16550aUART,
 };
 
 #[cfg(feature = "device_sdl2")]
@@ -36,6 +36,7 @@ pub enum DeviceEnume {
     DeviceUart,
     DeviceRTC,
     DeviceSifiveUart,
+    Device16550aUART,
     #[cfg(feature = "device_sdl2")]
     DeviceKB,
     #[cfg(feature = "device_sdl2")]

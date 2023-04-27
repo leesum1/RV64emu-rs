@@ -1,13 +1,9 @@
 use std::{
     cell::Cell,
-    io::{self, stdin, Read, Write},
     rc::Rc,
-    thread,
-    time::Duration,
 };
 
 use bitfield_struct::bitfield;
-
 
 use crate::device::device_trait::DeviceBase;
 
@@ -90,41 +86,30 @@ impl SifiveUartIN {
     }
 }
 type Rxfifo = crossbeam_channel::Receiver<u8>;
+type Txfifo = crossbeam_channel::Sender<u8>;
 pub struct DeviceSifiveUart {
     regs: Box<SifiveUartIN>,
     pub irq_pending: Rc<Cell<bool>>,
-    // _txfido // no txfifo
+
     rxfifo: Rxfifo,
+    txfifo: Txfifo,
 }
 
 impl DeviceSifiveUart {
-    pub fn new() -> Self {
-        let (sifive_uart_tx, sifive_uart_rx) = crossbeam_channel::bounded::<u8>(64);
-
-        thread::spawn(move || loop {
-            let mut buf = [0; 1];
-            if let Ok(n) = stdin().read(&mut buf) {
-                if n > 1 {
-                    panic!("Read {} characters into a 1 byte buffer", n);
-                }
-                if n == 1 {
-                    sifive_uart_tx.send(buf[0]).unwrap();
-                }
-                // Nothing needs to be sent for n == 0
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        });
-
+    pub fn new(uart_tx: Txfifo, uart_rx: Rxfifo) -> Self {
         DeviceSifiveUart {
             regs: Box::new(SifiveUartIN::new()),
-            rxfifo: sifive_uart_rx,
+            txfifo: uart_tx,
+            rxfifo: uart_rx,
             irq_pending: Rc::new(Cell::new(false)),
         }
     }
     pub fn put_char(&mut self, ch: u64) {
-        let c = char::from_u32(ch as u32).unwrap();
-        print!("{c}");
-        io::stdout().flush().unwrap();
+        // let c = char::from_u32(ch as u32).unwrap();
+        // print!("{c}");
+        // io::stdout().flush().unwrap();
+        let c = ch as u8;
+        self.txfifo.send(c).unwrap();
     }
 
     pub fn get_rxdata(&mut self) -> u32 {
@@ -135,9 +120,8 @@ impl DeviceSifiveUart {
         self.regs.rxdata.0
     }
     pub fn get_txdata(&mut self) -> u32 {
-        // there is no txfifo, so it is always empty
-        // when write to txdata, use put_char to print
 
+        // we don't have a real txdata register, so we just return 0
         self.regs.txdata.set_full(false);
         // debug!("sifive_uart: get_txdata: {:?}", self.regs.txdata);
         self.regs.txdata.0
@@ -184,17 +168,11 @@ impl DeviceBase for DeviceSifiveUart {
 
     fn do_update(&mut self) {
         let rxwm_pending = self.rxfifo.len() > self.regs.rxctrl.rxcnt().into();
-        // println!(
-        //     "rxfifo len: {}, rxctrl rxcnt: {}",
-        //     self.rxfifo.len(),
-        //     self.regs.rxctrl.rxcnt()
-        // );
+        let txwm_pending = self.txfifo.len() < self.regs.txctrl.txcnt().into();
 
         self.regs.ip.set_rxwm(rxwm_pending);
-        // no txfifo, so txwm is always true
-        let txwm_pending = true;
         self.regs.ip.set_txwm(txwm_pending);
- 
+
         // update irq_pending
         let has_irq = (self.regs.ip.0 & self.regs.ie.0).ne(&0);
         // println!("ie:{:?}", self.regs.ie);
