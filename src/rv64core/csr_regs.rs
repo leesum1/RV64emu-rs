@@ -38,7 +38,6 @@ pub struct CsrRegs {
     pub cycle: CsrShare<u64>,
     pub instret: CsrShare<u64>,
 }
-unsafe impl Send for CsrRegs {}
 
 impl CsrRegs {
     pub fn new(hart_id: usize) -> Self {

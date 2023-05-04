@@ -141,7 +141,7 @@ fn main() {
     });
 
     let (uart_getc_tx, uart_getc_rx) = crossbeam_channel::bounded::<u8>(64);
-    let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(1024);
+    let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(2048);
     thread::spawn(move || loop {
         let mut buf = [0; 1];
         if let Ok(n) = stdin().read(&mut buf) {
@@ -161,7 +161,7 @@ fn main() {
             print!("{}", c as char);
         });
         io::stdout().flush().unwrap();
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(50));
     });
 
     // device uart

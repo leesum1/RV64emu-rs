@@ -222,7 +222,8 @@ impl Device16550aUART {
     }
 
     fn get_char(&mut self) -> u8 {
-        self.rxfifo.try_recv().unwrap_or(0)
+        self.regs.rbr = self.rxfifo.try_recv().unwrap_or(0);
+        self.regs.rbr
     }
 }
 

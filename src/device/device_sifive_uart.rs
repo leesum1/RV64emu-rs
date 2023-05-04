@@ -174,7 +174,7 @@ impl DeviceBase for DeviceSifiveUart {
         self.regs.ip.set_txwm(txwm_pending);
 
         // update irq_pending
-        let has_irq = (self.regs.ip.0 & self.regs.ie.0).ne(&0);
+        let has_irq = 0!=(self.regs.ip.0 & self.regs.ie.0);
         // println!("ie:{:?}", self.regs.ie);
         // debug!("sifive_uart: irq_pending: {}", has_irq);
         self.irq_pending.set(has_irq);
