@@ -199,6 +199,7 @@ pub struct SifvePlic {
     // regs
     vec_irq_priority: Vec<IrqPriority>,
     irq_pending: [IrqPending; 2], // 0: 0-31, 1: 32-63
+    claimed: [bool; 64],
     context: Vec<PlicContext>,
 }
 
@@ -208,6 +209,7 @@ impl SifvePlic {
             irq_sources: Vec::new(),
             vec_irq_priority: vec![IrqPriority::new(); 64],
             irq_pending: [IrqPending::new(); 2],
+            claimed: [false; 64],
             context: Vec::new(),
         }
     }
@@ -312,7 +314,6 @@ impl SifvePlic {
     fn context_claim(&mut self, context_idx: usize) -> u32 {
         // 1. Get the highest priority pending interrupt, and clear the pending bit.
         // 2. Return the interrupt ID
-        // warn!("context_claim(context_idx:{})", context_idx);
         let mut irq_id = 0;
         let mut irq_priority = 0;
         let mut irq_pendding = Rc::new(Cell::new(false));
@@ -341,16 +342,25 @@ impl SifvePlic {
                 };
             });
 
-        c.claim = irq_id;
-
+        match self.claimed[irq_id as usize] {
+            true => 0,
+            false => {
+                // debug!("context_claim(context_idx:{}),id:{}", context_idx,irq_id);
+                irq_pendding.set(false);
+                self.claimed[irq_id as usize] = true;
+                c.claim = irq_id;
+                irq_id
+            }
+        }
         // warn!(
         //     "context_claim(context_idx:{}, irq_id:{})",
         //     context_idx, irq_id
         // );
-        irq_id
     }
 
-    fn context_complete(&mut self, _context_idx: usize, _val: u32) {}
+    fn context_complete(&mut self, _context_idx: usize, val: u32) {
+        self.claimed[val as usize] = false;
+    }
 }
 
 impl Default for SifvePlic {
