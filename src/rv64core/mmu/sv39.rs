@@ -20,10 +20,12 @@
 //                                Sv39 page table entry.
 
 use bitfield_struct::bitfield;
+
+use super::vm_info::{PAops, PTEops, VAops};
 // Sv39 virtual address
 
 #[bitfield(u64)]
-pub struct Sv39Va {
+pub struct Sv39VA {
     #[bits(12)]
     pub offset: u64,
     #[bits(9)]
@@ -36,8 +38,8 @@ pub struct Sv39Va {
     _pad: u64,
 }
 
-impl Sv39Va {
-    pub fn get_ppn_by_idx(&mut self, idx: u8) -> u64 {
+impl VAops for Sv39VA {
+    fn get_ppn_by_idx(&self, idx: u8) -> u64 {
         match idx {
             0 => self.ppn0(),
             1 => self.ppn1(),
@@ -45,10 +47,20 @@ impl Sv39Va {
             _ => panic!("idx err:{idx}"),
         }
     }
+    fn offset(&self) -> usize {
+        self.offset() as usize
+    }
+
+    fn set_offset(&mut self, val: usize) {
+        self.set_offset(val as u64);
+    }
+    fn raw(&self) -> u64 {
+        self.0
+    }
 }
 
 #[bitfield(u64)]
-pub struct Sv39Pa {
+pub struct Sv39PA {
     #[bits(12)]
     pub offset: u64,
     #[bits(9)]
@@ -60,14 +72,25 @@ pub struct Sv39Pa {
     #[bits(8)]
     _pad: u64,
 }
-impl Sv39Pa {
-    pub fn set_ppn_by_idx(&mut self, val: u64, idx: u8) {
+impl PAops for Sv39PA {
+    fn set_ppn_by_idx(&mut self, val: u64, idx: u8) {
         match idx {
             0 => self.set_ppn0(val),
             1 => self.set_ppn1(val),
             2 => self.set_ppn2(val),
             _ => panic!("idx err:{idx}"),
         }
+    }
+    fn offset(&self) -> usize {
+        self.offset() as usize
+    }
+
+    fn set_offset(&mut self, val: usize) {
+        self.set_offset(val as u64);
+    }
+
+    fn raw(&self) -> u64 {
+        self.0
     }
 }
 #[bitfield(u64)]
@@ -95,25 +118,63 @@ pub struct Sv39PTE {
     pub n: bool,
 }
 
-impl Sv39PTE {
-    pub fn point_next_level(&self) -> bool {
-        // 0 0 0
-        !(self.x() | self.w() | self.r())
-    }
+impl PTEops for Sv39PTE {
 
-}
 
-impl Sv39PTE {
-    pub fn ppn_all(&self) -> u64 {
-        (self.0 >> 10) & 0xfff_ffff_ffff
-    }
-
-    pub fn get_ppn_by_idx(&mut self, idx: u8) -> u64 {
+    fn get_ppn_by_idx(&self, idx: u8) -> u64 {
         match idx {
             0 => self.ppn0(),
             1 => self.ppn1(),
             2 => self.ppn2(),
             _ => panic!("idx err:{idx}"),
         }
+    }
+
+    fn v(&self) -> bool {
+        self.v()
+    }
+
+    fn r(&self) -> bool {
+        self.r()
+    }
+
+    fn w(&self) -> bool {
+        self.w()
+    }
+
+    fn x(&self) -> bool {
+        self.x()
+    }
+
+    fn u(&self) -> bool {
+        self.u()
+    }
+
+    fn g(&self) -> bool {
+        self.g()
+    }
+
+    fn a(&self) -> bool {
+        self.a()
+    }
+
+    fn d(&self) -> bool {
+        self.d()
+    }
+
+    fn rsw(&self) -> u8 {
+        self.rsw()
+    }
+
+    fn pbmt(&self) -> u8 {
+        self.pbmt()
+    }
+
+    fn n(&self) -> bool {
+        self.n()
+    }
+
+    fn raw(&self) -> u64 {
+        self.0
     }
 }

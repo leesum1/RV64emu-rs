@@ -646,6 +646,28 @@ pub enum StapMode {
     Sv64 = 11,
 }
 
+impl StapMode {
+    pub fn get_levels(&self) -> usize {
+        match self {
+            StapMode::Bare => 0,
+            StapMode::Sv39 => 3,
+            StapMode::Sv48 => 4,
+            StapMode::Sv57 => 5,
+            StapMode::Sv64 => 6,
+        }
+    }
+
+    pub fn get_ptesize(&self) -> usize {
+        match self {
+            StapMode::Bare => 0,
+            StapMode::Sv39 => 8,
+            StapMode::Sv48 => 8,
+            StapMode::Sv57 => 8,
+            StapMode::Sv64 => 8,
+        }
+    }
+}
+
 impl From<u64> for StapMode {
     fn from(value: u64) -> Self {
         match value {
@@ -677,10 +699,7 @@ pub struct SatpIn {
 
 impl SatpIn {
     pub fn unsupport_mod(&self) -> bool {
-        matches!(
-            self.mode(),
-            StapMode::Sv48 | StapMode::Sv57 | StapMode::Sv64
-        )
+        matches!(self.mode(), StapMode::Sv64)
     }
 }
 
@@ -714,24 +733,6 @@ impl Csr for Satp {
     fn read_raw(&self) -> u64 {
         self.inner.get().into()
     }
-
-    // fn check_permission(&self) -> Result<(), ()> {
-    //     let tvm = self.xstatus.get().tvm();
-
-    //     let require_priv = if tvm {
-    //         PrivilegeLevels::Machine
-    //     } else {
-    //         PrivilegeLevels::Supervisor
-    //     };
-
-    //     // warn!("SFENCE_VMA:cur_priv:{:?},require_priv:{:?}", cur_priv, require_priv);
-
-    //     if !require_priv.check_priv(cur_priv) {
-    //         Err(())
-    //     } else {
-    //         Ok(())
-    //     }
-    // }
 
     fn check_permission(
         &self,
