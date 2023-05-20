@@ -8,9 +8,15 @@ use crate::{
     rv64core::bus::Bus,
     rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
     rv64core::inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
-    rv64core::sv39::{Sv39PTE, Sv39Pa, Sv39Va},
     rv64core::traptype::TrapType,
 };
+
+use super::{
+    sv48::{Sv48PA, Sv48PTE, Sv48VA},
+    vm_info::{PAenume, PAops, PTEenume, PTEops, VAenume, VAops},
+};
+
+const PAGESIZE: u64 = 4096; // 2 ^ 12
 
 pub struct Mmu {
     pub bus: Arc<Mutex<Bus>>,
@@ -19,13 +25,13 @@ pub struct Mmu {
     satp: CsrShare<SatpIn>,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     mmu_effective_priv: PrivilegeLevels,
+    satp_mode: StapMode,
     i: i8,
     level: i8,
-    pagesize: u64,
     a: u64,
-    va: Sv39Va,
-    pub pa: Sv39Pa,
-    pte: Sv39PTE,
+    va: VAenume,
+    pa: PAenume,
+    pte: PTEenume,
 }
 
 impl Mmu {
@@ -40,33 +46,30 @@ impl Mmu {
             access_type: AccessType::Load(0),
             mstatus,
             satp,
-            i: 0,
-            level: 0,
-            pagesize: 0,
-            a: 0,
-            va: 0.into(),
-            pa: 0.into(),
-            pte: 0.into(),
             cur_priv: privilege,
             mmu_effective_priv: PrivilegeLevels::Machine,
+            satp_mode: StapMode::Bare,
+            i: 0,
+            level: 0,
+            a: 0,
+            va: Sv48VA::new().into(),
+            pa: Sv48PA::new().into(),
+            pte: Sv48PTE::new().into(),
         }
     }
 
-    fn get_ptesize(&self) -> u64 {
-        8 // todo! sv39 mode only
-    }
     // 1. Let a be satp.ppn × PAGESIZE, and let i = LEVELS − 1. (For Sv32, PAGESIZE=2^12 and
     // LEVELS=2.) The satp register must be active, i.e., the effective privilege mode must be
     // S-mode or U-mode.
 
     // todo! check privilege mode
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
-        assert_eq!(self.satp.get().mode(), StapMode::Sv39); // todo!  sv39 mode only
+
         assert_ne!(self.mmu_effective_priv, PrivilegeLevels::Machine); // check privilege mode
-        self.pagesize = 4096; // 2 ^ 12
-        self.level = 3;
+                                                                       // self.pagesize = 4096; // 2 ^ 12
+        self.level = self.satp_mode.get_levels() as i8;
         self.i = self.level - 1;
-        self.a = self.satp.get().ppn() * self.pagesize;
+        self.a = self.satp.get().ppn() * PAGESIZE;
         Ok(2)
     }
     // 2. Let pte be the value of the PTE at address a+va.vpn[i]×PTESIZE. (For Sv32, PTESIZE=4.)
@@ -75,7 +78,7 @@ impl Mmu {
 
     // todo! PMA or PMP check
     fn va_translation_step2(&mut self) -> Result<(), TrapType> {
-        let pte_size = self.get_ptesize();
+        let pte_size = self.satp_mode.get_ptesize() as u64;
 
         let pte_addr = self.a + self.va.get_ppn_by_idx(self.i as u8) * pte_size;
         // warn!("va:{:?}", self.stap);
@@ -88,7 +91,9 @@ impl Mmu {
             .unwrap()
             .read(pte_addr, pte_size as usize)
             .unwrap();
-        self.pte = Sv39PTE::from(pte_data);
+        // self.pte = Sv39PTE::from(pte_data).into();
+        self.pte = self.get_pteops(pte_data);
+
         Ok(())
     }
     // 3. If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings that are reserved for
@@ -115,7 +120,7 @@ impl Mmu {
             return Err(self.access_type.throw_page_exception());
         }
 
-        self.a = self.pte.ppn_all() * self.pagesize;
+        self.a = self.pte.ppn_all() * PAGESIZE;
 
         Ok(2)
     }
@@ -162,7 +167,7 @@ impl Mmu {
     // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
     // exception corresponding to the original access type.
     fn va_translation_step6(&mut self) -> Result<u8, TrapType> {
-        let mut is_misalign_superpage = || -> bool {
+        let is_misalign_superpage = || -> bool {
             for i in 0..self.i {
                 if self.pte.get_ppn_by_idx(i as u8) != 0 {
                     return true;
@@ -229,41 +234,29 @@ impl Mmu {
 
     pub fn page_table_walk(&mut self) -> Result<u64, TrapType> {
         let ret = self.va_translation_step1();
-
         assert!(ret.is_ok());
 
-        'step2: loop {
-            let ret = self.va_translation_step2();
-            assert!(ret.is_ok());
-
-            let ret = self.va_translation_step3();
-
-            ret?;
-
-            let ret = self.va_translation_step4();
-
-            ret?;
-
-            if let Ok(step) = ret {
+        loop {
+            self.va_translation_step2()?;
+            self.va_translation_step3()?;
+            if let Ok(step) = self.va_translation_step4() {
                 if step == 5 {
-                    break 'step2;
+                    break;
                 }
             }
         }
+
         self.va_translation_step5()?;
-        // ret?;
         self.va_translation_step6()?;
-        // ret?;
         self.va_translation_step7()?;
-        // ret?;
         self.va_translation_step8()?;
-        // ret?;
-        Ok(self.pa.into())
+
+        Ok(self.pa.raw())
     }
 
     fn no_mmu(&mut self) -> bool {
-        let satp_bare_mode = self.satp.get().mode().eq(&StapMode::Bare);
-        let mstatus = self.mstatus.get();
+        let satp_bare_mode = self.satp_mode.eq(&StapMode::Bare);
+        let mstatus: XstatusIn = self.mstatus.get();
         self.mmu_effective_priv = self.cur_priv.get();
 
         // When MPRV=1, load and store memory addresses are translated and protected, and endianness is applied, as though
@@ -287,7 +280,6 @@ impl Mmu {
         // no mmu
         //if the machine is without mmu,then we need not do page table walk,just return the physical address
         if self.no_mmu() {
-            self.pa = Sv39Pa::from(addr);
             return self
                 .bus
                 .lock()
@@ -295,16 +287,19 @@ impl Mmu {
                 .read(addr, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
-        // has mmu
-        //get the virtual address
-        self.va = Sv39Va::from(addr);
+        // has mmu,
+        // update the virtual address and physical address
+        self.va = self.get_vaops(addr);
+        self.pa = self.get_paops(0);
+
         //do page table walk
         self.page_table_walk()?; // err return
-                                 //read the data from the physical address
+
+        //read the data from the physical address
         self.bus
             .lock()
             .unwrap()
-            .read(self.pa.into(), len as usize)
+            .read(self.pa.raw(), len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
@@ -322,17 +317,52 @@ impl Mmu {
                 .write(addr, data, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
+
         // has mmu
-        self.va = Sv39Va::from(addr);
+        // update the virtual address and physical address
+
+        self.satp_mode = self.satp.get().mode();
+        self.va = self.get_vaops(addr);
+        self.pa = self.get_paops(0);
+
         self.page_table_walk()?; // err return
         self.bus
             .lock()
             .unwrap()
-            .write(self.pa.into(), data, len as usize)
+            .write(self.pa.raw(), data, len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
     pub fn update_access_type(&mut self, access_type: AccessType) {
         self.access_type = access_type;
+        // update satp mode
+        self.satp_mode = self.satp.get().mode();
+    }
+
+    fn get_pteops(&self, pte_data: u64) -> PTEenume {
+        match self.satp_mode {
+            StapMode::Sv39 => PTEenume::Sv39PTE(pte_data.into()),
+            StapMode::Sv48 => PTEenume::Sv48PTE(pte_data.into()),
+            StapMode::Sv57 => PTEenume::Sv57PTE(pte_data.into()),
+            _ => PTEenume::Sv39PTE(pte_data.into()),
+        }
+    }
+
+    fn get_paops(&self, pa_data: u64) -> PAenume {
+        match self.satp_mode {
+            StapMode::Sv39 => PAenume::Sv39PA(pa_data.into()),
+            StapMode::Sv48 => PAenume::Sv48PA(pa_data.into()),
+            StapMode::Sv57 => PAenume::Sv57PA(pa_data.into()),
+            _ => PAenume::Sv39PA(pa_data.into()),
+        }
+    }
+
+    fn get_vaops(&self, va_data: u64) -> VAenume {
+        match self.satp_mode {
+            StapMode::Sv39 => VAenume::Sv39VA(va_data.into()),
+            StapMode::Sv48 => VAenume::Sv48VA(va_data.into()),
+            StapMode::Sv57 => VAenume::Sv57VA(va_data.into()),
+            _ => VAenume::Sv39VA(va_data.into()),
+        }
     }
 }

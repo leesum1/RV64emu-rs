@@ -20,12 +20,13 @@ use crate::{
         inst_rv64a::LrScReservation,
     },
     rv64core::inst_decode::InstDecode,
-    rv64core::mmu::Mmu,
     rv64core::traptype::TrapType,
 };
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
+
+use super::mmu::mmu::Mmu;
 
 #[derive(PartialEq)]
 pub enum CpuState {
