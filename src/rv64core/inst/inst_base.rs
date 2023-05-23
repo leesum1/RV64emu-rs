@@ -2,7 +2,7 @@
 use core::fmt;
 use std::{
     io::{self, Write},
-    mem::discriminant,
+    mem::{discriminant, size_of_val},
 };
 
 use bitfield_struct::bitfield;
@@ -920,6 +920,420 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
         rd: ((word >> 7) & 0x1f) as u64,    // [11:7]
     }
 }
+
+pub struct FormatCR {
+    pub rd_rs1: u64,
+    pub rs2: u64,
+}
+impl FormatCR {
+    pub fn new(word: u32) -> FormatCR {
+        FormatCR {
+            rd_rs1: ((word >> 7) & 0x1f) as u64, // [11:7]
+            rs2: ((word >> 2) & 0x1f) as u64,    // [6:2]
+        }
+    }
+}
+
+pub struct FormatCI {
+    rd_rs1: usize,
+    imm2_6: usize,
+    imm12: usize,
+}
+impl FormatCI {
+    pub fn new(word: u32) -> FormatCI {
+        FormatCI {
+            rd_rs1: ((word >> 7) & 0x1f) as usize, // [11:7]
+            imm2_6: ((word >> 2) & 0x1f) as usize, // [6:2]
+            imm12: ((word >> 12) & 0x1) as usize,  // [12]
+        }
+    }
+
+    pub fn rd(&self) -> usize {
+        self.rd_rs1
+    }
+    pub fn rs1(&self) -> usize {
+        self.rd_rs1
+    }
+    pub fn imm_c_lwsp(&self) -> usize {
+        let offset5 = self.imm12 & 0b1;
+        let offset4_2 = (self.imm2_6 >> 2) & 0b111;
+        let offset7_6 = self.imm2_6 & 0b11;
+        (offset7_6 << 6) | (offset5 << 5) | (offset4_2 << 2) | 0b00
+    }
+
+    pub fn imm_c_ldsp(&self) -> usize {
+        let offset5 = self.imm12 & 0b1;
+        let offset4_3 = (self.imm2_6 >> 3) & 0b11;
+        let offset8_6 = (self.imm2_6) & 0b111;
+        (offset8_6 << 6) | (offset5 << 5) | (offset4_3 << 3) | 0b000
+    }
+
+    pub fn imm_c_lqsp(&self) -> usize {
+        let offset5 = self.imm12 & 0b1;
+        let offset4 = (self.imm2_6 >> 4) & 0b1;
+        let offset9_6 = (self.imm2_6) & 0b1111;
+        (offset9_6 << 6) | (offset5 << 5) | (offset4 << 4) | 0b0000
+    }
+
+    pub fn imm_c_flwsp(&self) -> usize {
+        self.imm_c_lwsp()
+    }
+
+    pub fn imm_c_fldsp(&self) -> usize {
+        self.imm_c_ldsp()
+    }
+
+    pub fn rd_is_zero(&self) -> bool {
+        self.rd_rs1 == 0
+    }
+
+    pub fn imm_c_li(&self) -> isize {
+        let imm4_0 = self.imm2_6 & 0b11111;
+        let imm5 = self.imm12 & 0b1;
+
+        let imm = (imm5 << 5) | imm4_0;
+        sign_extended(imm as isize, 6)
+    }
+
+    pub fn imm_c_lui(&self) -> isize {
+        let nzimm16_12 = self.imm2_6 & 0b11111;
+        let nzimm17 = self.imm12 & 0b1;
+
+        let imm = (nzimm17 << 17) | (nzimm16_12 << 12);
+        sign_extended(imm as isize, 18)
+    }
+
+    pub fn imm_c_addi(&self) -> isize {
+        self.imm_c_li()
+    }
+    pub fn imm_c_addiw(&self) -> isize {
+        self.imm_c_li()
+    }
+    pub fn imm_c_addi16sp(&self) -> isize {
+        let nzimm9 = self.imm12 & 0b1;
+        let nzimm5 = self.imm2_6 & 0b1;
+        let nzimm8_7 = (self.imm2_6 >> 1) & 0b11;
+        let nzimm6 = (self.imm2_6 >> 3) & 0b1;
+        let nzimm4_3 = (self.imm2_6 >> 4) & 0b11;
+
+        let nzimm =
+            (nzimm9 << 9) | (nzimm8_7 << 7) | (nzimm6 << 6) | (nzimm5 << 5) | nzimm4_3 | 0b00;
+
+        sign_extended(nzimm as isize, 10)
+    }
+
+    pub fn imm_c_slli(&self) -> usize {
+        let shamt4_0 = self.imm2_6 & 0b11111;
+        let shamt5 = self.imm12 & 0b1;
+
+        (shamt5 << 5) | shamt4_0
+    }
+}
+
+pub struct FormatCSS {
+    rs2: usize,
+    imm7_12: usize,
+}
+impl FormatCSS {
+    pub fn new(word: u32) -> FormatCSS {
+        FormatCSS {
+            rs2: ((word >> 2) & 0x1f) as usize,      // [6:2]
+            imm7_12: ((word >> 12) & 0x3f) as usize, // [12:7]
+        }
+    }
+
+    pub fn rs2(&self) -> usize {
+        self.rs2
+    }
+    pub fn imm_c_swsp(&self) -> usize {
+        let offset7_6: usize = self.imm7_12 & 0b11;
+        let offset5_2: usize = (self.imm7_12 >> 2) & 0b1111;
+        (offset7_6 << 6) | (offset5_2 << 2) | 0b00
+    }
+
+    pub fn imm_c_sdsp(&self) -> usize {
+        let offset8_6: usize = self.imm7_12 & 0b111;
+        let offset5_3: usize = (self.imm7_12 >> 3) & 0b111;
+        (offset8_6 << 6) | (offset5_3 << 3) | 0b000
+    }
+    pub fn imm_c_sqsp(&self) -> usize {
+        let offset9_6: usize = self.imm7_12 & 0b1111;
+        let offset5_4: usize = (self.imm7_12 >> 4) & 0b11;
+        (offset9_6 << 6) | (offset5_4 << 4) | 0b0000
+    }
+    pub fn imm_c_fswsp(&self) -> usize {
+        self.imm_c_swsp()
+    }
+    pub fn imm_c_fsdsp(&self) -> usize {
+        self.imm_c_sdsp()
+    }
+}
+
+pub struct FormatCIW {
+    rd_c: usize,
+    pub imm5_12: usize,
+}
+impl FormatCIW {
+    pub fn new(word: u32) -> FormatCIW {
+        FormatCIW {
+            rd_c: ((word >> 2) & 0b111) as usize,   // [4:2]
+            imm5_12: ((word >> 2) & 0x3f) as usize, // [6:2]
+        }
+    }
+
+    pub fn rd(&self) -> usize {
+        self.rd_c + 8
+    }
+
+    pub fn imm_c_addi4spn(&self) -> usize {
+        let nzuimm3 = self.imm5_12 & 0b1;
+        let nzuimm2 = (self.imm5_12 >> 1) & 0b1;
+        let nzuimm9_6 = (self.imm5_12 >> 2) & 0b1111;
+        let nzuimm5_4 = (self.imm5_12 >> 6) & 0b11;
+
+        let nzuimm = (nzuimm9_6 << 6) | (nzuimm5_4 << 4) | (nzuimm3 << 3) | (nzuimm2 << 2) | 0b00;
+        nzuimm
+    }
+}
+
+pub struct FormatCL {
+    rd_c: usize,
+    rs1_c: usize,
+    imm5_6: u8,
+    imm10_12: u8,
+}
+impl FormatCL {
+    pub fn new(word: u32) -> FormatCL {
+        FormatCL {
+            rd_c: ((word >> 2) & 0b111) as usize,   // [4:2]
+            rs1_c: ((word >> 7) & 0b111) as usize,  // [9:7]
+            imm5_6: ((word >> 5) & 0b11) as u8,     // [6:5]
+            imm10_12: ((word >> 10) & 0b111) as u8, // [12:10]
+        }
+    }
+
+    pub fn rd(&self) -> usize {
+        self.rd_c + 8
+    }
+
+    pub fn rs1(&self) -> usize {
+        self.rs1_c + 8
+    }
+
+    pub fn imm_c_lw(&self) -> usize {
+        let offset6 = (self.imm5_6 & 0b1) as usize;
+        let offset2 = ((self.imm5_6 >> 1) & 0b1) as usize;
+        let offset5_3 = (self.imm10_12 & 0b111) as usize;
+        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2) | 0b00
+    }
+    pub fn imm_c_ld(&self) -> usize {
+        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset5_3 = (self.imm10_12 & 0b111) as usize;
+        (offset7_6 << 6) | (offset5_3 << 3) | 0b000
+    }
+    pub fn imm_c_lq(&self) -> usize {
+        let offset8 = (self.imm10_12 & 0b1) as usize;
+        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset5_4 = ((self.imm10_12 >> 1) & 0b11) as usize;
+
+        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4) | 0b0000
+    }
+
+    pub fn imm_c_flw(&self) -> usize {
+        self.imm_c_lw()
+    }
+    pub fn imm_c_fld(&self) -> usize {
+        self.imm_c_ld()
+    }
+}
+
+pub struct FormatCS {
+    rs1_c: usize,
+    rs2_c: usize,
+    imm5_6: usize,
+    imm10_12: u8,
+}
+
+impl FormatCS {
+    pub fn new(word: u32) -> FormatCS {
+        FormatCS {
+            rs1_c: ((word >> 7) & 0b111) as usize,  // [9:7]
+            rs2_c: ((word >> 2) & 0b111) as usize,  // [6:2]
+            imm5_6: ((word >> 5) & 0b11) as usize,  // [6:5]
+            imm10_12: ((word >> 10) & 0b111) as u8, // [12:10]
+        }
+    }
+
+    pub fn rs1(&self) -> usize {
+        self.rs1_c + 8
+    }
+
+    pub fn rs2(&self) -> usize {
+        self.rs2_c + 8
+    }
+
+    pub fn imm_c_sw(&self) -> usize {
+        let offset6 = (self.imm5_6 & 0b1) as usize;
+        let offset2 = ((self.imm5_6 >> 1) & 0b1) as usize;
+        let offset5_3 = (self.imm10_12 & 0b111) as usize;
+        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2) | 0b00
+    }
+
+    pub fn imm_c_sd(&self) -> usize {
+        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset5_3 = (self.imm10_12 & 0b111) as usize;
+        (offset7_6 << 6) | (offset5_3 << 3) | 0b000
+    }
+    pub fn imm_c_sq(&self) -> usize {
+        let offset8 = (self.imm10_12 & 0b1) as usize;
+        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset5_4 = ((self.imm10_12 >> 1) & 0b11) as usize;
+
+        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4) | 0b0000
+    }
+
+    pub fn imm_c_fsw(&self) -> usize {
+        self.imm_c_sw()
+    }
+    pub fn imm_c_fsd(&self) -> usize {
+        self.imm_c_sd()
+    }
+}
+
+pub struct FormatCA {
+    rs2_c: usize,
+    rd_rs1_c: usize,
+}
+
+impl FormatCA {
+    pub fn new(word: u32) -> FormatCA {
+        FormatCA {
+            rs2_c: ((word >> 2) & 0b111) as usize,    // [4:2]
+            rd_rs1_c: ((word >> 7) & 0b111) as usize, // [9:7]
+        }
+    }
+
+    pub fn rs2(&self) -> usize {
+        self.rs2_c + 8
+    }
+
+    pub fn rd_rs1(&self) -> usize {
+        self.rd_rs1_c + 8
+    }
+}
+
+pub struct FormatCB {
+    rs1_c: usize,
+    offset2_6: u8,
+    offset10_12: u8,
+}
+impl FormatCB {
+    pub fn new(word: u32) -> FormatCB {
+        FormatCB {
+            rs1_c: ((word >> 7) & 0b111) as usize,     // [9:7]
+            offset2_6: ((word >> 2) & 0b11111) as u8,  // [6:2]
+            offset10_12: ((word >> 10) & 0b111) as u8, // [12:10]
+        }
+    }
+
+    pub fn rs1(&self) -> usize {
+        self.rs1_c + 8
+    }
+
+    pub fn imm_c_beqz(&self) -> isize {
+        let offset5 = (self.offset2_6 & 0b1) as usize;
+        let offset2_1 = ((self.offset2_6 >> 1) & 0b11) as usize;
+        let offset7_6 = ((self.offset2_6 >> 3) & 0b11) as usize;
+        let offset4_3 = (self.offset10_12 & 0b11) as usize;
+        let offset8 = ((self.offset10_12 >> 2) & 0b1) as usize;
+
+        let offset = (offset8 << 8)
+            | (offset7_6 << 6)
+            | (offset5 << 5)
+            | (offset4_3 << 3)
+            | (offset2_1 << 1)
+            | 0b0;
+
+        sign_extended(offset as isize, 9)
+    }
+    pub fn imm_c_bnez(&self) -> isize {
+        self.imm_c_beqz()
+    }
+
+    pub fn imm_c_srli(&self) -> usize {
+        let shamt4_0 = (self.offset2_6 & 0b11111) as usize;
+        let shamt5 = ((self.offset10_12 >> 2) & 0b1) as usize;
+
+        (shamt5 << 5) | shamt4_0
+    }
+    pub fn imm_c_srai(&self) -> usize {
+        self.imm_c_srli()
+    }
+
+    pub fn imm_c_addi(&self) -> isize {
+        sign_extended(self.imm_c_srli() as isize, 6)
+    }
+    
+}
+
+pub struct FormatCJ {
+    jump_target: usize,
+}
+
+impl FormatCJ {
+    pub fn new(word: u32) -> FormatCJ {
+        FormatCJ {
+            jump_target: ((word >> 2) & 0b111_1111_1111) as usize, // [12:2]
+        }
+    }
+
+    pub fn imm_c_j(&self) -> isize {
+        let offset5 = self.jump_target & 0b1;
+        let offest3_1 = (self.jump_target >> 1) & 0b111;
+        let offset7 = (self.jump_target >> 4) & 0b1;
+        let offset6 = (self.jump_target >> 5) & 0b1;
+        let offset10 = (self.jump_target >> 6) & 0b1;
+        let offset9_8 = (self.jump_target >> 7) & 0b11;
+        let offset4 = (self.jump_target >> 9) & 0b1;
+        let offset11 = (self.jump_target >> 10) & 0b1;
+
+        let offset = (offset11 << 11)
+            | (offset10 << 10)
+            | (offset9_8 << 8)
+            | (offset7 << 7)
+            | (offset6 << 6)
+            | (offset5 << 5)
+            | (offset4 << 4)
+            | (offest3_1 << 1)
+            | 0b0;
+
+        sign_extended(offset as isize, 12)
+        // match offset11 == 1 {
+        //     true => (offset as isize) | ((-1 as isize) << 12),
+        //     false => offset as isize,
+        // }
+    }
+
+    pub fn imm_c_jal(&self) -> isize {
+        self.imm_c_j()
+    }
+}
+
+#[test]
+fn c_j_test() {
+    let i = 0b0001_0000_0000_0000;
+    let f = FormatCJ::new(i);
+    assert_eq!(f.imm_c_j(), -2048);
+
+    let i = 0b0001_1111_1111_1111;
+    let f = FormatCJ::new(i);
+    assert_eq!(f.imm_c_j(), -2);
+
+    let i = 0b0000_1111_1111_1111;
+    let f = FormatCJ::new(i);
+    assert_eq!(f.imm_c_j(), 2046);
+}
+
 #[derive(Debug)]
 pub enum RVerr {
     AddrMisalign,
@@ -1034,4 +1448,9 @@ impl FesvrCmd {
             None
         }
     }
+}
+
+pub fn sign_extended(x: isize, nbits: u32) -> isize {
+    let notherbits = size_of_val(&x) as u32 * 8 - nbits;
+    x.wrapping_shl(notherbits).wrapping_shr(notherbits)
 }
