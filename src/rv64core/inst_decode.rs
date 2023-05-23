@@ -14,10 +14,10 @@ pub struct InstDecode {
 impl InstDecode {
     pub fn new() -> Self {
         let mut i_vec = Vec::new();
-        i_vec.extend(&INSTRUCTIONS_I);
-        i_vec.extend(&INSTRUCTIONS_M);
-        i_vec.extend(&INSTRUCTIONS_A);
-        i_vec.extend(&INSTRUCTIONS_Z);
+        i_vec.extend(INSTRUCTIONS_I);
+        i_vec.extend(INSTRUCTIONS_M);
+        i_vec.extend(INSTRUCTIONS_A);
+        i_vec.extend(INSTRUCTIONS_Z);
 
         InstDecode {
             inst_vec: i_vec,

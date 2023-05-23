@@ -29,7 +29,7 @@ impl Default for LrScReservation {
 }
 
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_A: [Instruction; 22] = [
+pub const INSTRUCTIONS_A: &[Instruction] = &[
     Instruction {
         mask: MASK_LR_W,
         match_data: MATCH_LR_W,

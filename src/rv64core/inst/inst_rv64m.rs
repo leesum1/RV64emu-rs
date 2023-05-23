@@ -9,7 +9,7 @@ use crate::rv64core::inst::inst_base::*;
 //  Table 7.1: Semantics for division by zero and division overflow. L is the width of the operation in
 //  bits: XLEN for DIV[U] and REM[U], or 32 for DIV[U]W and REM[U]W.
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_M: [Instruction; 13] = [
+pub const INSTRUCTIONS_M: &[Instruction] = &[
     Instruction {
         mask: MASK_MUL,
         match_data: MATCH_MUL,

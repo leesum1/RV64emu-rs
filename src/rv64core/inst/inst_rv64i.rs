@@ -4,7 +4,7 @@ use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
 use crate::trace::traces::TraceType;
 
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_I: [Instruction; 49] = [
+pub const INSTRUCTIONS_I: &[Instruction]  = &[
     Instruction {
         mask: MASK_LUI,
         match_data: MATCH_LUI,

@@ -1,7 +1,7 @@
 use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
 
 #[allow(unused_variables)]
-pub const INSTRUCTIONS_Z: [Instruction; 14] = [
+pub const INSTRUCTIONS_Z: &[Instruction] = &[
     Instruction {
         mask: MASK_EBREAK,
         match_data: MATCH_EBREAK,
