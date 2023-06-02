@@ -1,6 +1,7 @@
 #![allow(unused)]
 use core::fmt;
 use std::{
+    cmp::{self, Ordering},
     io::{self, Write},
     mem::{discriminant, size_of_val},
 };
@@ -746,12 +747,36 @@ pub const CSR_MHPMCOUNTER29H: u16 = 0xb9d;
 pub const CSR_MHPMCOUNTER30H: u16 = 0xb9e;
 pub const CSR_MHPMCOUNTER31H: u16 = 0xb9f;
 
-// #[derive(Clone, Copy)]
 pub struct Instruction {
     pub mask: u32,
     pub match_data: u32,
     pub name: &'static str,
     pub operation: fn(cpu: &mut CpuCore, word: u32, address: u64) -> Result<(), TrapType>,
+}
+
+// bool operator()(const insn_desc_t& lhs, const insn_desc_t& rhs) {
+//     if (lhs.match == rhs.match)
+//       return lhs.mask > rhs.mask;
+//     return lhs.match > rhs.match;
+//   }
+// };
+
+impl Instruction {
+    pub fn cmp(lhs: &Instruction, rhs: &Instruction) -> Ordering {
+        // if lhs.match_data == rhs.match_data {
+        //     lhs.mask.cmp(&rhs.mask)
+        // } else {
+        //     lhs.match_data.cmp(&rhs.match_data)
+        // }
+
+        match (lhs.match_data.cmp(&rhs.match_data), lhs.mask.cmp(&rhs.mask)) {
+            (Ordering::Less, _) => Ordering::Greater,
+            (Ordering::Greater, _) => Ordering::Less,
+            (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
+            (Ordering::Equal, Ordering::Greater) => Ordering::Less,
+            (Ordering::Equal, Ordering::Less) => Ordering::Greater,
+        }
+    }
 }
 
 pub struct FormatB {
@@ -1020,13 +1045,18 @@ impl FormatCI {
     }
     pub fn imm_c_addi16sp(&self) -> isize {
         let nzimm9 = self.imm12 & 0b1;
+
         let nzimm5 = self.imm2_6 & 0b1;
         let nzimm8_7 = (self.imm2_6 >> 1) & 0b11;
         let nzimm6 = (self.imm2_6 >> 3) & 0b1;
-        let nzimm4_3 = (self.imm2_6 >> 4) & 0b11;
+        let nzimm4 = (self.imm2_6 >> 4) & 0b1;
 
-        let nzimm =
-            (nzimm9 << 9) | (nzimm8_7 << 7) | (nzimm6 << 6) | (nzimm5 << 5) | nzimm4_3 | 0b00;
+        let nzimm = (nzimm9 << 9)
+            | (nzimm8_7 << 7)
+            | (nzimm6 << 6)
+            | (nzimm5 << 5)
+            | (nzimm4 << 4)
+            | 0b0000;
 
         sign_extended(nzimm as isize, 10)
     }
@@ -1046,8 +1076,8 @@ pub struct FormatCSS {
 impl FormatCSS {
     pub fn new(word: u32) -> FormatCSS {
         FormatCSS {
-            rs2: ((word >> 2) & 0x1f) as usize,      // [6:2]
-            imm7_12: ((word >> 12) & 0x3f) as usize, // [12:7]
+            rs2: ((word >> 2) & 0x1f) as usize,     // [6:2]
+            imm7_12: ((word >> 7) & 0x3f) as usize, // [12:7]
         }
     }
 
@@ -1086,7 +1116,7 @@ impl FormatCIW {
     pub fn new(word: u32) -> FormatCIW {
         FormatCIW {
             rd_c: ((word >> 2) & 0b111) as usize,   // [4:2]
-            imm5_12: ((word >> 2) & 0x3f) as usize, // [6:2]
+            imm5_12: ((word >> 5) & 0xff) as usize, // [6:2]
         }
     }
 
@@ -1226,7 +1256,11 @@ impl FormatCA {
         self.rs2_c + 8
     }
 
-    pub fn rd_rs1(&self) -> usize {
+    pub fn rs1(&self) -> usize {
+        self.rd_rs1_c + 8
+    }
+
+    pub fn rd(&self) -> usize {
         self.rd_rs1_c + 8
     }
 }
@@ -1283,7 +1317,7 @@ impl FormatCB {
         self.imm_c_srli()
     }
 
-    pub fn imm_c_addi(&self) -> isize {
+    pub fn imm_c_andi(&self) -> isize {
         sign_extended(self.imm_c_srli() as isize, 6)
     }
 }
@@ -1461,4 +1495,8 @@ pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
 pub fn check_aligned(addr: u64, len: u64) -> bool {
     // assert!(addr & (len - 1) == 0, "bus address not aligned");
     addr & (len - 1) == 0
+}
+
+pub fn is_compressed_instruction(inst: u32) -> bool {
+    inst & 0b11 != 0b11
 }

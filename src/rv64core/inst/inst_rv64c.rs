@@ -1,6 +1,6 @@
 use crate::rv64core::{inst::inst_base::*, traptype::TrapType};
 
-#[cfg(feature = "rv_debug_trace")]
+#[cfg(feature = "rvc_debug_trace")]
 use crate::trace::traces::TraceType;
 // https://stackoverflow.com/questions/50241218/risc-v-compressed-instructions-can-compiler-be-forced-to-align-32bit-instructio
 #[allow(unused_variables)]
@@ -157,7 +157,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         name: "c.sd",
         operation: |cpu, inst, pc| {
             let f = FormatCS::new(inst);
-            let imm = f.imm_c_sw() as u64;
+            let imm = f.imm_c_sd() as u64;
             let rs2 = cpu.gpr.read(f.rs2() as u64);
             let rs1 = cpu.gpr.read(f.rs1() as u64);
             let mem_addr = rs1.wrapping_add(imm);
@@ -183,7 +183,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
 
             // todo! check align
             let next_pc = cpu.pc.wrapping_add(imm as u64);
-            #[cfg(feature = "rv_debug_trace")]
+            #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {
                 if let Some(sender) = &cpu.trace_sender {
                     sender.send(TraceType::Call(pc, next_pc)).unwrap();
@@ -193,26 +193,26 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             Ok(())
         },
     },
-    Instruction {
-        mask: MASK_C_JAL,
-        match_data: MATCH_C_JAL,
-        name: "c.jal",
-        operation: |cpu, inst, pc| {
-            let f = FormatCJ::new(inst);
-            let imm = f.imm_c_jal() as i64;
-            panic!("c.jal is rv32 only");
-            // todo! check align
-            let next_pc = cpu.pc.wrapping_add(imm as u64);
-            #[cfg(feature = "rv_debug_trace")]
-            if f.is_call() {
-                if let Some(sender) = &cpu.trace_sender {
-                    sender.send(TraceType::Call(pc, next_pc)).unwrap();
-                };
-            };
-            cpu.npc = next_pc;
-            Ok(())
-        },
-    },
+    // Instruction {
+    //     mask: MASK_C_JAL,
+    //     match_data: MATCH_C_JAL,
+    //     name: "c.jal",
+    //     operation: |cpu, inst, pc| {
+    //         let f = FormatCJ::new(inst);
+    //         let imm = f.imm_c_jal() as i64;
+    //         panic!("c.jal is rv32 only");
+    //         // todo! check align
+    //         let next_pc = cpu.pc.wrapping_add(imm as u64);
+    //         #[cfg(feature = "rvc_debug_trace")]
+    //         if f.is_call() {
+    //             if let Some(sender) = &cpu.trace_sender {
+    //                 sender.send(TraceType::Call(pc, next_pc)).unwrap();
+    //             };
+    //         };
+    //         cpu.npc = next_pc;
+    //         Ok(())
+    //     },
+    // },
     Instruction {
         mask: MASK_C_JR,
         match_data: MATCH_C_JR,
@@ -223,7 +223,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
 
             // todo! check align
             let next_pc = rs1_data;
-            #[cfg(feature = "rv_debug_trace")]
+            #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {
                 if let Some(sender) = &cpu.trace_sender {
                     sender.send(TraceType::Call(pc, next_pc)).unwrap();
@@ -244,7 +244,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let wdata = pc.wrapping_add(2);
             // todo! check align
             let next_pc = rs1_data;
-            #[cfg(feature = "rv_debug_trace")]
+            #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {
                 if let Some(sender) = &cpu.trace_sender {
                     sender.send(TraceType::Call(pc, next_pc)).unwrap();
@@ -359,10 +359,13 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         name: "c.addi16sp",
         operation: |cpu, inst, pc| {
             let f = FormatCI::new(inst);
-            let imm = f.imm_c_addi16sp() as i64 as u64;
+            let imm = f.imm_c_addi16sp() as i64;
             let rd = 2;
-            let wb = cpu.gpr.read(2) + imm;
-            cpu.gpr.write(rd, wb);
+            let rd_data = cpu.gpr.read(rd) as i64;
+            
+            let wb = rd_data.wrapping_add(imm);
+
+            cpu.gpr.write(rd, wb as u64);
             Ok(())
         },
     },
@@ -372,10 +375,13 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         name: "c.addi4spn",
         operation: |cpu, inst, pc| {
             let f = FormatCIW::new(inst);
-            let imm = f.imm_c_addi4spn() as u64;
+            let imm = f.imm_c_addi4spn() as u64 as i64;
+            let x2_data = cpu.gpr.read(2) as i64;
+
             let rd: u64 = f.rd() as u64;
-            let wb: u64 = cpu.gpr.read(2) + imm;
-            cpu.gpr.write(rd, wb);
+
+            let wb = x2_data.wrapping_add(imm);
+            cpu.gpr.write(rd, wb as u64);
             Ok(())
         },
     },
@@ -425,16 +431,16 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         },
     },
     Instruction {
-        mask: MASK_C_ADDI,
-        match_data: MATCH_C_ADDI,
-        name: "c.addi",
+        mask: MASK_C_ANDI,
+        match_data: MATCH_C_ANDI,
+        name: "c.andi",
         operation: |cpu, inst, pc| {
             let f = FormatCB::new(inst);
-            let imm = f.imm_c_addi() as i64;
-            let rd = f.rd() as u64;
+            let imm = f.imm_c_andi() as i64;
+            let rd: u64 = f.rd() as u64;
             let rd_data = cpu.gpr.read(rd) as i64;
 
-            let wb = rd_data.wrapping_add(imm);
+            let wb = rd_data & imm;
             cpu.gpr.write(rd, wb as u64);
             Ok(())
         },
@@ -469,7 +475,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rs2_data = cpu.gpr.read(rs2) as i64;
             let rd_data = cpu.gpr.read(rd) as i64;
 
-            let wb = rs2_data + rd_data;
+            let wb = rs2_data.wrapping_add(rd_data);
             cpu.gpr.write(rd, wb as u64);
             Ok(())
         },
@@ -479,7 +485,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_AND,
         name: "c.and",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -497,7 +503,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_OR,
         name: "c.or",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -515,7 +521,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_XOR,
         name: "c.xor",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -533,7 +539,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_SUB,
         name: "c.sub",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -541,7 +547,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rs2_data = cpu.gpr.read(rs2) as i64;
             let rd_data = cpu.gpr.read(rd) as i64;
 
-            let wb = rs2_data - rd_data;
+            let wb = rd_data.wrapping_sub(rs2_data);
             cpu.gpr.write(rd, wb as u64);
             Ok(())
         },
@@ -551,7 +557,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_ADDW,
         name: "c.addw",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -569,7 +575,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_SUBW,
         name: "c.subw",
         operation: |cpu, inst, pc| {
-            let f = FormatCR::new(inst);
+            let f = FormatCA::new(inst);
 
             let rd: u64 = f.rd() as u64;
             let rs2 = f.rs2() as u64;
@@ -577,7 +583,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rs2_data = cpu.gpr.read(rs2) as i64;
             let rd_data = cpu.gpr.read(rd) as i64;
 
-            let wb = rs2_data.wrapping_sub(rd_data) as i32;
+            let wb = rd_data.wrapping_sub(rs2_data) as i32;
             cpu.gpr.write(rd, wb as i64 as u64);
             Ok(())
         },
@@ -591,7 +597,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
     Instruction {
         mask: MASK_C_EBREAK,
         match_data: MATCH_C_EBREAK,
-        name: "c.nop",
+        name: "c.ebreak",
         operation: |cpu, inst, pc| {
             #[cfg(feature = "support_am")]
             cpu.halt();

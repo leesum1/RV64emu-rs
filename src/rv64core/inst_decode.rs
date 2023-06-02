@@ -2,8 +2,8 @@ use hashbrown::HashMap;
 
 use crate::rv64core::{
     inst::inst_base::Instruction, inst::inst_rv64a::INSTRUCTIONS_A,
-    inst::inst_rv64i::INSTRUCTIONS_I, inst::inst_rv64m::INSTRUCTIONS_M,
-    inst::inst_rv64z::INSTRUCTIONS_Z,
+    inst::inst_rv64c::INSTRUCTIONS_C, inst::inst_rv64i::INSTRUCTIONS_I,
+    inst::inst_rv64m::INSTRUCTIONS_M, inst::inst_rv64z::INSTRUCTIONS_Z,
 };
 
 pub struct InstDecode {
@@ -18,6 +18,10 @@ impl InstDecode {
         i_vec.extend(INSTRUCTIONS_M);
         i_vec.extend(INSTRUCTIONS_A);
         i_vec.extend(INSTRUCTIONS_Z);
+        #[cfg(feature = "rv_c")]
+        i_vec.extend(INSTRUCTIONS_C);
+
+        i_vec.sort_by(|a: &&Instruction, b: &&Instruction| Instruction::cmp(a, b));
 
         InstDecode {
             inst_vec: i_vec,

@@ -1,5 +1,7 @@
+use capstone::arch::riscv::ArchExtraMode;
 use capstone::prelude::*;
 
+use crate::rv64core::inst::inst_base::is_compressed_instruction;
 use crate::rv64core::traptype::TrapType;
 use std::fs::File;
 use std::io::Write;
@@ -12,9 +14,11 @@ unsafe impl Send for Itrace {}
 
 impl Itrace {
     pub fn new(hart_id: usize) -> Self {
+        let mode_vec = vec![ArchExtraMode::RiscVC];
         let cs_riscv = Capstone::new()
             .riscv()
             .mode(arch::riscv::ArchMode::RiscV64)
+            .extra_mode(mode_vec.into_iter())
             .detail(false)
             .build()
             .unwrap();
@@ -33,6 +37,11 @@ impl Itrace {
         self.itrace_log(&insns);
     }
     fn cs_disassemble_bytes(&mut self, pc: u64, inst: u32) -> String {
+        let mut inst = inst;
+        if is_compressed_instruction(inst) {
+            inst |= 0xffff_0000;
+        }
+
         let code = inst.to_le_bytes();
         let insns = self.cs_disasm.disasm_all(&code, pc).unwrap();
         insns.to_string()

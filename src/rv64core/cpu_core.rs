@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use log::warn;
+use log::{warn, info};
 
 use crate::{
     difftest::difftest_trait::Difftest,
@@ -27,7 +27,7 @@ use crate::{
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
 
-use super::{inst::inst_base::check_aligned, mmu::mmu::Mmu};
+use super::{inst::inst_base::{check_aligned, is_compressed_instruction}, mmu::mmu::Mmu};
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -148,7 +148,8 @@ impl CpuCore {
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
-
+        
+        assert!(self.pc % 2 == 0, "pc must be aligned to 2");
         // first lookup icache
         // if icache hit ,than return,
         // else load inst from mem and push into icache
@@ -192,7 +193,7 @@ impl CpuCore {
     }
 
     fn advance_pc(&mut self, inst: u32) {
-        let is_rvc = inst & 0x3 != 0x3;
+        let is_rvc = is_compressed_instruction(inst);
         self.npc = self.pc.wrapping_add(if is_rvc { 2 } else { 4 });
     }
 
@@ -412,6 +413,7 @@ impl CpuCore {
         let sig_start = self.gpr.read_by_name("a1");
         let sig_end = self.gpr.read_by_name("a2");
 
+        info!("sig_start: {:#x},sig_end: {:#x}", sig_start, sig_end);
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {

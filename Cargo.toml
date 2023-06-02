@@ -24,12 +24,15 @@ simple_logger = "4.1.0"
 
 [features]
 # default = ["rv_debug_trace","support_am"]
-default = ["support_am"]
+# default = ["support_am","rv_c","rv_debug_trace"]
+default = ["support_am","rv_c"]
+
 # default = ["device_sdl2"]
 # default = ["caches"]
 device_sdl2 = ["dep:sdl2"]
 rv_debug_trace = ["dep:capstone"]
 caches = ["inst_cache", "decode_cache"]
+rv_c = []
 inst_cache = []
 decode_cache = []
 support_am = []
