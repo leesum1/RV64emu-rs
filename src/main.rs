@@ -96,6 +96,7 @@ fn main() {
         .init()
         .unwrap();
     let args = Args::parse();
+    let signature_file = args.signature;
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
 
@@ -319,6 +320,9 @@ fn main() {
             cycle += 5000;
         }
         println!("total:{cycle}");
+        if let Some(sig_path) = signature_file {
+            hart_vec[0].dump_signature(&sig_path);
+        }
         // send signal to stop the trace thread
         signal_term_cpucore.store(true, Ordering::Relaxed);
     });
