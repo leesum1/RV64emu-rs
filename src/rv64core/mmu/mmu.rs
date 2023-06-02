@@ -1,8 +1,9 @@
 use std::{
-    cell::Cell,
     rc::Rc,
     sync::{Arc, Mutex},
 };
+
+use core::cell::Cell;
 
 use crate::{
     rv64core::bus::Bus,
@@ -64,7 +65,6 @@ impl Mmu {
 
     // todo! check privilege mode
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
-
         assert_ne!(self.mmu_effective_priv, PrivilegeLevels::Machine); // check privilege mode
                                                                        // self.pagesize = 4096; // 2 ^ 12
         self.level = self.satp_mode.get_levels() as i8;
