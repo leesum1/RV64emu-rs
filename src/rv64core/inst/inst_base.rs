@@ -922,8 +922,8 @@ pub fn parse_format_csr(word: u32) -> FormatCSR {
 }
 
 pub struct FormatCR {
-    pub rd_rs1: u64,
-    pub rs2: u64,
+    rd_rs1: u64,
+    rs2: u64,
 }
 impl FormatCR {
     pub fn new(word: u32) -> FormatCR {
@@ -931,6 +931,15 @@ impl FormatCR {
             rd_rs1: ((word >> 7) & 0x1f) as u64, // [11:7]
             rs2: ((word >> 2) & 0x1f) as u64,    // [6:2]
         }
+    }
+    pub fn rd(&self) -> u64 {
+        self.rd_rs1
+    }
+    pub fn rs1(&self) -> u64 {
+        self.rd_rs1
+    }
+    pub fn rs2(&self) -> u64 {
+        self.rs2
     }
 }
 
@@ -1223,21 +1232,25 @@ impl FormatCA {
 }
 
 pub struct FormatCB {
-    rs1_c: usize,
+    rs1_rd_c: usize,
     offset2_6: u8,
     offset10_12: u8,
 }
 impl FormatCB {
     pub fn new(word: u32) -> FormatCB {
         FormatCB {
-            rs1_c: ((word >> 7) & 0b111) as usize,     // [9:7]
+            rs1_rd_c: ((word >> 7) & 0b111) as usize,  // [9:7]
             offset2_6: ((word >> 2) & 0b11111) as u8,  // [6:2]
             offset10_12: ((word >> 10) & 0b111) as u8, // [12:10]
         }
     }
 
     pub fn rs1(&self) -> usize {
-        self.rs1_c + 8
+        self.rs1_rd_c + 8
+    }
+
+    pub fn rd(&self) -> usize {
+        self.rs1_rd_c + 8
     }
 
     pub fn imm_c_beqz(&self) -> isize {
@@ -1273,7 +1286,6 @@ impl FormatCB {
     pub fn imm_c_addi(&self) -> isize {
         sign_extended(self.imm_c_srli() as isize, 6)
     }
-    
 }
 
 pub struct FormatCJ {
@@ -1308,10 +1320,6 @@ impl FormatCJ {
             | 0b0;
 
         sign_extended(offset as isize, 12)
-        // match offset11 == 1 {
-        //     true => (offset as isize) | ((-1 as isize) << 12),
-        //     false => offset as isize,
-        // }
     }
 
     pub fn imm_c_jal(&self) -> isize {
@@ -1393,15 +1401,6 @@ impl PrivilegeLevels {
 pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;
 pub const MASK_NONE: u64 = !MASK_ALL;
 
-pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
-    (addr >= start) && (addr < (start + len))
-}
-
-pub fn check_aligned(addr: u64, len: u64) -> bool {
-    // assert!(addr & (len - 1) == 0, "bus address not aligned");
-    addr & (len - 1) == 0
-}
-
 // see spike fesvr/device.h class command_t
 // see https://github.com/riscv-software-src/riscv-isa-sim/issues/364
 // Bits 63:56 indicate the "device".
@@ -1451,6 +1450,15 @@ impl FesvrCmd {
 }
 
 pub fn sign_extended(x: isize, nbits: u32) -> isize {
-    let notherbits = size_of_val(&x) as u32 * 8 - nbits;
+    let notherbits = isize::BITS - nbits;
     x.wrapping_shl(notherbits).wrapping_shr(notherbits)
+}
+
+pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
+    (addr >= start) && (addr < (start + len))
+}
+
+pub fn check_aligned(addr: u64, len: u64) -> bool {
+    // assert!(addr & (len - 1) == 0, "bus address not aligned");
+    addr & (len - 1) == 0
 }

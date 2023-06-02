@@ -1,5 +1,6 @@
+use core::cell::Cell;
+
 use std::{
-    cell::Cell,
     fs::File,
     io::Write,
     rc::Rc,
@@ -26,7 +27,7 @@ use crate::{
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
 
-use super::mmu::mmu::Mmu;
+use super::{inst::inst_base::check_aligned, mmu::mmu::Mmu};
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -130,9 +131,23 @@ pub struct CpuCore {
 }
 unsafe impl Send for CpuCore {}
 impl CpuCore {
+    fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
+        // data_bytes will contain the bytes read from memory.
+        let mut data_bytes = 0_u32.to_le_bytes();
+        // We read two bytes at a time, so we step by 2.
+        for i in (0..size).step_by(2) {
+            // Read a byte from memory.
+            let byte = self.read(addr + i, 2, AccessType::Fetch(addr + i))?;
+            // Convert the byte to a byte array.
+            let src = byte.to_le_bytes();
+            // Copy the byte into data_bytes.
+            data_bytes[(i as usize)..(i as usize + 2)].copy_from_slice(&src[..2]);
+        }
+        // Convert data_bytes to a u64 and return it.
+        Ok(u32::from_le_bytes(data_bytes) as u64)
+    }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
-        self.npc += 4;
 
         // first lookup icache
         // if icache hit ,than return,
@@ -143,16 +158,14 @@ impl CpuCore {
                 self.cpu_icache.insert_inst(self.pc, icache_inst);
                 Ok(icache_inst as u64)
             }
-            None => self.read(self.pc, 4, AccessType::Fetch(self.pc)),
+            None => self.fetch_from_mem(self.pc, 4),
         }
 
         #[cfg(not(feature = "inst_cache"))]
-        self.read(self.pc, 4, AccessType::Fetch(self.pc))
+        self.fetch_from_mem(self.pc, 4)
     }
 
     pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
-
-        
         let inst_op = if cfg!(feature = "decode_cache") {
             let decode_cache_hit = self.decode.fast_path(inst);
             match decode_cache_hit {
@@ -178,6 +191,11 @@ impl CpuCore {
         }
     }
 
+    fn advance_pc(&mut self, inst: u32) {
+        let is_rvc = inst & 0x3 != 0x3;
+        self.npc = self.pc.wrapping_add(if is_rvc { 2 } else { 4 });
+    }
+
     pub fn execute(&mut self, num: usize) {
         for _ in 0..num {
             match self.cpu_state {
@@ -189,7 +207,10 @@ impl CpuCore {
                     let fetch_ret = self.inst_fetch();
                     let exe_ret = match fetch_ret {
                         // op ret
-                        Ok(inst_val) => self.step(inst_val as u32),
+                        Ok(inst_val) => {
+                            self.advance_pc(inst_val as u32);
+                            self.step(inst_val as u32)
+                        }
                         // fetch fault
                         Err(trap_type) => Err(trap_type),
                     };

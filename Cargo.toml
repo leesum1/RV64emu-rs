@@ -23,8 +23,8 @@ simple_logger = "4.1.0"
 
 
 [features]
-default = ["rv_debug_trace","support_am"]
-# default = ["support_am"]
+# default = ["rv_debug_trace","support_am"]
+default = ["support_am"]
 # default = ["device_sdl2"]
 # default = ["caches"]
 device_sdl2 = ["dep:sdl2"]
