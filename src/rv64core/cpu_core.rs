@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use log::{warn, info};
+use log::{info, warn};
 
 use crate::{
     difftest::difftest_trait::Difftest,
@@ -27,7 +27,10 @@ use crate::{
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
 
-use super::{inst::inst_base::{check_aligned, is_compressed_instruction}, mmu::mmu::Mmu};
+use super::{
+    inst::inst_base::is_compressed_instruction,
+    mmu::cpu_mmu::Mmu,
+};
 
 #[derive(PartialEq)]
 pub enum CpuState {
@@ -132,6 +135,10 @@ pub struct CpuCore {
 unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
+        // if check_aligned(addr, 4) {
+        //     return self.read(addr, 4, AccessType::Fetch(addr));
+        // }
+
         // data_bytes will contain the bytes read from memory.
         let mut data_bytes = 0_u32.to_le_bytes();
         // We read two bytes at a time, so we step by 2.
@@ -139,16 +146,17 @@ impl CpuCore {
             // Read a byte from memory.
             let byte = self.read(addr + i, 2, AccessType::Fetch(addr + i))?;
             // Convert the byte to a byte array.
-            let src = byte.to_le_bytes();
+            let src = u16::to_le_bytes(byte as u16);
+            let dest_range = i as usize..(i + 2) as usize;
             // Copy the byte into data_bytes.
-            data_bytes[(i as usize)..(i as usize + 2)].copy_from_slice(&src[..2]);
+            data_bytes[dest_range].copy_from_slice(&src[..]);
         }
         // Convert data_bytes to a u64 and return it.
         Ok(u32::from_le_bytes(data_bytes) as u64)
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
-        
+
         assert!(self.pc % 2 == 0, "pc must be aligned to 2");
         // first lookup icache
         // if icache hit ,than return,

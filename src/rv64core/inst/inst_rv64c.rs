@@ -16,7 +16,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let x2 = cpu.gpr.read(2);
             let mem_addr = x2.wrapping_add(imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load(mem_addr as u64)) {
+            let mem_data = match cpu.read(mem_addr, 4, AccessType::Load(mem_addr)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -36,7 +36,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let x2 = cpu.gpr.read(2);
             let mem_addr = x2.wrapping_add(imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 8, AccessType::Load(mem_addr as u64)) {
+            let mem_data = match cpu.read(mem_addr, 8, AccessType::Load(mem_addr)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -57,10 +57,10 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let mem_addr = x2.wrapping_add(imm);
 
             match cpu.write(
-                mem_addr as u64,
-                rs2 as u64,
+                mem_addr,
+                rs2,
                 4,
-                AccessType::Store(mem_addr as u64),
+                AccessType::Store(mem_addr),
             ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
@@ -79,10 +79,10 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let mem_addr = x2.wrapping_add(imm);
 
             match cpu.write(
-                mem_addr as u64,
-                rs2 as u64,
+                mem_addr,
+                rs2,
                 8,
-                AccessType::Store(mem_addr as u64),
+                AccessType::Store(mem_addr),
             ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
@@ -100,7 +100,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rd = f.rd() as u64;
             let mem_addr = rs1_data.wrapping_add(imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 4, AccessType::Load(mem_addr as u64)) {
+            let mem_data = match cpu.read(mem_addr, 4, AccessType::Load(mem_addr)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -120,7 +120,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rd = f.rd() as u64;
             let mem_addr = rs1_data.wrapping_add(imm);
 
-            let mem_data = match cpu.read(mem_addr as u64, 8, AccessType::Load(mem_addr as u64)) {
+            let mem_data = match cpu.read(mem_addr, 8, AccessType::Load(mem_addr)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
             };
@@ -141,10 +141,10 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let mem_addr = rs1.wrapping_add(imm);
 
             match cpu.write(
-                mem_addr as u64,
-                rs2 as u64,
+                mem_addr,
+                rs2,
                 4,
-                AccessType::Store(mem_addr as u64),
+                AccessType::Store(mem_addr),
             ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
@@ -163,10 +163,10 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let mem_addr = rs1.wrapping_add(imm);
 
             match cpu.write(
-                mem_addr as u64,
-                rs2 as u64,
+                mem_addr,
+                rs2,
                 8,
-                AccessType::Store(mem_addr as u64),
+                AccessType::Store(mem_addr),
             ) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
@@ -219,7 +219,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         name: "c.jr",
         operation: |cpu, inst, pc| {
             let f = FormatCR::new(inst);
-            let rs1_data = cpu.gpr.read(f.rs1() as u64);
+            let rs1_data = cpu.gpr.read(f.rs1());
 
             // todo! check align
             let next_pc = rs1_data;
@@ -240,7 +240,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         operation: |cpu, inst, pc| {
             // t = pc+2; pc = x[rs1]; x[1] = t
             let f = FormatCR::new(inst);
-            let rs1_data = cpu.gpr.read(f.rs1() as u64);
+            let rs1_data = cpu.gpr.read(f.rs1());
             let wdata = pc.wrapping_add(2);
             // todo! check align
             let next_pc = rs1_data;
@@ -452,13 +452,13 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         operation: |cpu, inst, pc| {
             let f = FormatCR::new(inst);
 
-            let rd = f.rd() as u64;
-            let rs2 = f.rs2() as u64;
+            let rd = f.rd();
+            let rs2 = f.rs2();
 
             let rs2_data = cpu.gpr.read(rs2);
 
             let wb = rs2_data;
-            cpu.gpr.write(rd, wb as u64);
+            cpu.gpr.write(rd, wb);
             Ok(())
         },
     },
@@ -469,8 +469,8 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         operation: |cpu, inst, pc| {
             let f = FormatCR::new(inst);
 
-            let rd: u64 = f.rd() as u64;
-            let rs2 = f.rs2() as u64;
+            let rd: u64 = f.rd();
+            let rs2 = f.rs2();
 
             let rs2_data = cpu.gpr.read(rs2) as i64;
             let rd_data = cpu.gpr.read(rd) as i64;
@@ -494,7 +494,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rd_data = cpu.gpr.read(rd);
 
             let wb = rs2_data & rd_data;
-            cpu.gpr.write(rd, wb as u64);
+            cpu.gpr.write(rd, wb);
             Ok(())
         },
     },
@@ -512,7 +512,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rd_data = cpu.gpr.read(rd);
 
             let wb = rs2_data | rd_data;
-            cpu.gpr.write(rd, wb as u64);
+            cpu.gpr.write(rd, wb);
             Ok(())
         },
     },
@@ -530,7 +530,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rd_data = cpu.gpr.read(rd);
 
             let wb = rs2_data ^ rd_data;
-            cpu.gpr.write(rd, wb as u64);
+            cpu.gpr.write(rd, wb);
             Ok(())
         },
     },

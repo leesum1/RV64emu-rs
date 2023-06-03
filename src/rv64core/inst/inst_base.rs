@@ -762,12 +762,16 @@ pub struct Instruction {
 // };
 
 impl Instruction {
-    pub fn cmp(lhs: &Instruction, rhs: &Instruction) -> Ordering {
-        // if lhs.match_data == rhs.match_data {
-        //     lhs.mask.cmp(&rhs.mask)
-        // } else {
-        //     lhs.match_data.cmp(&rhs.match_data)
-        // }
+    /**
+     * Compare two instructions for sorting.
+     * The comparison is done by comparing the match_data first, then the mask.
+     * This is done to ensure that the most specific match is found first.
+     * The mask is used to differentiate between instructions with the same match_data.
+     * Because some instructions have the same match_data, but different masks.
+     * The priority is given to the instruction (same match_data) with the biggest mask.
+     *
+     */
+    pub fn inst_cmp(lhs: &Instruction, rhs: &Instruction) -> Ordering {
 
         match (lhs.match_data.cmp(&rhs.match_data), lhs.mask.cmp(&rhs.mask)) {
             (Ordering::Less, _) => Ordering::Greater,
@@ -992,21 +996,21 @@ impl FormatCI {
         let offset5 = self.imm12 & 0b1;
         let offset4_2 = (self.imm2_6 >> 2) & 0b111;
         let offset7_6 = self.imm2_6 & 0b11;
-        (offset7_6 << 6) | (offset5 << 5) | (offset4_2 << 2) | 0b00
+        (offset7_6 << 6) | (offset5 << 5) | (offset4_2 << 2)
     }
 
     pub fn imm_c_ldsp(&self) -> usize {
         let offset5 = self.imm12 & 0b1;
         let offset4_3 = (self.imm2_6 >> 3) & 0b11;
         let offset8_6 = (self.imm2_6) & 0b111;
-        (offset8_6 << 6) | (offset5 << 5) | (offset4_3 << 3) | 0b000
+        (offset8_6 << 6) | (offset5 << 5) | (offset4_3 << 3)
     }
 
     pub fn imm_c_lqsp(&self) -> usize {
         let offset5 = self.imm12 & 0b1;
         let offset4 = (self.imm2_6 >> 4) & 0b1;
         let offset9_6 = (self.imm2_6) & 0b1111;
-        (offset9_6 << 6) | (offset5 << 5) | (offset4 << 4) | 0b0000
+        (offset9_6 << 6) | (offset5 << 5) | (offset4 << 4)
     }
 
     pub fn imm_c_flwsp(&self) -> usize {
@@ -1055,8 +1059,7 @@ impl FormatCI {
             | (nzimm8_7 << 7)
             | (nzimm6 << 6)
             | (nzimm5 << 5)
-            | (nzimm4 << 4)
-            | 0b0000;
+            | (nzimm4 << 4);
 
         sign_extended(nzimm as isize, 10)
     }
@@ -1087,18 +1090,18 @@ impl FormatCSS {
     pub fn imm_c_swsp(&self) -> usize {
         let offset7_6: usize = self.imm7_12 & 0b11;
         let offset5_2: usize = (self.imm7_12 >> 2) & 0b1111;
-        (offset7_6 << 6) | (offset5_2 << 2) | 0b00
+        (offset7_6 << 6) | (offset5_2 << 2)
     }
 
     pub fn imm_c_sdsp(&self) -> usize {
         let offset8_6: usize = self.imm7_12 & 0b111;
         let offset5_3: usize = (self.imm7_12 >> 3) & 0b111;
-        (offset8_6 << 6) | (offset5_3 << 3) | 0b000
+        (offset8_6 << 6) | (offset5_3 << 3)
     }
     pub fn imm_c_sqsp(&self) -> usize {
         let offset9_6: usize = self.imm7_12 & 0b1111;
         let offset5_4: usize = (self.imm7_12 >> 4) & 0b11;
-        (offset9_6 << 6) | (offset5_4 << 4) | 0b0000
+        (offset9_6 << 6) | (offset5_4 << 4)
     }
     pub fn imm_c_fswsp(&self) -> usize {
         self.imm_c_swsp()
@@ -1130,8 +1133,8 @@ impl FormatCIW {
         let nzuimm9_6 = (self.imm5_12 >> 2) & 0b1111;
         let nzuimm5_4 = (self.imm5_12 >> 6) & 0b11;
 
-        let nzuimm = (nzuimm9_6 << 6) | (nzuimm5_4 << 4) | (nzuimm3 << 3) | (nzuimm2 << 2) | 0b00;
-        nzuimm
+        
+        (nzuimm9_6 << 6) | (nzuimm5_4 << 4) | (nzuimm3 << 3) | (nzuimm2 << 2)
     }
 }
 
@@ -1163,19 +1166,19 @@ impl FormatCL {
         let offset6 = (self.imm5_6 & 0b1) as usize;
         let offset2 = ((self.imm5_6 >> 1) & 0b1) as usize;
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
-        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2) | 0b00
+        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2)
     }
     pub fn imm_c_ld(&self) -> usize {
         let offset7_6 = (self.imm5_6 & 0b11) as usize;
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
-        (offset7_6 << 6) | (offset5_3 << 3) | 0b000
+        (offset7_6 << 6) | (offset5_3 << 3)
     }
     pub fn imm_c_lq(&self) -> usize {
         let offset8 = (self.imm10_12 & 0b1) as usize;
         let offset7_6 = (self.imm5_6 & 0b11) as usize;
         let offset5_4 = ((self.imm10_12 >> 1) & 0b11) as usize;
 
-        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4) | 0b0000
+        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4)
     }
 
     pub fn imm_c_flw(&self) -> usize {
@@ -1212,23 +1215,23 @@ impl FormatCS {
     }
 
     pub fn imm_c_sw(&self) -> usize {
-        let offset6 = (self.imm5_6 & 0b1) as usize;
-        let offset2 = ((self.imm5_6 >> 1) & 0b1) as usize;
+        let offset6 = (self.imm5_6 & 0b1);
+        let offset2 = ((self.imm5_6 >> 1) & 0b1);
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
-        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2) | 0b00
+        (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2)
     }
 
     pub fn imm_c_sd(&self) -> usize {
-        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset7_6 = (self.imm5_6 & 0b11);
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
-        (offset7_6 << 6) | (offset5_3 << 3) | 0b000
+        (offset7_6 << 6) | (offset5_3 << 3)
     }
     pub fn imm_c_sq(&self) -> usize {
         let offset8 = (self.imm10_12 & 0b1) as usize;
-        let offset7_6 = (self.imm5_6 & 0b11) as usize;
+        let offset7_6 = (self.imm5_6 & 0b11);
         let offset5_4 = ((self.imm10_12 >> 1) & 0b11) as usize;
 
-        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4) | 0b0000
+        (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4)
     }
 
     pub fn imm_c_fsw(&self) -> usize {
@@ -1298,8 +1301,7 @@ impl FormatCB {
             | (offset7_6 << 6)
             | (offset5 << 5)
             | (offset4_3 << 3)
-            | (offset2_1 << 1)
-            | 0b0;
+            | (offset2_1 << 1);
 
         sign_extended(offset as isize, 9)
     }
@@ -1350,8 +1352,7 @@ impl FormatCJ {
             | (offset6 << 6)
             | (offset5 << 5)
             | (offset4 << 4)
-            | (offest3_1 << 1)
-            | 0b0;
+            | (offest3_1 << 1);
 
         sign_extended(offset as isize, 12)
     }

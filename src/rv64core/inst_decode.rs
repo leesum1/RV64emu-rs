@@ -21,7 +21,7 @@ impl InstDecode {
         #[cfg(feature = "rv_c")]
         i_vec.extend(INSTRUCTIONS_C);
 
-        i_vec.sort_by(|a: &&Instruction, b: &&Instruction| Instruction::cmp(a, b));
+        i_vec.sort_by(|a: &&Instruction, b: &&Instruction| Instruction::inst_cmp(a, b));
 
         InstDecode {
             inst_vec: i_vec,

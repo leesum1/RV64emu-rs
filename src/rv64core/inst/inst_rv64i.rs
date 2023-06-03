@@ -1,4 +1,4 @@
-use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
+use crate::{rv64core::inst::inst_base::*};
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;

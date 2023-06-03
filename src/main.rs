@@ -103,7 +103,7 @@ fn main() {
     #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
     #[allow(unused_variables)]
-    let signal_term_uart = signal_term.clone();
+    let signal_term_uart = signal_term;
 
     let bus_u: Arc<Mutex<Bus>> = Arc::new(Mutex::new(Bus::new()));
 
@@ -185,7 +185,7 @@ fn main() {
     });
 
     // device sifive_uart
-    let device_sifive_uart = DeviceSifiveUart::new(uart_putc_tx.clone(), uart_getc_rx.clone());
+    let device_sifive_uart = DeviceSifiveUart::new(uart_putc_tx, uart_getc_rx);
 
     bus_u
         .lock()
@@ -218,10 +218,7 @@ fn main() {
     // show device address map
     debug!("{0}", bus_u.lock().unwrap());
 
-    let hart_num = match args.num_harts {
-        Some(num) => num,
-        None => 1,
-    };
+    let hart_num = args.num_harts.unwrap_or(1);
 
     let boot_pc = if let Some(x) = args.boot_pc.as_ref() {
         u64::from_str_radix(

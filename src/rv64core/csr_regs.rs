@@ -45,6 +45,7 @@ impl CsrRegs {
             .with_i(true)
             .with_m(true)
             .with_a(true)
+            .with_c(true)
             .with_s(true)
             .with_u(true)
             .with_mxl(2); // 64
