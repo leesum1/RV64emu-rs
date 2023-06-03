@@ -1,7 +1,10 @@
-use crate::{rv64core::inst::inst_base::*};
+use crate::rv64core::inst::inst_base::*;
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
+#[cfg(not(feature = "rv_c"))]
+use crate::rv64core::traptype::TrapType;
+
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_I: &[Instruction] = &[
@@ -35,9 +38,8 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
             let wdata = pc.wrapping_add(4);
 
             let next_pc = pc.wrapping_add(f.imm);
-            #[cfg(feature = "rvi")]
+            #[cfg(not(feature = "rv_c"))]
             if !check_aligned(next_pc, 4) {
-                // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
 
@@ -64,9 +66,8 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             let next_pc = (rs1_data.wrapping_add(f.imm as u64)) & !1_u64;
 
-            #[cfg(feature = "rvi")]
+            #[cfg(not(feature = "rv_c"))]
             if !check_aligned(next_pc, 4) {
-                // todo! not clear
                 return Err(TrapType::InstructionAddressMisaligned(next_pc));
             };
 
@@ -97,9 +98,8 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             if rs1 == rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
-                    // todo! not clear
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
@@ -119,9 +119,8 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             if rs1 != rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
-                    // todo! not clear
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
                 cpu.npc = next_pc;
@@ -141,7 +140,7 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             if rs1 < rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
@@ -162,7 +161,7 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             if rs1 >= rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
@@ -183,7 +182,7 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
 
             if rs1 < rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }
@@ -203,7 +202,7 @@ pub const INSTRUCTIONS_I: &[Instruction] = &[
             let rs2 = cpu.gpr.read(f.rs2);
             if rs1 >= rs2 {
                 let next_pc = pc.wrapping_add(f.imm);
-                #[cfg(feature = "rvi")]
+                #[cfg(not(feature = "rv_c"))]
                 if !check_aligned(next_pc, 4) {
                     return Err(TrapType::InstructionAddressMisaligned(next_pc));
                 }

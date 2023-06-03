@@ -152,6 +152,11 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             if !require_priv.check_priv(cur_priv) {
                 Err(TrapType::IllegalInstruction(inst.into()))
             } else {
+                
+                // PASS icache-alias.S
+                #[cfg(feature = "inst_cache")]
+                cpu.cpu_icache.clear_inst();
+
                 Ok(())
             }
         },

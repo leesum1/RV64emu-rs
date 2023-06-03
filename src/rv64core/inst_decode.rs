@@ -1,9 +1,15 @@
 use hashbrown::HashMap;
 
+#[cfg(feature = "rv_a")]
+use crate::rv64core::inst::inst_rv64a::INSTRUCTIONS_A;
+#[cfg(feature = "rv_c")]
+use crate::rv64core::inst::inst_rv64c::INSTRUCTIONS_C;
+#[cfg(feature = "rv_m")]
+use crate::rv64core::inst::inst_rv64m::INSTRUCTIONS_M;
+
 use crate::rv64core::{
-    inst::inst_base::Instruction, inst::inst_rv64a::INSTRUCTIONS_A,
-    inst::inst_rv64c::INSTRUCTIONS_C, inst::inst_rv64i::INSTRUCTIONS_I,
-    inst::inst_rv64m::INSTRUCTIONS_M, inst::inst_rv64z::INSTRUCTIONS_Z,
+    inst::inst_base::Instruction, inst::inst_rv64i::INSTRUCTIONS_I,
+    inst::inst_rv64z::INSTRUCTIONS_Z,
 };
 
 pub struct InstDecode {
@@ -15,9 +21,11 @@ impl InstDecode {
     pub fn new() -> Self {
         let mut i_vec = Vec::new();
         i_vec.extend(INSTRUCTIONS_I);
-        i_vec.extend(INSTRUCTIONS_M);
-        i_vec.extend(INSTRUCTIONS_A);
         i_vec.extend(INSTRUCTIONS_Z);
+        #[cfg(feature = "rv_m")]
+        i_vec.extend(INSTRUCTIONS_M);
+        #[cfg(feature = "rv_a")]
+        i_vec.extend(INSTRUCTIONS_A);
         #[cfg(feature = "rv_c")]
         i_vec.extend(INSTRUCTIONS_C);
 

@@ -4,9 +4,9 @@ use hashbrown::HashMap;
 
 use crate::{
     rv64core::csr_regs_define::{
-        CommonCSR, Counter, Csr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg,
-        MidelegIn, Misa, ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn,
-        Xstatus, XstatusIn, Xtvec, XtvecIn,
+        CommonCSR, Counter, Csr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg, MidelegIn, Misa,
+        ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn, Xstatus, XstatusIn,
+        Xtvec, XtvecIn,
     },
     rv64core::inst::inst_base::{
         AccessType, PrivilegeLevels, CSR_CYCLE, CSR_INSTRET, CSR_MARCHID, CSR_MCAUSE,
@@ -41,14 +41,15 @@ pub struct CsrRegs {
 
 impl CsrRegs {
     pub fn new(hart_id: usize) -> Self {
-        let misa_val = Misa::new()
-            .with_i(true)
-            .with_m(true)
-            .with_a(true)
-            .with_c(true)
-            .with_s(true)
-            .with_u(true)
-            .with_mxl(2); // 64
+        let mut misa_val = Misa::new().with_i(true).with_s(true).with_mxl(2); // 64
+
+        #[cfg(feature = "rv_m")]
+        misa_val.set_m(true);
+        #[cfg(feature = "rv_a")]
+        misa_val.set_a(true);
+        #[cfg(feature = "rv_c")]
+        misa_val.set_c(true);
+
         let mstatus_val = XstatusIn::new()
             .with_uxl(misa_val.mxl())
             .with_sxl(misa_val.mxl());
@@ -78,10 +79,6 @@ impl CsrRegs {
         let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_mask.into());
         let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
 
-        // todo!
-        // I don't know why, Linux kernel will set sip.stip = 1,it will cause a trap
-        // I use this mask to fix it
-        // because of bug in handle_interrupt, mstatus is not write back to xstatus!!!!
         let sip_mask = XieIn::new().with_seie(true).with_ssie(true).with_stie(true);
 
         let xip_share = Rc::new(Cell::new(XipIn::new()));

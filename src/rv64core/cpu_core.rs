@@ -28,7 +28,7 @@ use crate::{
 use crate::trace::traces::TraceType;
 
 use super::{
-    inst::inst_base::is_compressed_instruction,
+    inst::inst_base::{check_aligned, is_compressed_instruction},
     mmu::cpu_mmu::Mmu,
 };
 
@@ -135,24 +135,30 @@ pub struct CpuCore {
 unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
-        // if check_aligned(addr, 4) {
-        //     return self.read(addr, 4, AccessType::Fetch(addr));
-        // }
-
-        // data_bytes will contain the bytes read from memory.
-        let mut data_bytes = 0_u32.to_le_bytes();
-        // We read two bytes at a time, so we step by 2.
-        for i in (0..size).step_by(2) {
-            // Read a byte from memory.
-            let byte = self.read(addr + i, 2, AccessType::Fetch(addr + i))?;
-            // Convert the byte to a byte array.
-            let src = u16::to_le_bytes(byte as u16);
-            let dest_range = i as usize..(i + 2) as usize;
-            // Copy the byte into data_bytes.
-            data_bytes[dest_range].copy_from_slice(&src[..]);
+        if check_aligned(addr, 4) {
+            #[warn(clippy::needless_return)]
+            return self.read(addr, size, AccessType::Fetch(addr));
+        } else {
+            #[cfg(not(feature = "rv_c"))]
+            return Err(TrapType::LoadAddressMisaligned(addr));
         }
-        // Convert data_bytes to a u64 and return it.
-        Ok(u32::from_le_bytes(data_bytes) as u64)
+
+        #[cfg(feature = "rv_c")]
+        {
+            // Initialize data_bytes to store the bytes read from memory.
+            let mut data_bytes = 0_u32.to_le_bytes();
+            // Read two bytes at a time from memory and store them in data_bytes.
+            for i in (0..size).step_by(2) {
+                // Read a byte from memory.
+                let byte = self.read(addr + i, 2, AccessType::Fetch(addr + i))?;
+                // Convert the byte to a byte array and copy it into data_bytes.
+                let src = u16::to_le_bytes(byte as u16);
+                let dest_range = i as usize..(i + 2) as usize;
+                data_bytes[dest_range].copy_from_slice(&src[..]);
+            }
+            // Convert data_bytes to a u64 and return it.
+            Ok(u32::from_le_bytes(data_bytes) as u64)
+        }
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
@@ -163,10 +169,7 @@ impl CpuCore {
         // else load inst from mem and push into icache
         #[cfg(feature = "inst_cache")]
         match self.cpu_icache.get_inst(self.pc) {
-            Some(icache_inst) => {
-                self.cpu_icache.insert_inst(self.pc, icache_inst);
-                Ok(icache_inst as u64)
-            }
+            Some(icache_inst) => Ok(icache_inst as u64),
             None => self.fetch_from_mem(self.pc, 4),
         }
 
@@ -217,6 +220,8 @@ impl CpuCore {
                     let exe_ret = match fetch_ret {
                         // op ret
                         Ok(inst_val) => {
+                            #[cfg(feature = "inst_cache")]
+                            self.cpu_icache.insert_inst(self.pc, inst_val as u32);
                             self.advance_pc(inst_val as u32);
                             self.step(inst_val as u32)
                         }
@@ -431,7 +436,8 @@ impl CpuCore {
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
                 }
             },
-        )
+        );
+        info!("dump signature done, file: {}", file_name);
     }
     // for riscv-tests
     // It seems in riscv-tests ends with end code

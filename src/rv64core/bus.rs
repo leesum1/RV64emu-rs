@@ -78,7 +78,7 @@ impl Bus {
                 Ok(self.plic.instance.do_read(addr - self.plic.start, len))
             } else {
                 warn!("can not find device,read addr{addr:X}");
-                panic!("can not find device,read addr{addr:X}");
+                // panic!("can not find device,read addr{addr:X}");
                 Err(RVerr::NotFindDevice)
             }
         };
@@ -116,7 +116,7 @@ impl Bus {
                     .do_write(addr - self.plic.start, data, len))
             } else {
                 warn!("can not find device,read addr{addr:X}");
-                panic!("can not find device,read addr{addr:X}");
+                // panic!("can not find device,read addr{addr:X}");
 
                 Err(RVerr::NotFindDevice)
             }

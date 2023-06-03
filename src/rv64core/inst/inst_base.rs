@@ -1,10 +1,7 @@
-#![allow(unused)]
-use core::fmt;
-use std::{
-    cmp::{self, Ordering},
-    io::{self, Write},
-    mem::{discriminant, size_of_val},
-};
+// #![allow(unused)]
+use core::{cmp::Ordering, mem::discriminant};
+
+use std::io::{self, Write};
 
 use bitfield_struct::bitfield;
 
@@ -772,7 +769,6 @@ impl Instruction {
      *
      */
     pub fn inst_cmp(lhs: &Instruction, rhs: &Instruction) -> Ordering {
-
         match (lhs.match_data.cmp(&rhs.match_data), lhs.mask.cmp(&rhs.mask)) {
             (Ordering::Less, _) => Ordering::Greater,
             (Ordering::Greater, _) => Ordering::Less,
@@ -805,9 +801,9 @@ impl FormatI {
 
         let is_return = rs1_is_link && !rd_is_link;
 
-        let is_call_1 = (!rs1_is_link && rd_is_link);
-        let is_call_2 = (rs1_is_link && rd_is_link && rs1_eq_rd);
-        let is_call_3 = (rs1_is_link && rd_is_link && !rs1_eq_rd);
+        let is_call_1 = !rs1_is_link && rd_is_link;
+        let is_call_2 = rs1_is_link && rd_is_link && rs1_eq_rd;
+        let is_call_3 = rs1_is_link && rd_is_link && !rs1_eq_rd;
         let is_call = is_call_1 || is_call_2 || is_call_3;
 
         if is_call && is_return {
@@ -1055,11 +1051,7 @@ impl FormatCI {
         let nzimm6 = (self.imm2_6 >> 3) & 0b1;
         let nzimm4 = (self.imm2_6 >> 4) & 0b1;
 
-        let nzimm = (nzimm9 << 9)
-            | (nzimm8_7 << 7)
-            | (nzimm6 << 6)
-            | (nzimm5 << 5)
-            | (nzimm4 << 4);
+        let nzimm = (nzimm9 << 9) | (nzimm8_7 << 7) | (nzimm6 << 6) | (nzimm5 << 5) | (nzimm4 << 4);
 
         sign_extended(nzimm as isize, 10)
     }
@@ -1133,7 +1125,6 @@ impl FormatCIW {
         let nzuimm9_6 = (self.imm5_12 >> 2) & 0b1111;
         let nzuimm5_4 = (self.imm5_12 >> 6) & 0b11;
 
-        
         (nzuimm9_6 << 6) | (nzuimm5_4 << 4) | (nzuimm3 << 3) | (nzuimm2 << 2)
     }
 }
@@ -1215,20 +1206,20 @@ impl FormatCS {
     }
 
     pub fn imm_c_sw(&self) -> usize {
-        let offset6 = (self.imm5_6 & 0b1);
-        let offset2 = ((self.imm5_6 >> 1) & 0b1);
+        let offset6 = self.imm5_6 & 0b1;
+        let offset2 = (self.imm5_6 >> 1) & 0b1;
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
         (offset6 << 6) | (offset5_3 << 3) | (offset2 << 2)
     }
 
     pub fn imm_c_sd(&self) -> usize {
-        let offset7_6 = (self.imm5_6 & 0b11);
+        let offset7_6 = self.imm5_6 & 0b11;
         let offset5_3 = (self.imm10_12 & 0b111) as usize;
         (offset7_6 << 6) | (offset5_3 << 3)
     }
     pub fn imm_c_sq(&self) -> usize {
         let offset8 = (self.imm10_12 & 0b1) as usize;
-        let offset7_6 = (self.imm5_6 & 0b11);
+        let offset7_6 = self.imm5_6 & 0b11;
         let offset5_4 = ((self.imm10_12 >> 1) & 0b11) as usize;
 
         (offset8 << 8) | (offset7_6 << 6) | (offset5_4 << 4)
