@@ -56,12 +56,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let x2 = cpu.gpr.read(2);
             let mem_addr = x2.wrapping_add(imm);
 
-            match cpu.write(
-                mem_addr,
-                rs2,
-                4,
-                AccessType::Store(mem_addr),
-            ) {
+            match cpu.write(mem_addr, rs2, 4, AccessType::Store(mem_addr)) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -78,12 +73,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let x2 = cpu.gpr.read(2);
             let mem_addr = x2.wrapping_add(imm);
 
-            match cpu.write(
-                mem_addr,
-                rs2,
-                8,
-                AccessType::Store(mem_addr),
-            ) {
+            match cpu.write(mem_addr, rs2, 8, AccessType::Store(mem_addr)) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -140,12 +130,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rs1 = cpu.gpr.read(f.rs1() as u64);
             let mem_addr = rs1.wrapping_add(imm);
 
-            match cpu.write(
-                mem_addr,
-                rs2,
-                4,
-                AccessType::Store(mem_addr),
-            ) {
+            match cpu.write(mem_addr, rs2, 4, AccessType::Store(mem_addr)) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -162,12 +147,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let rs1 = cpu.gpr.read(f.rs1() as u64);
             let mem_addr = rs1.wrapping_add(imm);
 
-            match cpu.write(
-                mem_addr,
-                rs2,
-                8,
-                AccessType::Store(mem_addr),
-            ) {
+            match cpu.write(mem_addr, rs2, 8, AccessType::Store(mem_addr)) {
                 Ok(_) => Ok(()),
                 Err(trap_type) => Err(trap_type),
             }
@@ -221,7 +201,6 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let f = FormatCR::new(inst);
             let rs1_data = cpu.gpr.read(f.rs1());
 
-            // todo! check align
             let next_pc = rs1_data;
             #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {
@@ -362,7 +341,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let imm = f.imm_c_addi16sp() as i64;
             let rd = 2;
             let rd_data = cpu.gpr.read(rd) as i64;
-            
+
             let wb = rd_data.wrapping_add(imm);
 
             cpu.gpr.write(rd, wb as u64);
@@ -376,6 +355,11 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         operation: |cpu, inst, pc| {
             let f = FormatCIW::new(inst);
             let imm = f.imm_c_addi4spn() as u64 as i64;
+
+            if imm == 0 {
+                return Err(TrapType::IllegalInstruction(inst.into()));
+            }
+
             let x2_data = cpu.gpr.read(2) as i64;
 
             let rd: u64 = f.rd() as u64;

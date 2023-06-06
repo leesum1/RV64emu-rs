@@ -62,15 +62,6 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
 
             cpu.lr_sc_reservation_set(rs1_data);
 
-            cpu.mmu
-                .bus
-                .lock()
-                .unwrap()
-                .lr_sc_set
-                .lock()
-                .unwrap()
-                .set(rs1_data);
-
             cpu.gpr.write(f.rd, r_data);
 
             Ok(())
@@ -134,8 +125,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs2_data = cpu.gpr.read(f.rs2);
 
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
 
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
@@ -160,8 +155,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs2_data = cpu.gpr.read(f.rs2);
 
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -187,8 +186,13 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -210,8 +214,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -233,8 +241,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -256,8 +268,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -283,8 +299,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -308,8 +328,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -333,8 +357,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -358,8 +386,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i64;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -383,8 +415,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
 
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
@@ -409,8 +445,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -434,8 +474,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -459,8 +503,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as i64;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -487,8 +535,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -512,8 +564,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -540,8 +596,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2) as u32;
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 4, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
@@ -565,8 +625,12 @@ pub const INSTRUCTIONS_A: &[Instruction] = &[
             let rs1_data = cpu.gpr.read(f.rs1);
             let rs2_data = cpu.gpr.read(f.rs2);
             // amo inst need lock the bus
-            let amo_lock = cpu.amo_mutex.clone();
-            let _x = amo_lock.lock().unwrap();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "expr_mutithread")] {
+                    let amo_lock = cpu.amo_mutex.clone();
+                    let _x = amo_lock.lock().unwrap();
+                }
+            }
             let tmp = match cpu.read(rs1_data, 8, AccessType::Amo(rs1_data)) {
                 Ok(data) => data,
                 Err(trap_type) => return Err(trap_type),
