@@ -3,3 +3,4 @@
 lcov.info
 *.svg
 perf.data*
+/ready_to_run

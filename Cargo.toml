@@ -32,7 +32,7 @@ simple_logger = "4.1.0"
 default = ["default_isa","caches"]
 device_sdl2 = ["dep:sdl2","support_am"]
 rv_debug_trace = ["dep:capstone"]
-caches = ["inst_cache","decode_cache"]
+caches = ["decode_cache","inst_cache"]
 
 default_isa = ["rv_c","rv_m","rv_a"]
 rv_c = []
@@ -42,8 +42,6 @@ rv_a = []
 inst_cache = []
 decode_cache = []
 support_am = []
-expr_mutithread = []
-
 
 
 [[example]]

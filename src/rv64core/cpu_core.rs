@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use crate::{
     difftest::difftest_trait::Difftest,
@@ -16,10 +16,7 @@ use crate::{
     rv64core::csr_regs::CsrRegs,
     rv64core::csr_regs_define::XipIn,
     rv64core::gpr::Gpr,
-    rv64core::inst::{
-        inst_base::{AccessType, FesvrCmd, PrivilegeLevels},
-        inst_rv64a::LrScReservation,
-    },
+    rv64core::inst::inst_base::{AccessType, FesvrCmd, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
     rv64core::traptype::TrapType,
 };
@@ -40,14 +37,14 @@ pub enum CpuState {
 }
 pub struct CpuCoreBuild {
     hart_id: usize,
-    shared_bus: Arc<Mutex<Bus>>,
+    shared_bus: Rc<Mutex<Bus>>,
     boot_pc: u64,
     smode: bool,
     #[cfg(feature = "rv_debug_trace")]
     trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 impl CpuCoreBuild {
-    pub fn new(shared_bus: Arc<Mutex<Bus>>) -> Self {
+    pub fn new(shared_bus: Rc<Mutex<Bus>>) -> Self {
         CpuCoreBuild {
             hart_id: 0,
             shared_bus,
@@ -96,7 +93,6 @@ impl CpuCoreBuild {
             }
         }
 
-        let share_lr_sc_set = mmu_u.bus.lock().unwrap().lr_sc_set.clone();
         let share_amo = mmu_u.bus.lock().unwrap().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
@@ -106,7 +102,6 @@ impl CpuCoreBuild {
             pc: self.boot_pc,
             npc: self.boot_pc,
             cur_priv: privi_u,
-            lr_sc_set: share_lr_sc_set,
             cpu_state: CpuState::Stop,
             cpu_icache: CpuIcache::new(),
             #[cfg(feature = "rv_debug_trace")]
@@ -125,7 +120,6 @@ pub struct CpuCore {
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
     // todo! move to bus
-    pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
     pub amo_mutex: Arc<Mutex<()>>,
     pub cpu_state: CpuState,
     pub cpu_icache: CpuIcache,
@@ -251,9 +245,9 @@ impl CpuCore {
         let a0 = self.gpr.read_by_name("a0");
 
         if let 0 = a0 {
-            warn!("GOOD TRAP");
+            info!("GOOD TRAP");
         } else {
-            warn!("BAD TRAP");
+            info!("BAD TRAP");
         }
         self.cpu_state = CpuState::Stop;
         a0 as usize
@@ -316,6 +310,10 @@ impl CpuCore {
             self.npc = mtvec.get_trap_pc(trap_type);
             self.cur_priv.set(PrivilegeLevels::Machine);
         }
+    }
+
+    pub fn get_bus(&self) -> Rc<Mutex<Bus>> {
+        self.mmu.bus.clone()
     }
 
     pub fn handle_interrupt(&mut self) {
@@ -410,10 +408,24 @@ impl CpuCore {
     }
 
     pub fn lr_sc_reservation_set(&mut self, addr: u64) {
-        self.lr_sc_set.lock().unwrap().set(addr);
+        self.mmu
+            .bus
+            .lock()
+            .unwrap()
+            .lr_sc_set
+            .lock()
+            .unwrap()
+            .set(addr);
     }
     pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
-        self.lr_sc_set.lock().unwrap().check_and_clear(addr)
+        self.mmu
+            .bus
+            .lock()
+            .unwrap()
+            .lr_sc_set
+            .lock()
+            .unwrap()
+            .check_and_clear(addr)
     }
     // pub fn lr_sc_reservation_clear(&mut self) {
     //     self.lr_sc_set.lock().unwrap().clear();
@@ -452,7 +464,7 @@ impl CpuCore {
         let data = bus_u.read(0x8000_1000, 8).unwrap();
         // !! must clear mem
         bus_u.write(0x8000_1000, 0, 8).unwrap();
-
+        debug!("check to host: {:#x}", data);
         let cmd = FesvrCmd::from(data);
         if let Some(pass) = cmd.syscall_device() {
             if pass {

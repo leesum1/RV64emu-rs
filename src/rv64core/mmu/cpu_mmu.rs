@@ -1,7 +1,4 @@
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{rc::Rc, sync::Mutex};
 
 use core::cell::Cell;
 
@@ -20,7 +17,7 @@ use super::{
 const PAGESIZE: u64 = 4096; // 2 ^ 12
 
 pub struct Mmu {
-    pub bus: Arc<Mutex<Bus>>,
+    pub bus: Rc<Mutex<Bus>>,
     pub access_type: AccessType,
     mstatus: CsrShare<XstatusIn>,
     satp: CsrShare<SatpIn>,
@@ -37,7 +34,7 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(
-        bus: Arc<Mutex<Bus>>,
+        bus: Rc<Mutex<Bus>>,
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: CsrShare<XstatusIn>,
         satp: CsrShare<SatpIn>,

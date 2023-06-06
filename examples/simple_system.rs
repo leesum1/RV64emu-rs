@@ -1,7 +1,7 @@
 use std::{
     env,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Mutex, rc::Rc,
 };
 extern crate riscv64_emu;
 
@@ -28,7 +28,7 @@ fn main() {
     // create system bus, which functions are as follows
     // 1. manage all devices,including plic,clint,and sram
     // 2. shared by all harts
-    let bus_u = Arc::new(Mutex::new(Bus::new()));
+    let bus_u = Rc::new(Mutex::new(Bus::new()));
 
     // create hart0 with smode support, some additional features are as follows
     // 1. the first instruction is executed at 0x8000_0000

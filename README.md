@@ -53,7 +53,7 @@ When you build the project, you will get a standalone emulator, you can run it d
 |rv_c|support rv_c extension||
 |rv_m|support rv_m extension||
 |rv_a|support rv_a extension||
-|expr_mutithread|support expr mutithread|unstable,do not enable it|
+
 
 default features
 

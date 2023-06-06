@@ -1,9 +1,5 @@
 extern crate riscv64_emu;
-use std::{
-    fs,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{fs, path::Path, rc::Rc, sync::Mutex};
 
 use crate::{
     riscv64_emu::device::device_dram::DeviceDram,
@@ -22,7 +18,7 @@ fn get_riscv_tests_path() -> std::path::PathBuf {
 }
 
 fn start_test(img: &str) -> bool {
-    let bus_u = Arc::new(Mutex::new(Bus::new()));
+    let bus_u = Rc::new(Mutex::new(Bus::new()));
 
     let mut cpu = CpuCoreBuild::new(bus_u.clone())
         .with_boot_pc(0x8000_0000)
@@ -62,7 +58,12 @@ struct TestRet {
 #[test]
 fn run_arch_tests() {
     // not support misaligned load/store, so skip these tests
-    let sikp_files = vec!["rv64ui-p-ma_data.bin", "rv64ui-v-ma_data.bin"];
+    let sikp_files = vec![
+        "rv64ui-p-ma_data.bin",
+        "rv64ui-v-ma_data.bin",
+        "rv64uc-p-rvc.bin", // tohost is 0x8000_3000
+                            // "rv64uc-v-rvc.bin",
+    ];
     let tests_dir = get_riscv_tests_path();
     let mut tests_ret: Vec<TestRet> = Vec::new();
 

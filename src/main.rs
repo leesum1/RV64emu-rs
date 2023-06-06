@@ -103,9 +103,10 @@ fn main() {
     #[allow(unused_variables)]
     let signal_term_sdl_event = signal_term.clone();
     #[allow(unused_variables)]
-    let signal_term_uart = signal_term;
+    #[allow(clippy::redundant_clone)]
+    let signal_term_uart = signal_term.clone();
 
-    let bus_u: Arc<Mutex<Bus>> = Arc::new(Mutex::new(Bus::new()));
+    let bus_u: Rc<Mutex<Bus>> = Rc::new(Mutex::new(Bus::new()));
 
     // device dram len:0X08000000
     let mut mem = DeviceDram::new(128 * 1024 * 1024);
@@ -154,7 +155,7 @@ fn main() {
             }
             // Nothing needs to be sent for n == 0
         }
-        std::thread::sleep(Duration::from_millis(100));
+        // std::thread::sleep(Duration::from_millis(100));
     });
 
     thread::spawn(move || loop {
@@ -265,35 +266,9 @@ fn main() {
         };
     }
 
-    #[cfg(feature = "expr_mutithread")]
-    for mut hart in hart_vec {
-        let cpu_siganl = signal_term_cpucore.clone();
-        thread::spawn(move || {
-            hart.cpu_state = CpuState::Running;
-
-            while hart.cpu_state == CpuState::Running {
-                hart.execute(1000);
-            }
-            cpu_siganl.store(true, Ordering::Relaxed);
-        });
-    }
-
-    #[cfg(feature = "expr_mutithread")]
-    let bus_thread = thread::spawn(move || {
-        while !signal_term.load(Ordering::Relaxed) {
-            {
-                bus_u.lock().unwrap().update();
-                bus_u.lock().unwrap().clint.instance.tick(5000 / 100);
-                bus_u.lock().unwrap().plic.instance.tick();
-            }
-            thread::sleep(Duration::from_millis(50));
-        }
-    });
-
     // create another thread to simmulate the harts
     // while the main thread is used to handle sdl events
     // which will be send to the coresponding devices through ring_channel
-    #[cfg(not(feature = "expr_mutithread"))]
     let cpu_main = thread::spawn(move || {
         // start sim
         hart_vec.iter_mut().for_each(|x| {
@@ -302,6 +277,8 @@ fn main() {
 
         let mut cycle: u64 = 0;
 
+        let bus: Rc<Mutex<Bus>> = hart_vec[0].get_bus();
+
         // if all harts are in running state, then continue to execute
         while hart_vec
             .iter()
@@ -309,14 +286,14 @@ fn main() {
         {
             hart_vec.iter_mut().for_each(|hart| {
                 hart.execute(5000);
-                bus_u.lock().unwrap().update();
-                bus_u.lock().unwrap().clint.instance.tick(5000 / 100);
-                bus_u.lock().unwrap().plic.instance.tick();
+                bus.lock().unwrap().update();
+                bus.lock().unwrap().clint.instance.tick(5000 / 100);
+                bus.lock().unwrap().plic.instance.tick();
             });
             // not accurate, but enough for now
             cycle += 5000;
         }
-        println!("total:{cycle}");
+        info!("total:{cycle}");
         if let Some(sig_path) = signature_file {
             hart_vec[0].dump_signature(&sig_path);
         }
@@ -328,9 +305,6 @@ fn main() {
         handle.join().unwrap();
     }
 
-    #[cfg(feature = "expr_mutithread")]
-    bus_thread.join().unwrap();
-    #[cfg(not(feature = "expr_mutithread"))]
     cpu_main.join().unwrap();
 }
 
@@ -343,7 +317,7 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
     .expect("Key event send error");
 }
 #[cfg(feature = "device_sdl2")]
-fn create_sdl2_devices(bus_u: Arc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicBool>) {
+fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicBool>) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
