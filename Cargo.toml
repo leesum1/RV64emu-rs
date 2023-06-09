@@ -20,6 +20,7 @@ capstone = {version = "0.11.0",optional = true}
 
 cfg-if = "1.0.0"
 simple_logger = "4.1.0"
+elf = "0.7.2"
 
 
 [features]
@@ -29,12 +30,12 @@ simple_logger = "4.1.0"
 # default = ["device_sdl2"]rv_debug_trace
 # default = ["caches"]
 
-default = ["default_isa","caches"]
-device_sdl2 = ["dep:sdl2","support_am"]
+default = ["default_isa", "caches"]
+device_sdl2 = ["dep:sdl2", "support_am"]
 rv_debug_trace = ["dep:capstone"]
-caches = ["decode_cache","inst_cache"]
+caches = ["decode_cache", "inst_cache"]
 
-default_isa = ["rv_c","rv_m","rv_a"]
+default_isa = ["rv_c", "rv_m", "rv_a"]
 rv_c = []
 rv_m = []
 rv_a = []

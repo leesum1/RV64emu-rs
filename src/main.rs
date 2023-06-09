@@ -1,3 +1,5 @@
+pub mod rvsim;
+
 extern crate riscv64_emu;
 
 #[allow(unused_imports)]
@@ -20,6 +22,7 @@ use std::{
 };
 
 use clap::Parser;
+
 use log::{debug, info, LevelFilter};
 use riscv64_emu::device::device_16550a::Device16550aUART;
 
@@ -54,7 +57,7 @@ use crate::{
         device_uart::DeviceUart,
     },
     riscv64_emu::rv64core::bus::{Bus, DeviceType},
-    riscv64_emu::rv64core::cpu_core::{CpuCoreBuild, CpuState},
+    riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
 // /* 各个设备地址 */
@@ -96,7 +99,7 @@ fn main() {
         .init()
         .unwrap();
     let args = Args::parse();
-    let signature_file = args.signature;
+
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
 
@@ -109,11 +112,8 @@ fn main() {
     let bus_u: Rc<Mutex<Bus>> = Rc::new(Mutex::new(Bus::new()));
 
     // device dram len:0X08000000
-    let mut mem = DeviceDram::new(128 * 1024 * 1024);
+    let mem = DeviceDram::new(128 * 1024 * 1024);
 
-    if let Some(ram_img) = args.img {
-        mem.load_binary(&ram_img);
-    }
     bus_u.lock().unwrap().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
@@ -131,10 +131,8 @@ fn main() {
     });
 
     // device flash len:0X01000000
-    let mut falsh = DeviceDram::new(128 * 1024 * 1024);
-    if let Some(xipflash) = &args.xipflash {
-        falsh.load_binary(xipflash);
-    }
+    let falsh = DeviceDram::new(128 * 1024 * 1024);
+
     bus_u.lock().unwrap().add_device(DeviceType {
         start: 0x3000_0000,
         len: falsh.capacity as u64,
@@ -219,7 +217,7 @@ fn main() {
     // show device address map
     debug!("{0}", bus_u.lock().unwrap());
 
-    let hart_num = args.num_harts.unwrap_or(1);
+    let hart_num: usize = args.num_harts.unwrap_or(1);
 
     let boot_pc = if let Some(x) = args.boot_pc.as_ref() {
         u64::from_str_radix(
@@ -249,11 +247,14 @@ fn main() {
                 hart_vec.push(cpu);
                 let mut trace_log = Traces::new(0, trace_rx);
                 let term_sig_trace = signal_term.clone();
+
+                // create another thread to handle trace log
                 let trace_thread = thread::spawn(move || {
                     while !term_sig_trace.load(Ordering::Relaxed) {
                         trace_log.run();
                     }
                 });
+
                 trace_handle.push(trace_thread);
             } else {
                 let hart: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
@@ -270,41 +271,23 @@ fn main() {
     // while the main thread is used to handle sdl events
     // which will be send to the coresponding devices through ring_channel
     let cpu_main = thread::spawn(move || {
-        // start sim
-        hart_vec.iter_mut().for_each(|x| {
-            x.cpu_state = CpuState::Running;
-        });
-
-        let mut cycle: u64 = 0;
-
-        let bus: Rc<Mutex<Bus>> = hart_vec[0].get_bus();
-
-        // if all harts are in running state, then continue to execute
-        while hart_vec
-            .iter()
-            .all(|hart| hart.cpu_state == CpuState::Running)
-        {
-            hart_vec.iter_mut().for_each(|hart| {
-                hart.execute(5000);
-                bus.lock().unwrap().update();
-                bus.lock().unwrap().clint.instance.tick(5000 / 100);
-                bus.lock().unwrap().plic.instance.tick();
-            });
-            // not accurate, but enough for now
-            cycle += 5000;
+        let mut sim = rvsim::RVsim::new(hart_vec);
+        if let Some(ram_img) = args.img {
+            sim.load_elf(&ram_img);
         }
-        info!("total:{cycle}");
-        if let Some(sig_path) = signature_file {
-            hart_vec[0].dump_signature(&sig_path);
+        if let Some(signature_file) = args.signature {
+            sim.set_signature_file(signature_file);
         }
-        // send signal to stop the trace thread
-        signal_term_cpucore.store(true, Ordering::Relaxed);
+
+        sim.run();
+
+        signal_term_cpucore.store(true, Ordering::Release);
     });
 
+    // wait for all trace threads to finish
     for handle in trace_handle {
         handle.join().unwrap();
     }
-
     cpu_main.join().unwrap();
 }
 

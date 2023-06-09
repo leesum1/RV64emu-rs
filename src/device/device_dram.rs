@@ -20,14 +20,11 @@ impl DeviceDram {
     }
 
     pub fn load_binary(&mut self, file_name: &str) {
-
         let read_ret = fs::read(file_name);
-
         let text = match read_ret {
             Ok(buff) => buff,
             Err(e) => panic!("can not read file:{e},{file_name}"),
         };
-
         let text_size = text.len();
         info!("load binary : {file_name}, size: {text_size}");
         self.data[0..text_size].copy_from_slice(&text[..text_size]);
