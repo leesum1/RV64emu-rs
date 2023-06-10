@@ -4,3 +4,6 @@ lcov.info
 *.svg
 perf.data*
 /ready_to_run
+/node_modules
+package-lock.json
+package.json
