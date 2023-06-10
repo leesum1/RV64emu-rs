@@ -21,8 +21,8 @@ pub struct RVsim {
     signature_file: Option<String>,
     bus: Rc<Mutex<Bus>>,
     harts: Vec<CpuCore>,
-    // value: u64,name: String
-    _elf_symbols: hashbrown::HashMap<u64, String>,
+    // name: String,value: u64
+    elf_symbols: hashbrown::HashMap<String, u64>,
 }
 
 impl RVsim {
@@ -32,6 +32,50 @@ impl RVsim {
             harts,
             bus,
             ..Default::default()
+        }
+    }
+    fn get_symbol_values(&mut self) {
+        let tohost_addr = self.elf_symbols.get("tohost").copied();
+        let fromhost_addr = self.elf_symbols.get("fromhost").copied();
+        let begin_regstate_addr: Option<u64> = self.elf_symbols.get("begin_signature").copied();
+        let end_regstate_addr = self.elf_symbols.get("end_signature").copied();
+
+        self.tohost = tohost_addr;
+        self._fromhost = fromhost_addr;
+        if let (Some(begin_regstate_addr), Some(end_regstate_addr)) =
+            (begin_regstate_addr, end_regstate_addr)
+        {
+            self.signature_range = Some(begin_regstate_addr..end_regstate_addr);
+        }
+
+        /* log */
+        if let Some(tohost) = self.tohost {
+            info!("tohost: {:#x}", tohost);
+        }
+        if let Some(fromhost) = self._fromhost {
+            info!("fromhost: {:#x}", fromhost);
+        }
+        if let Some(signature_range) = &self.signature_range {
+            info!(
+                "signature_range: {:#x}..{:#x}",
+                signature_range.start, signature_range.end
+            );
+        }
+    }
+
+    fn collect_elf_symbols(&mut self, elf_data: &elf::ElfBytes<AnyEndian>) {
+        let common_data = elf_data.find_common_data().unwrap();
+        if let (Some(symtab), Some(symtab_strs)) = (common_data.symtab, common_data.symtab_strs) {
+            for sym in symtab.iter() {
+                if let Ok(name) = symtab_strs.get(sym.st_name as usize) {
+                    self.elf_symbols.insert(name.to_string(), sym.st_value);
+                    // debug!("elf symbol: {} = {:#x}", name, sym.st_value);
+                }
+            }
+            info!("collected elf symbols: {}", self.elf_symbols.len());
+            println!("self._elf_symbols: {:?}", self.elf_symbols);
+            // get needed symbols value
+            self.get_symbol_values();
         }
     }
 
@@ -44,11 +88,12 @@ impl RVsim {
             let ehdr: elf::file::FileHeader<AnyEndian> = elf_data.ehdr;
             // Check e_machine
             assert_eq!(ehdr.e_machine, EM_RISCV);
-            /* Check Program header Table */
+            // Check Program header Table
             assert_ne!(ehdr.e_phnum, 0);
+            let phdr: elf::parse::ParsingTable<AnyEndian, elf::segment::ProgramHeader> =
+                elf_data.segments().unwrap();
 
-            let phdr = elf_data.segments().unwrap();
-
+            // Load program segments to memory
             phdr.iter().filter(|x| x.p_type == PT_LOAD).for_each(|p| {
                 let data = elf_data.segment_data(&p).unwrap();
                 assert_eq!(data.len(), p.p_filesz as usize);
@@ -59,7 +104,10 @@ impl RVsim {
                         .unwrap();
                 }
             });
-            info!("elf load success:{}", file_name);
+            info!("Elf file match,elf load success:{}", file_name);
+
+            // Collect elf symbols into self.elf_symbols(hashmap)
+            self.collect_elf_symbols(&elf_data);
         } else {
             let boot_pc = self.harts.get(0).unwrap().pc;
             let mut bus = self.bus.lock().unwrap();
@@ -68,7 +116,7 @@ impl RVsim {
             for (i, data) in file_data.iter().enumerate() {
                 bus.write(boot_pc + i as u64, (*data).into(), 1).unwrap();
             }
-            info!("bin load success:{}", file_name);
+            info!("Elf file not match, bin load success:{}", file_name);
         }
     }
     pub fn run(&mut self) {
@@ -91,6 +139,7 @@ impl RVsim {
             });
             self.check_to_host();
         }
+        self.dump_signature();
     }
     // for riscv-tests
     // It seems in riscv-tests ends with end code
@@ -103,7 +152,7 @@ impl RVsim {
         if self.tohost.is_none() {
             return;
         }
-        let mut bus_u = self.bus.lock().unwrap();
+        let mut bus_u: std::sync::MutexGuard<Bus> = self.bus.lock().unwrap();
         let tohost = self.tohost.unwrap_or(0x8000_1000);
         let data = bus_u.read(tohost, 8).unwrap();
         // !! must clear mem
@@ -133,11 +182,11 @@ impl RVsim {
 
     // for riscof
     pub fn dump_signature(&mut self) {
-        if self.signature_range.is_none() || self.signature_file.is_none() {
+        if self.signature_file.is_none() {
             return;
         }
         // todo! how to remove this clone?
-        let file_name = self.signature_file.clone().unwrap();
+        let file_name: String = self.signature_file.clone().unwrap();
         let sig_range = self.signature_range.clone().unwrap();
 
         let fd: Result<File, std::io::Error> = File::create(&file_name);
