@@ -4,8 +4,9 @@ use elf::{
     abi::{EM_RISCV, PT_LOAD},
     endian::AnyEndian,
 };
-use log::{debug, info, warn};
-use riscv64_emu::rv64core::{
+use log::{info, warn};
+
+use crate::rv64core::{
     bus::Bus,
     cpu_core::{CpuCore, CpuState},
     inst::inst_base::FesvrCmd,
@@ -73,7 +74,6 @@ impl RVsim {
                 }
             }
             info!("collected elf symbols: {}", self.elf_symbols.len());
-            println!("self._elf_symbols: {:?}", self.elf_symbols);
             // get needed symbols value
             self.get_symbol_values();
         }
@@ -119,7 +119,9 @@ impl RVsim {
             info!("Elf file not match, bin load success:{}", file_name);
         }
     }
-    pub fn run(&mut self) {
+
+    // true: exit, false: abort
+    pub fn run(&mut self) -> bool {
         self.harts
             .iter_mut()
             .for_each(|hart| hart.cpu_state = CpuState::Running);
@@ -140,6 +142,10 @@ impl RVsim {
             self.check_to_host();
         }
         self.dump_signature();
+
+        self.harts
+            .iter()
+            .all(|hart| hart.cpu_state != CpuState::Abort)
     }
     // for riscv-tests
     // It seems in riscv-tests ends with end code
@@ -157,7 +163,7 @@ impl RVsim {
         let data = bus_u.read(tohost, 8).unwrap();
         // !! must clear mem
         bus_u.write(tohost, 0, 8).unwrap();
-        debug!("check to host: {:#x}", data);
+        // debug!("check to host: {:#x}", data);
         let cmd = FesvrCmd::from(data);
         if let Some(pass) = cmd.syscall_device() {
             if pass {

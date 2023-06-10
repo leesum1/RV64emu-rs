@@ -1,34 +1,37 @@
 extern crate riscv64_emu;
 use std::{fs, path::Path, rc::Rc, sync::Mutex};
 
+use log::LevelFilter;
+use riscv64_emu::rvsim::RVsim;
+
 use crate::{
     riscv64_emu::device::device_dram::DeviceDram,
     riscv64_emu::device::device_trait::{DeviceBase, MEM_BASE},
     riscv64_emu::rv64core::bus::{Bus, DeviceType},
-    riscv64_emu::rv64core::cpu_core::{CpuCoreBuild, CpuState},
+    riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
 fn get_riscv_tests_path() -> std::path::PathBuf {
-    let root_dir = env!("CARGO_MANIFEST_DIR");
-    let bin_path: std::path::PathBuf = Path::new(root_dir)
+    let root_dir: &str = env!("CARGO_MANIFEST_DIR");
+    let elf_path: std::path::PathBuf = Path::new(root_dir)
         .join("ready_to_run")
         .join("riscv-tests")
-        .join("bin");
-    bin_path
+        .join("elf");
+    elf_path
 }
 
+// ture: pass, false: fail
 fn start_test(img: &str) -> bool {
     let bus_u = Rc::new(Mutex::new(Bus::new()));
 
-    let mut cpu = CpuCoreBuild::new(bus_u.clone())
+    let cpu = CpuCoreBuild::new(bus_u.clone())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)
         .build();
 
     // device dram
-    let mut mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
-    mem.load_binary(img);
+    let mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
     let device_name = mem.get_name();
     bus_u.lock().unwrap().add_device(DeviceType {
         start: MEM_BASE,
@@ -37,17 +40,11 @@ fn start_test(img: &str) -> bool {
         name: device_name,
     });
 
-    cpu.cpu_state = CpuState::Running;
-    let mut cycle: u128 = 0;
-    while cpu.cpu_state == CpuState::Running {
-        cpu.execute(1);
-        cycle += 1;
-        cpu.check_to_host();
-    }
-    println!("total:{cycle}");
+    let mut sim = RVsim::new(vec![cpu]);
 
-    // check result
-    cpu.cpu_state == CpuState::Stop
+    sim.load_elf(img);
+
+    sim.run()
 }
 
 struct TestRet {
@@ -58,12 +55,18 @@ struct TestRet {
 #[test]
 fn run_arch_tests() {
     // not support misaligned load/store, so skip these tests
+
     let sikp_files = vec![
-        "rv64ui-p-ma_data.bin",
-        "rv64ui-v-ma_data.bin",
-        "rv64uc-p-rvc.bin", // tohost is 0x8000_3000
-                            // "rv64uc-v-rvc.bin",
+        "rv64ui-p-ma_data",
+        "rv64ui-v-ma_data",
+        // "rv64uc-p-rvc", // tohost is 0x8000_3000
+                        // "rv64uc-v-rvc.bin",
     ];
+    simple_logger::SimpleLogger::new()
+        .with_level(LevelFilter::Debug)
+        .init()
+        .unwrap();
+
     let tests_dir = get_riscv_tests_path();
     let mut tests_ret: Vec<TestRet> = Vec::new();
 

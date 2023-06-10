@@ -1,5 +1,3 @@
-pub mod rvsim;
-
 extern crate riscv64_emu;
 
 #[allow(unused_imports)]
@@ -24,7 +22,7 @@ use std::{
 use clap::Parser;
 
 use log::{debug, info, LevelFilter};
-use riscv64_emu::device::device_16550a::Device16550aUART;
+use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
@@ -271,7 +269,7 @@ fn main() {
     // while the main thread is used to handle sdl events
     // which will be send to the coresponding devices through ring_channel
     let cpu_main = thread::spawn(move || {
-        let mut sim = rvsim::RVsim::new(hart_vec);
+        let mut sim = RVsim::new(hart_vec);
         if let Some(ram_img) = args.img {
             sim.load_elf(&ram_img);
         }
