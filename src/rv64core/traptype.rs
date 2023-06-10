@@ -114,6 +114,7 @@ impl TrapType {
             | TrapType::StoreAddressMisaligned(val)
             | TrapType::InstructionAccessFault(val)
             | TrapType::InstructionPageFault(val)
+            | TrapType::Breakpoint(val)
             | TrapType::IllegalInstruction(val) => *val,
             _ => 0,
         }
