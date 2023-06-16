@@ -125,8 +125,8 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         match_data: MATCH_FENCE_I,
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
-            cpu.cache_system.lock().dcache.clear();
-            cpu.cache_system.lock().icache.clear_inst();
+            cpu.cache_system.borrow_mut().dcache.clear();
+            cpu.cache_system.borrow_mut().icache.clear_inst();
             Ok(())
         },
     },
@@ -155,9 +155,9 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             } else {
                 // PASS icache-alias.S
                 #[cfg(feature = "inst_cache")]
-                cpu.cache_system.lock().icache.clear_inst();
+                cpu.cache_system.borrow_mut().icache.clear_inst();
                 #[cfg(feature = "data_cache")]
-                cpu.cache_system.lock().dcache.clear();
+                cpu.cache_system.borrow_mut().dcache.clear();
 
                 Ok(())
             }

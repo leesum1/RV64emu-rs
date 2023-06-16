@@ -88,7 +88,7 @@ impl Mmu {
         // todo! PMA or PMP check
         let pte_data = self
             .caches
-            .lock()
+            .borrow_mut()
             .dcache
             .read(pte_addr, pte_size as usize)
             .unwrap();
@@ -280,7 +280,7 @@ impl Mmu {
         if self.no_mmu() {
             return self
                 .caches
-                .lock()
+                .borrow_mut()
                 .dcache
                 .read(addr, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
@@ -295,7 +295,7 @@ impl Mmu {
 
         //read the data from the physical address
         self.caches
-            .lock()
+            .borrow_mut()
             .dcache
             .read(self.pa.raw(), len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
@@ -322,7 +322,7 @@ impl Mmu {
         if self.no_mmu() {
             return self
                 .caches
-                .lock()
+                .borrow_mut()
                 .dcache
                 .write(addr, data, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
@@ -337,7 +337,7 @@ impl Mmu {
 
         self.page_table_walk()?; // err return
         self.caches
-            .lock()
+            .borrow_mut()
             .dcache
             .write(self.pa.raw(), data, len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)

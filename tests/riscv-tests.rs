@@ -2,7 +2,7 @@ extern crate riscv64_emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use riscv64_emu::{rvsim::RVsim, rv64core::traptype::RVmutex};
+use riscv64_emu::{rv64core::traptype::RVmutex, rvsim::RVsim};
 
 use crate::{
     riscv64_emu::device::device_dram::DeviceDram,
@@ -25,7 +25,6 @@ fn start_test(img: &str) -> bool {
     // let bus_u = Rc::new(Mutex::new(Bus::new()));
     let bus_u: RVmutex<Bus> = RVmutex::new(Bus::new().into());
 
-
     let cpu = CpuCoreBuild::new(bus_u.clone())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
@@ -35,7 +34,7 @@ fn start_test(img: &str) -> bool {
     // device dram
     let mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
     let device_name = mem.get_name();
-    bus_u.lock().add_device(DeviceType {
+    bus_u.borrow_mut().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem.into(),
@@ -62,7 +61,7 @@ fn run_arch_tests() {
         "rv64ui-p-ma_data",
         "rv64ui-v-ma_data",
         // "rv64uc-p-rvc", // tohost is 0x8000_3000
-                        // "rv64uc-v-rvc.bin",
+        // "rv64uc-v-rvc.bin",
     ];
     simple_logger::SimpleLogger::new()
         .with_level(LevelFilter::Debug)

@@ -29,7 +29,7 @@ pub struct RVsim {
 
 impl RVsim {
     pub fn new(harts: Vec<CpuCore>) -> Self {
-        let bus = harts[0].mmu.caches.lock().bus.clone();
+        let bus = harts[0].mmu.caches.borrow_mut().bus.clone();
         Self {
             harts,
             bus,
@@ -98,7 +98,7 @@ impl RVsim {
             phdr.iter().filter(|x| x.p_type == PT_LOAD).for_each(|p| {
                 let data = elf_data.segment_data(&p).unwrap();
                 assert_eq!(data.len(), p.p_filesz as usize);
-                let mut bus = self.bus.lock();
+                let mut bus = self.bus.borrow_mut();
                 // todo! write 8 bytes at a time
                 for addr in (p.p_paddr)..(p.p_paddr + p.p_filesz) {
                     bus.write(addr, data[(addr - p.p_paddr) as usize].into(), 1)
@@ -111,7 +111,7 @@ impl RVsim {
             self.collect_elf_symbols(&elf_data);
         } else {
             let boot_pc = self.harts.get(0).unwrap().pc;
-            let mut bus = self.bus.lock();
+            let mut bus = self.bus.borrow_mut();
 
             // todo! write 8 bytes at a time
             for (i, data) in file_data.iter().enumerate() {
@@ -134,7 +134,7 @@ impl RVsim {
         {
             self.harts.iter_mut().for_each(|hart| {
                 hart.execute(5000);
-                let mut bus = self.bus.lock();
+                let mut bus = self.bus.borrow_mut();
                 bus.update();
                 // bus.clint.instance.tick(5000 / 100);
                 bus.clint.instance.tick(500);
@@ -145,7 +145,7 @@ impl RVsim {
         self.dump_signature();
 
         self.harts.iter().all(|hart| {
-            hart.cache_system.lock().show_perf();
+            hart.cache_system.borrow_mut().show_perf();
             hart.cpu_state != CpuState::Abort
         })
     }
@@ -161,8 +161,8 @@ impl RVsim {
             return;
         }
 
-        self.harts[0].cache_system.lock().clear();
-        let mut bus_u = self.bus.lock();
+        self.harts[0].cache_system.borrow_mut().clear();
+        let mut bus_u = self.bus.borrow_mut();
         let tohost = self.tohost.unwrap_or(0x8000_1000);
         let data = bus_u.read(tohost, 8).unwrap();
         // !! must clear mem
@@ -207,7 +207,7 @@ impl RVsim {
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {
-                let mut bus_u = self.bus.lock();
+                let mut bus_u = self.bus.borrow_mut();
                 for i in sig_range.step_by(4) {
                     let tmp_data = bus_u.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();

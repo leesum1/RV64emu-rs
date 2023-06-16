@@ -1,8 +1,8 @@
 use core::fmt;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
-pub type RVmutex<T> = Rc<spin::Mutex<T>>;
-// pub type RVmutex<T> = Rc<RefCell<T>>;
+// pub type RVmutex<T> = Rc<spin::Mutex<T>>;
+pub type RVmutex<T> = Rc<RefCell<T>>;
 
 const INTERRUPT_BIT: u64 = 0x8000000000000000_u64;
 

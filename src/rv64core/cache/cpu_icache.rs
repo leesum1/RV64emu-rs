@@ -28,7 +28,7 @@ impl CpuIcache {
             self.hit += 1;
             return Ok(*inst as u64);
         }
-        let mut bus = self.bus.lock();
+        let mut bus = self.bus.borrow_mut();
         match bus.read(addr, 4) {
             Ok(data) => {
                 self.miss += 1;

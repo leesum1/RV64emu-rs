@@ -24,7 +24,7 @@ use crate::{
 use crate::trace::traces::TraceType;
 
 use super::{
-    cache::{cache_system::CacheSystem},
+    cache::cache_system::CacheSystem,
     inst::inst_base::{check_aligned, is_compressed_instruction},
     mmu::cpu_mmu::Mmu,
     traptype::RVmutex,
@@ -84,10 +84,10 @@ impl CpuCoreBuild {
 
         let cache_system = RVmutex::new(CacheSystem::new(self.shared_bus.clone()).into());
 
-        let mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
+        let mut mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
         {
-            let bus_u = mmu_u.caches.lock().bus.clone();
-            let mut bus_u = bus_u.lock();
+            let mut bus_u = mmu_u.caches.borrow_mut().bus.clone();
+            let mut bus_u = bus_u.borrow_mut();
 
             let mtime = bus_u.clint.instance.add_hart(xip.clone());
             csr_regs_u.add_mtime(mtime);
@@ -98,7 +98,7 @@ impl CpuCoreBuild {
             }
         }
 
-        let share_amo = mmu_u.caches.lock().bus.lock().amo_mutex.clone();
+        let share_amo = mmu_u.caches.borrow_mut().bus.borrow_mut().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
@@ -224,7 +224,7 @@ impl CpuCore {
                     }
 
                     self.handle_interrupt();
-                    // self.mmu.bus.lock().update();
+                    // self.mmu.bus.borrow_mut().update();
 
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
@@ -392,12 +392,7 @@ impl CpuCore {
         #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
         #[cfg(feature = "data_cache")]
-        match self
-            .cache_system
-            .lock()
-            .dcache
-            .read(paddr, len as usize)
-        {
+        match self.cache_system.borrow_mut().dcache.read(paddr, len as usize) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
@@ -412,7 +407,7 @@ impl CpuCore {
         #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
         #[cfg(feature = "data_cache")]
-        match self.cache_system.lock().icache.read(paddr) {
+        match self.cache_system.borrow_mut().icache.read(paddr) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
@@ -433,7 +428,7 @@ impl CpuCore {
         #[cfg(feature = "data_cache")]
         match self
             .cache_system
-            .lock()
+            .borrow_mut()
             .dcache
             .write(paddr, data, len as usize)
         {
@@ -447,9 +442,9 @@ impl CpuCore {
     pub fn lr_sc_reservation_set(&mut self, addr: u64) {
         self.mmu
             .caches
-            .lock()
+            .borrow_mut()
             .bus
-            .lock()
+            .borrow_mut()
             .lr_sc_set
             .lock()
             .unwrap()
@@ -458,9 +453,9 @@ impl CpuCore {
     pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
         self.mmu
             .caches
-            .lock()
+            .borrow_mut()
             .bus
-            .lock()
+            .borrow_mut()
             .lr_sc_set
             .lock()
             .unwrap()
@@ -481,7 +476,7 @@ impl CpuCore {
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {
-                let mut bus_u = self.mmu.caches.lock();
+                let mut bus_u = self.mmu.caches.borrow_mut();
                 for i in (sig_start..sig_end).step_by(4) {
                     let tmp_data = bus_u.dcache.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
@@ -498,7 +493,7 @@ impl CpuCore {
     // if non-zero data is written.
     // End code 1 seems to mean pass.
     pub fn check_to_host(&mut self) {
-        let mut bus_u = self.mmu.caches.lock();
+        let mut bus_u = self.mmu.caches.borrow_mut();
 
         let data = bus_u.dcache.read(0x8000_1000, 8).unwrap();
         // !! must clear mem
@@ -539,17 +534,12 @@ impl Difftest for CpuCore {
         self.csr_regs.read_raw(csr)
     }
     fn set_mem(&mut self, paddr: u64, data: u64, len: usize) {
-        let _ret = self
-            .mmu
-            .caches
-            .lock()
-            .dcache
-            .write(paddr, data, len);
+        let _ret = self.mmu.caches.borrow_mut().dcache.write(paddr, data, len);
     }
     fn get_mem(&mut self, paddr: u64, len: usize) -> u64 {
         self.mmu
             .caches
-            .lock()
+            .borrow_mut()
             .dcache
             .read(paddr, len)
             .map_or(0, |x| x)

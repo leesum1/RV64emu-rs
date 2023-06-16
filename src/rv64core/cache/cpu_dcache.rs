@@ -91,7 +91,7 @@ impl CpuDcache {
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, RVerr> {
         if !self.cacheble(addr) {
-            let mut bus = self.bus.lock();
+            let mut bus = self.bus.borrow_mut();
             return bus.read(addr, len);
         }
 
@@ -125,7 +125,7 @@ impl CpuDcache {
     }
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
         if !self.cacheble(addr) {
-            let mut bus = self.bus.lock();
+            let mut bus = self.bus.borrow_mut();
             return bus.write(addr, data, len);
         }
         let tag = self.tag(addr);
@@ -159,7 +159,7 @@ impl CpuDcache {
         //     })
     }
     pub fn clear(&mut self) {
-        let mut bus = self.bus.lock();
+        let mut bus = self.bus.borrow_mut();
         self.caches.iter_mut().for_each(|(_, cache_line)| {
             if cache_line.dirty() {
                 let addr = cache_line.tag << 6;
@@ -184,7 +184,7 @@ impl CpuDcache {
         let tag = self.tag(addr);
         let cacheline_base = self.cacheline_base(addr);
 
-        let mut bus = self.bus.lock();
+        let mut bus = self.bus.borrow_mut();
         let mut cache_data = [0_u8; 64];
         for i in (0..64).step_by(8) {
             let data = bus.read(cacheline_base + i as u64, 8).unwrap();
@@ -239,7 +239,7 @@ impl CpuDcache {
     }
 
     // fn write_back(&mut self, cacheline: &mut CacheLine) {
-    //     let mut bus = self.bus.lock();
+    //     let mut bus = self.bus.borrow_mut();
     //     let addr = cacheline.tag << 6;
     //     for i in (0..64).step_by(8) {
     //         let data = cacheline.read(i, 8);
