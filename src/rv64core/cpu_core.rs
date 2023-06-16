@@ -401,16 +401,12 @@ impl CpuCore {
     pub fn icahce_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
         let access_type = AccessType::Fetch(addr);
         self.mmu.update_access_type(&access_type);
-
-        #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
-        #[cfg(feature = "data_cache")]
         match self.cache_system.borrow_mut().icache.read(paddr) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
-        #[cfg(not(feature = "data_cache"))]
-        self.mmu.do_read(addr, len)
+
     }
 
     pub fn write(
@@ -421,9 +417,7 @@ impl CpuCore {
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(&access_type);
-        #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
-        #[cfg(feature = "data_cache")]
         match self
             .cache_system
             .borrow_mut()
@@ -433,8 +427,7 @@ impl CpuCore {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
-        #[cfg(not(feature = "data_cache"))]
-        self.mmu.do_write(addr, data, len)
+
     }
 
     pub fn lr_sc_reservation_set(&mut self, addr: u64) {
@@ -463,53 +456,6 @@ impl CpuCore {
     //     self.lr_sc_set.lock().unwrap().clear();
     // }
 
-    // for riscof
-    pub fn dump_signature(&mut self, file_name: &str) {
-        let fd = File::create(file_name);
-
-        let sig_start = self.gpr.read_by_name("a1");
-        let sig_end = self.gpr.read_by_name("a2");
-
-        info!("sig_start: {:#x},sig_end: {:#x}", sig_start, sig_end);
-        fd.map_or_else(
-            |err| warn!("{err}"),
-            |mut file| {
-                let mut bus_u = self.mmu.caches.borrow_mut();
-                for i in (sig_start..sig_end).step_by(4) {
-                    let tmp_data = bus_u.dcache.read(i, 4).unwrap();
-                    file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
-                }
-            },
-        );
-        info!("dump signature done, file: {}", file_name);
-    }
-    // for riscv-tests
-    // It seems in riscv-tests ends with end code
-    // written to a certain physical memory address
-    // (0x80001000 in mose test cases) so checking
-    // the data in the address and terminating the test
-    // if non-zero data is written.
-    // End code 1 seems to mean pass.
-    pub fn check_to_host(&mut self) {
-        let mut bus_u = self.mmu.caches.borrow_mut();
-
-        let data = bus_u.dcache.read(0x8000_1000, 8).unwrap();
-        // !! must clear mem
-        bus_u.dcache.write(0x8000_1000, 0, 8).unwrap();
-        debug!("check to host: {:#x}", data);
-        let cmd = FesvrCmd::from(data);
-        if let Some(pass) = cmd.syscall_device() {
-            if pass {
-                self.cpu_state = CpuState::Stop;
-            }
-            // fail
-            else {
-                self.cpu_state = CpuState::Abort;
-                warn!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
-            }
-        }
-        cmd.character_device_write();
-    }
 }
 
 impl Difftest for CpuCore {

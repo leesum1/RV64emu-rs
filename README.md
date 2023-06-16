@@ -69,6 +69,7 @@ rv_m = []
 rv_a = []
 inst_cache = []
 decode_cache = []
+data_cache = []
 support_am = []
 expr_mutithread = []
 

@@ -21,9 +21,22 @@ impl CpuIcache {
             miss: 0,
         }
     }
-
+    #[cfg(feature = "inst_cache")]
+    fn cacheble(&self, addr: u64) -> bool {
+        (0x80000000..0x80000000 + 0x8000000).contains(&addr)
+    }
+    #[cfg(not(feature = "inst_cache"))]
+    fn cacheble(&self, addr: u64) -> bool {
+        false
+    }
+    // todo len:2,4
     pub fn read(&mut self, pc: u64) -> Result<u64, RVerr> {
         let addr = pc;
+        if !self.cacheble(addr) {
+            let mut bus = self.bus.borrow_mut();
+            return bus.read(addr, 4);
+        }
+
         if let Some(inst) = self.inst_hash.get(&pc) {
             self.hit += 1;
             return Ok(*inst as u64);

@@ -154,11 +154,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
                 Err(TrapType::IllegalInstruction(inst.into()))
             } else {
                 // PASS icache-alias.S
-                #[cfg(feature = "inst_cache")]
-                cpu.cache_system.borrow_mut().icache.clear_inst();
-                #[cfg(feature = "data_cache")]
-                cpu.cache_system.borrow_mut().dcache.clear();
-
+                cpu.cache_system.borrow_mut().clear();
                 Ok(())
             }
         },

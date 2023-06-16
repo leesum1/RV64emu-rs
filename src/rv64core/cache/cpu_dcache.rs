@@ -82,9 +82,13 @@ impl CpuDcache {
     fn cacheline_base(&self, addr: u64) -> u64 {
         addr & !0x3f
     }
+    #[cfg(feature = "data_cache")]
     fn cacheble(&self, addr: u64) -> bool {
         (0x80000000..0x80000000 + 0x8000000).contains(&addr)
-        // false
+    }
+    #[cfg(not(feature = "data_cache"))]
+    fn cacheble(&self, addr: u64) -> bool {
+        false
     }
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, RVerr> {
