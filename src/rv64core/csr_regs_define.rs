@@ -1,9 +1,5 @@
-use core::{
-    cell::Cell,
-    u8,
-};
+use core::{cell::Cell, u8};
 use std::rc::Rc;
-
 
 use bitfield_struct::bitfield;
 use enum_dispatch::enum_dispatch;
@@ -229,6 +225,10 @@ impl XstatusIn {
             _ => panic!("invalid mpp value"),
         }
     }
+    pub fn update_sd(&mut self) {
+        let sd_val = self.fs() == 0b11 || self.xs() == 0b11 || self.vs() == 0b11;
+        self.set_sd(sd_val);
+    }
 }
 
 pub struct Xstatus {
@@ -250,14 +250,18 @@ impl Xstatus {
 impl Csr for Xstatus {
     fn write(&mut self, data: u64) {
         let new_data = write_with_mask(self.inner.get().into(), data, self.wmask);
-        self.inner.set(XstatusIn::from(new_data));
+        let mut status = XstatusIn::from(new_data);
+        status.update_sd();
+        self.inner.set(status);
     }
     fn read(&self) -> u64 {
         let data = self.read_raw();
         data & self.rmask
     }
     fn read_raw(&self) -> u64 {
-        self.inner.get().into()
+        let mut status = self.inner.get();
+        status.update_sd();
+        status.into()
     }
 }
 
@@ -282,7 +286,7 @@ impl XtvecIn {
         match self.mode() {
             TvecMode::Vectored if trap.is_interupt() => base + 4 * trap.get_irq_num(),
             TvecMode::Direct | TvecMode::Vectored => base,
-            TvecMode::Reserved => todo!(),
+            TvecMode::Reserved => panic!("invalid tvec mode:{:?}", self.mode()),
         }
     }
 
@@ -410,8 +414,18 @@ impl XipIn {
         } else if self.stip() {
             return TrapType::SupervisorTimerInterrupt;
         }
-
         panic!("no interupt:{self:?}");
+    }
+    pub fn set_irq(&mut self, irq_num: usize) {
+        match irq_num {
+            1 => self.set_ssip(true),
+            3 => self.set_msip(true),
+            5 => self.set_stip(true),
+            7 => self.set_mtip(true),
+            9 => self.set_seip(true),
+            11 => self.set_meip(true),
+            _ => panic!("invalid irq num:{}", irq_num),
+        }
     }
 }
 

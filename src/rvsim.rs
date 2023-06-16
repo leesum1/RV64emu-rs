@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, ops, rc::Rc, sync::Mutex};
+use std::{fs::File, io::Write, ops};
 
 use elf::{
     abi::{EM_RISCV, PT_LOAD},
@@ -9,7 +9,8 @@ use log::{info, warn};
 use crate::rv64core::{
     bus::Bus,
     cpu_core::{CpuCore, CpuState},
-    inst::inst_base::FesvrCmd,
+    // csr_regs_define::Misa,
+    inst::inst_base::FesvrCmd, traptype::RVmutex,
 };
 
 #[derive(Default)]
@@ -20,7 +21,7 @@ pub struct RVsim {
     /* riscof tests */
     signature_range: Option<ops::Range<u64>>,
     signature_file: Option<String>,
-    bus: Rc<Mutex<Bus>>,
+    bus: RVmutex<Bus>,
     harts: Vec<CpuCore>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
@@ -28,7 +29,7 @@ pub struct RVsim {
 
 impl RVsim {
     pub fn new(harts: Vec<CpuCore>) -> Self {
-        let bus = harts[0].mmu.bus.clone();
+        let bus = harts[0].mmu.caches.lock().bus.clone();
         Self {
             harts,
             bus,
@@ -97,7 +98,7 @@ impl RVsim {
             phdr.iter().filter(|x| x.p_type == PT_LOAD).for_each(|p| {
                 let data = elf_data.segment_data(&p).unwrap();
                 assert_eq!(data.len(), p.p_filesz as usize);
-                let mut bus = self.bus.lock().unwrap();
+                let mut bus = self.bus.lock();
                 // todo! write 8 bytes at a time
                 for addr in (p.p_paddr)..(p.p_paddr + p.p_filesz) {
                     bus.write(addr, data[(addr - p.p_paddr) as usize].into(), 1)
@@ -110,9 +111,9 @@ impl RVsim {
             self.collect_elf_symbols(&elf_data);
         } else {
             let boot_pc = self.harts.get(0).unwrap().pc;
-            let mut bus = self.bus.lock().unwrap();
-            // todo! write 8 bytes at a time
+            let mut bus = self.bus.lock();
 
+            // todo! write 8 bytes at a time
             for (i, data) in file_data.iter().enumerate() {
                 bus.write(boot_pc + i as u64, (*data).into(), 1).unwrap();
             }
@@ -133,7 +134,7 @@ impl RVsim {
         {
             self.harts.iter_mut().for_each(|hart| {
                 hart.execute(5000);
-                let mut bus = self.bus.lock().unwrap();
+                let mut bus = self.bus.lock();
                 bus.update();
                 // bus.clint.instance.tick(5000 / 100);
                 bus.clint.instance.tick(500);
@@ -143,9 +144,10 @@ impl RVsim {
         }
         self.dump_signature();
 
-        self.harts
-            .iter()
-            .all(|hart| hart.cpu_state != CpuState::Abort)
+        self.harts.iter().all(|hart| {
+            hart.cache_system.lock().show_perf();
+            hart.cpu_state != CpuState::Abort
+        })
     }
     // for riscv-tests
     // It seems in riscv-tests ends with end code
@@ -158,7 +160,9 @@ impl RVsim {
         if self.tohost.is_none() {
             return;
         }
-        let mut bus_u: std::sync::MutexGuard<Bus> = self.bus.lock().unwrap();
+
+        self.harts[0].cache_system.lock().clear();
+        let mut bus_u = self.bus.lock();
         let tohost = self.tohost.unwrap_or(0x8000_1000);
         let data = bus_u.read(tohost, 8).unwrap();
         // !! must clear mem
@@ -203,7 +207,7 @@ impl RVsim {
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {
-                let mut bus_u = self.bus.lock().unwrap();
+                let mut bus_u = self.bus.lock();
                 for i in sig_range.step_by(4) {
                     let tmp_data = bus_u.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
@@ -213,3 +217,10 @@ impl RVsim {
         );
     }
 }
+
+// pub struct HartConfig {
+//     isa_futrue: Misa,
+//     mmu_futrue: u32,
+//     mode: u32,
+//     boot_pc: u64,
+// }

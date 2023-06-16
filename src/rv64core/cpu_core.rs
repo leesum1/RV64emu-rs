@@ -12,7 +12,6 @@ use log::{debug, info, warn};
 use crate::{
     difftest::difftest_trait::Difftest,
     rv64core::bus::Bus,
-    rv64core::cpu_icache::CpuIcache,
     rv64core::csr_regs::CsrRegs,
     rv64core::csr_regs_define::XipIn,
     rv64core::gpr::Gpr,
@@ -25,8 +24,10 @@ use crate::{
 use crate::trace::traces::TraceType;
 
 use super::{
+    cache::{cache_system::CacheSystem},
     inst::inst_base::{check_aligned, is_compressed_instruction},
     mmu::cpu_mmu::Mmu,
+    traptype::RVmutex,
 };
 
 #[derive(PartialEq)]
@@ -37,14 +38,14 @@ pub enum CpuState {
 }
 pub struct CpuCoreBuild {
     hart_id: usize,
-    shared_bus: Rc<Mutex<Bus>>,
+    shared_bus: RVmutex<Bus>,
     boot_pc: u64,
     smode: bool,
     #[cfg(feature = "rv_debug_trace")]
     trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 impl CpuCoreBuild {
-    pub fn new(shared_bus: Rc<Mutex<Bus>>) -> Self {
+    pub fn new(shared_bus: RVmutex<Bus>) -> Self {
         CpuCoreBuild {
             hart_id: 0,
             shared_bus,
@@ -81,9 +82,13 @@ impl CpuCoreBuild {
         // let mtime = csr_regs_u.time.clone();
         let xip = csr_regs_u.xip.clone();
 
-        let mmu_u = Mmu::new(self.shared_bus.clone(), privi_u.clone(), xstatus, satp);
+        let cache_system = RVmutex::new(CacheSystem::new(self.shared_bus.clone()).into());
+
+        let mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
         {
-            let mut bus_u = mmu_u.bus.lock().unwrap();
+            let bus_u = mmu_u.caches.lock().bus.clone();
+            let mut bus_u = bus_u.lock();
+
             let mtime = bus_u.clint.instance.add_hart(xip.clone());
             csr_regs_u.add_mtime(mtime);
             // add plic context for core0 m-mode and s-mode
@@ -93,17 +98,17 @@ impl CpuCoreBuild {
             }
         }
 
-        let share_amo = mmu_u.bus.lock().unwrap().amo_mutex.clone();
+        let share_amo = mmu_u.caches.lock().bus.lock().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
             mmu: mmu_u,
             decode: InstDecode::new(),
+            cache_system,
             pc: self.boot_pc,
             npc: self.boot_pc,
             cur_priv: privi_u,
             cpu_state: CpuState::Stop,
-            cpu_icache: CpuIcache::new(),
             #[cfg(feature = "rv_debug_trace")]
             trace_sender: self.trace_sender.clone(),
             amo_mutex: share_amo,
@@ -116,13 +121,12 @@ pub struct CpuCore {
     pub csr_regs: CsrRegs,
     pub mmu: Mmu,
     pub decode: InstDecode,
+    pub cache_system: RVmutex<CacheSystem>,
     pub pc: u64,
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
-    // todo! move to bus
     pub amo_mutex: Arc<Mutex<()>>,
     pub cpu_state: CpuState,
-    pub cpu_icache: CpuIcache,
     #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
@@ -130,8 +134,9 @@ unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
         if check_aligned(addr, 4) {
-            #[warn(clippy::needless_return)]
-            return self.read(addr, size, AccessType::Fetch(addr));
+            // #[warn(clippy::needless_return)]
+            // return self.read(addr, size, AccessType::Fetch(addr));
+            return self.icahce_read(addr, 4);
         } else {
             #[cfg(not(feature = "rv_c"))]
             return Err(TrapType::LoadAddressMisaligned(addr));
@@ -156,18 +161,10 @@ impl CpuCore {
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
-
-        assert!(self.pc % 2 == 0, "pc must be aligned to 2");
-        // first lookup icache
-        // if icache hit ,than return,
-        // else load inst from mem and push into icache
-        #[cfg(feature = "inst_cache")]
-        match self.cpu_icache.get_inst(self.pc) {
-            Some(icache_inst) => Ok(icache_inst as u64),
-            None => self.fetch_from_mem(self.pc, 4),
+        if self.pc == 0x8000_21d0 || self.pc == 0x80002218 {
+            println!("br");
         }
-
-        #[cfg(not(feature = "inst_cache"))]
+        assert!(self.pc % 2 == 0, "pc must be aligned to 2");
         self.fetch_from_mem(self.pc, 4)
     }
 
@@ -214,8 +211,6 @@ impl CpuCore {
                     let exe_ret = match fetch_ret {
                         // op ret
                         Ok(inst_val) => {
-                            #[cfg(feature = "inst_cache")]
-                            self.cpu_icache.insert_inst(self.pc, inst_val as u32);
                             self.advance_pc(inst_val as u32);
                             self.step(inst_val as u32)
                         }
@@ -229,7 +224,7 @@ impl CpuCore {
                     }
 
                     self.handle_interrupt();
-                    // self.mmu.bus.lock().unwrap().update();
+                    // self.mmu.bus.lock().update();
 
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
@@ -312,9 +307,9 @@ impl CpuCore {
         }
     }
 
-    pub fn get_bus(&self) -> Rc<Mutex<Bus>> {
-        self.mmu.bus.clone()
-    }
+    // pub fn get_bus(&self) -> RVmutex<Bus> {
+    //     self.mmu.bus.clone()
+    // }
 
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
@@ -392,7 +387,36 @@ impl CpuCore {
     }
 
     pub fn read(&mut self, addr: u64, len: u64, access_type: AccessType) -> Result<u64, TrapType> {
-        self.mmu.update_access_type(access_type);
+        self.mmu.update_access_type(&access_type);
+
+        #[cfg(feature = "data_cache")]
+        let paddr = self.mmu.translate(addr, len)?;
+        #[cfg(feature = "data_cache")]
+        match self
+            .cache_system
+            .lock()
+            .dcache
+            .read(paddr, len as usize)
+        {
+            Ok(data) => Ok(data),
+            Err(_err) => Err(access_type.throw_access_exception()),
+        }
+        #[cfg(not(feature = "data_cache"))]
+        self.mmu.do_read(addr, len)
+    }
+
+    pub fn icahce_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+        let access_type = AccessType::Fetch(addr);
+        self.mmu.update_access_type(&access_type);
+
+        #[cfg(feature = "data_cache")]
+        let paddr = self.mmu.translate(addr, len)?;
+        #[cfg(feature = "data_cache")]
+        match self.cache_system.lock().icache.read(paddr) {
+            Ok(data) => Ok(data),
+            Err(_err) => Err(access_type.throw_access_exception()),
+        }
+        #[cfg(not(feature = "data_cache"))]
         self.mmu.do_read(addr, len)
     }
 
@@ -403,15 +427,29 @@ impl CpuCore {
         len: u64,
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
-        self.mmu.update_access_type(access_type);
+        self.mmu.update_access_type(&access_type);
+        #[cfg(feature = "data_cache")]
+        let paddr = self.mmu.translate(addr, len)?;
+        #[cfg(feature = "data_cache")]
+        match self
+            .cache_system
+            .lock()
+            .dcache
+            .write(paddr, data, len as usize)
+        {
+            Ok(data) => Ok(data),
+            Err(_err) => Err(access_type.throw_access_exception()),
+        }
+        #[cfg(not(feature = "data_cache"))]
         self.mmu.do_write(addr, data, len)
     }
 
     pub fn lr_sc_reservation_set(&mut self, addr: u64) {
         self.mmu
+            .caches
+            .lock()
             .bus
             .lock()
-            .unwrap()
             .lr_sc_set
             .lock()
             .unwrap()
@@ -419,9 +457,10 @@ impl CpuCore {
     }
     pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
         self.mmu
+            .caches
+            .lock()
             .bus
             .lock()
-            .unwrap()
             .lr_sc_set
             .lock()
             .unwrap()
@@ -442,9 +481,9 @@ impl CpuCore {
         fd.map_or_else(
             |err| warn!("{err}"),
             |mut file| {
-                let mut bus_u = self.mmu.bus.lock().unwrap();
+                let mut bus_u = self.mmu.caches.lock();
                 for i in (sig_start..sig_end).step_by(4) {
-                    let tmp_data = bus_u.read(i, 4).unwrap();
+                    let tmp_data = bus_u.dcache.read(i, 4).unwrap();
                     file.write_fmt(format_args! {"{tmp_data:08x}\n"}).unwrap();
                 }
             },
@@ -459,11 +498,11 @@ impl CpuCore {
     // if non-zero data is written.
     // End code 1 seems to mean pass.
     pub fn check_to_host(&mut self) {
-        let mut bus_u = self.mmu.bus.lock().unwrap();
+        let mut bus_u = self.mmu.caches.lock();
 
-        let data = bus_u.read(0x8000_1000, 8).unwrap();
+        let data = bus_u.dcache.read(0x8000_1000, 8).unwrap();
         // !! must clear mem
-        bus_u.write(0x8000_1000, 0, 8).unwrap();
+        bus_u.dcache.write(0x8000_1000, 0, 8).unwrap();
         debug!("check to host: {:#x}", data);
         let cmd = FesvrCmd::from(data);
         if let Some(pass) = cmd.syscall_device() {
@@ -496,31 +535,35 @@ impl Difftest for CpuCore {
     fn set_csr(&mut self, csr: u64, val: u64) {
         self.csr_regs.write_raw(csr, val);
     }
-
     fn get_csr(&mut self, csr: u64) -> u64 {
         self.csr_regs.read_raw(csr)
     }
-
     fn set_mem(&mut self, paddr: u64, data: u64, len: usize) {
-        let _ret = self.mmu.bus.lock().unwrap().write(paddr, data, len);
+        let _ret = self
+            .mmu
+            .caches
+            .lock()
+            .dcache
+            .write(paddr, data, len);
     }
-
     fn get_mem(&mut self, paddr: u64, len: usize) -> u64 {
         self.mmu
-            .bus
+            .caches
             .lock()
-            .unwrap()
+            .dcache
             .read(paddr, len)
             .map_or(0, |x| x)
     }
-
     fn get_pc(&mut self) -> u64 {
         self.npc
     }
     fn set_pc(&mut self, pc: u64) {
         self.npc = pc;
     }
-    fn raise_intr(&mut self, _irq: u64) {
-        todo!()
+    fn raise_intr(&mut self, irq_num: u64) {
+        let mut xip = self.csr_regs.xip.get();
+        xip.set_irq(irq_num as usize);
+        self.csr_regs.xip.set(xip);
+        self.handle_interrupt();
     }
 }

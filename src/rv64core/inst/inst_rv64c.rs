@@ -161,7 +161,6 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let f = FormatCJ::new(inst);
             let imm = f.imm_c_j() as i64;
 
-            // todo! check align
             let next_pc = cpu.pc.wrapping_add(imm as u64);
             #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {
@@ -221,7 +220,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
             let f = FormatCR::new(inst);
             let rs1_data = cpu.gpr.read(f.rs1());
             let wdata = pc.wrapping_add(2);
-            // todo! check align
+
             let next_pc = rs1_data;
             #[cfg(feature = "rvc_debug_trace")]
             if f.is_call() {

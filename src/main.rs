@@ -16,13 +16,12 @@ use std::{
 };
 use std::{
     io::{stdin, Write},
-    sync::Mutex,
 };
 
 use clap::Parser;
 
 use log::{debug, info, LevelFilter};
-use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
+use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim, rv64core::traptype::RVmutex};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
@@ -107,12 +106,12 @@ fn main() {
     #[allow(clippy::redundant_clone)]
     let signal_term_uart = signal_term.clone();
 
-    let bus_u: Rc<Mutex<Bus>> = Rc::new(Mutex::new(Bus::new()));
+    let bus_u: RVmutex<Bus> = RVmutex::new(Bus::new().into());
 
     // device dram len:0X08000000
     let mem = DeviceDram::new(128 * 1024 * 1024);
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem.into(),
@@ -121,7 +120,7 @@ fn main() {
 
     // device dtcm
     let dtcm = DeviceDram::new(128 * 1024 * 1024);
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: 0x9000_0000,
         len: dtcm.capacity as u64,
         instance: dtcm.into(),
@@ -131,7 +130,7 @@ fn main() {
     // device flash len:0X01000000
     let falsh = DeviceDram::new(128 * 1024 * 1024);
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: 0x3000_0000,
         len: falsh.capacity as u64,
         instance: falsh.into(),
@@ -165,7 +164,7 @@ fn main() {
     // device uart
     let uart = DeviceUart::new();
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart.into(),
@@ -174,7 +173,7 @@ fn main() {
     // device 16650_uart
     let device_16650_uart = Device16550aUART::new(uart_putc_tx.clone(), uart_getc_rx.clone());
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: 0x1000_0000,
         len: 0x1000,
         instance: device_16650_uart.into(),
@@ -186,12 +185,11 @@ fn main() {
 
     bus_u
         .lock()
-        .unwrap()
         .plic
         .instance
         .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: SIFIVE_UART_BASE,
         len: 0x1000,
         instance: device_sifive_uart.into(),
@@ -202,7 +200,7 @@ fn main() {
     let rtc = DeviceRTC::new();
     let device_name = rtc.get_name();
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
         instance: rtc.into(),
@@ -213,7 +211,7 @@ fn main() {
     create_sdl2_devices(bus_u.clone(), signal_term_sdl_event);
 
     // show device address map
-    debug!("{0}", bus_u.lock().unwrap());
+    debug!("{0}", bus_u.lock());
 
     let hart_num: usize = args.num_harts.unwrap_or(1);
 
@@ -298,7 +296,7 @@ fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: boo
     .expect("Key event send error");
 }
 #[cfg(feature = "device_sdl2")]
-fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicBool>) {
+fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBool>) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
@@ -325,7 +323,7 @@ fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicB
     let vgactl = DeviceVGACTL::new(vgactl_msg.clone());
 
     let device_name = vgactl.get_name();
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
         instance: vgactl.into(),
@@ -335,7 +333,7 @@ fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicB
     // device vga
     let vga = DeviceVGA::new(canvas, vgactl_msg);
     let device_name = vga.get_name();
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
         instance: vga.into(),
@@ -355,7 +353,7 @@ fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicB
     let device_kb = DeviceKB::new(kb_am_rx, kb_sdl_rx);
     let device_name = device_kb.get_name();
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
         instance: device_kb.into(),
@@ -366,7 +364,7 @@ fn create_sdl2_devices(bus_u: Rc<Mutex<Bus>>, signal_term_sdl_event: Arc<AtomicB
         ring_channel(NonZeroUsize::new(1).unwrap());
     let device_mouse = DeviceMouse::new(mouse_sdl_rx);
 
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: MOUSE_ADDR,
         len: 16,
         instance: device_mouse.into(),

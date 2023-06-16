@@ -1,7 +1,6 @@
 use std::{
     env,
-    path::PathBuf,
-    sync::Mutex, rc::Rc,
+    path::PathBuf, rc::Rc,
 };
 extern crate riscv64_emu;
 
@@ -13,7 +12,7 @@ use riscv64_emu::{
     },
     rv64core::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild, CpuState},
+        cpu_core::{CpuCoreBuild, CpuState}, traptype::RVmutex,
     },
 };
 
@@ -28,7 +27,7 @@ fn main() {
     // create system bus, which functions are as follows
     // 1. manage all devices,including plic,clint,and sram
     // 2. shared by all harts
-    let bus_u = Rc::new(Mutex::new(Bus::new()));
+    let bus_u = RVmutex::new(Bus::new().into());
 
     // create hart0 with smode support, some additional features are as follows
     // 1. the first instruction is executed at 0x8000_0000
@@ -46,7 +45,7 @@ fn main() {
     let mut mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
     mem.load_binary(bin_path.to_str().unwrap());
     let device_name = mem.get_name();
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.capacity as u64,
         instance: mem.into(),
@@ -56,7 +55,7 @@ fn main() {
     // device uart
     let uart = DeviceUart::new();
     let device_name = uart.get_name();
-    bus_u.lock().unwrap().add_device(DeviceType {
+    bus_u.lock().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
         instance: uart.into(),
@@ -64,7 +63,7 @@ fn main() {
     });
 
     // print bus device map
-    println!("{0}", bus_u.lock().unwrap());
+    println!("{0}", bus_u.lock());
 
     hart0.cpu_state = CpuState::Running;
     let mut cycle: u64 = 0;
@@ -73,9 +72,9 @@ fn main() {
 
         // update clint and plic every 128 cycles
         if cycle % 128 == 0 {
-            bus_u.lock().unwrap().update();
-            bus_u.lock().unwrap().clint.instance.tick(128);
-            bus_u.lock().unwrap().plic.instance.tick();
+            bus_u.lock().update();
+            bus_u.lock().clint.instance.tick(128);
+            bus_u.lock().plic.instance.tick();
         }
         cycle += 1;
     }

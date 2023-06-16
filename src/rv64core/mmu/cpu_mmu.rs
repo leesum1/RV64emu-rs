@@ -1,12 +1,14 @@
-use std::{rc::Rc, sync::Mutex};
+use std::{rc::Rc};
 
 use core::cell::Cell;
 
 use crate::{
-    rv64core::bus::Bus,
     rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
-    rv64core::inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
-    rv64core::traptype::TrapType,
+    rv64core::traptype::{TrapType, RVmutex},
+    rv64core::{
+        cache::cache_system::CacheSystem,
+        inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
+    },
 };
 
 use super::{
@@ -17,13 +19,15 @@ use super::{
 const PAGESIZE: u64 = 4096; // 2 ^ 12
 
 pub struct Mmu {
-    pub bus: Rc<Mutex<Bus>>,
+    pub caches: RVmutex<CacheSystem>,
     pub access_type: AccessType,
     mstatus: CsrShare<XstatusIn>,
     satp: CsrShare<SatpIn>,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
+
+    /* tmp val */
     i: i8,
     level: i8,
     a: u64,
@@ -34,13 +38,13 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(
-        bus: Rc<Mutex<Bus>>,
+        caches: RVmutex<CacheSystem>,
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: CsrShare<XstatusIn>,
         satp: CsrShare<SatpIn>,
     ) -> Self {
         Mmu {
-            bus,
+            caches,
             access_type: AccessType::Load(0),
             mstatus,
             satp,
@@ -83,9 +87,9 @@ impl Mmu {
         // assert_eq!(self.stap.ppn() * 4096, self.a);
         // todo! PMA or PMP check
         let pte_data = self
-            .bus
+            .caches
             .lock()
-            .unwrap()
+            .dcache
             .read(pte_addr, pte_size as usize)
             .unwrap();
         // self.pte = Sv39PTE::from(pte_data).into();
@@ -165,6 +169,8 @@ impl Mmu {
     // exception corresponding to the original access type.
     fn va_translation_step6(&mut self) -> Result<u8, TrapType> {
         let is_misalign_superpage = || -> bool {
+            // if self.i == 0 this loop do not excute
+            // and will return false;
             for i in 0..self.i {
                 if self.pte.get_ppn_by_idx(i as u8) != 0 {
                     return true;
@@ -173,7 +179,7 @@ impl Mmu {
             false
         };
 
-        if (self.i > 0) && is_misalign_superpage() {
+        if is_misalign_superpage() {
             return Err(self.access_type.throw_page_exception());
         }
 
@@ -191,12 +197,7 @@ impl Mmu {
 
     fn va_translation_step7(&mut self) -> Result<u8, TrapType> {
         // choese to raise a exception
-        if !self.pte.a()
-            || ((!self.pte.d())
-                    // only check eume type without data
-                && (self.access_type == AccessType::Store(0)
-                    || self.access_type == AccessType::Amo(0)))
-        {
+        if !self.pte.a() || ((!self.pte.d()) && self.access_type.is_store()) {
             Err(self.access_type.throw_page_exception())
         } else {
             Ok(8)
@@ -278,9 +279,9 @@ impl Mmu {
         //if the machine is without mmu,then we need not do page table walk,just return the physical address
         if self.no_mmu() {
             return self
-                .bus
+                .caches
                 .lock()
-                .unwrap()
+                .dcache
                 .read(addr, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
@@ -293,11 +294,23 @@ impl Mmu {
         self.page_table_walk()?; // err return
 
         //read the data from the physical address
-        self.bus
+        self.caches
             .lock()
-            .unwrap()
+            .dcache
             .read(self.pa.raw(), len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
+    }
+
+    pub fn translate(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+        if !check_aligned(addr, len) {
+            return Err(TrapType::LoadAddressMisaligned(addr));
+        }
+        if self.no_mmu() {
+            return Ok(addr);
+        }
+        self.va = self.get_vaops(addr);
+        self.pa = self.get_paops(0);
+        self.page_table_walk()
     }
 
     pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
@@ -308,9 +321,9 @@ impl Mmu {
         // no mmu
         if self.no_mmu() {
             return self
-                .bus
+                .caches
                 .lock()
-                .unwrap()
+                .dcache
                 .write(addr, data, len as usize)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
@@ -323,15 +336,15 @@ impl Mmu {
         self.pa = self.get_paops(0);
 
         self.page_table_walk()?; // err return
-        self.bus
+        self.caches
             .lock()
-            .unwrap()
+            .dcache
             .write(self.pa.raw(), data, len as usize)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
-    pub fn update_access_type(&mut self, access_type: AccessType) {
-        self.access_type = access_type;
+    pub fn update_access_type(&mut self, access_type: &AccessType) {
+        self.access_type = access_type.clone();
         // update satp mode
         self.satp_mode = self.satp.get().mode();
     }

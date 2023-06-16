@@ -125,7 +125,8 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         match_data: MATCH_FENCE_I,
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
-            cpu.cpu_icache.clear_inst();
+            cpu.cache_system.lock().dcache.clear();
+            cpu.cache_system.lock().icache.clear_inst();
             Ok(())
         },
     },
@@ -152,10 +153,11 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             if !require_priv.check_priv(cur_priv) {
                 Err(TrapType::IllegalInstruction(inst.into()))
             } else {
-                
                 // PASS icache-alias.S
                 #[cfg(feature = "inst_cache")]
-                cpu.cpu_icache.clear_inst();
+                cpu.cache_system.lock().icache.clear_inst();
+                #[cfg(feature = "data_cache")]
+                cpu.cache_system.lock().dcache.clear();
 
                 Ok(())
             }
