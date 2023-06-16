@@ -1382,7 +1382,7 @@ pub enum PrivilegeLevels {
     Machine = 3,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum AccessType {
     Load(u64),
     Store(u64),
@@ -1432,6 +1432,14 @@ impl AccessType {
             AccessType::Load(tval) => TrapType::LoadAccessFault(*tval),
             AccessType::Store(tval) => TrapType::StoreAccessFault(*tval),
             AccessType::Amo(tval) => TrapType::StoreAccessFault(*tval), // todo! ???
+        }
+    }
+    pub fn throw_addr_misaligned_exception(&self) -> TrapType {
+        match self {
+            AccessType::Fetch(tval) => TrapType::InstructionAddressMisaligned(*tval),
+            AccessType::Load(tval) => TrapType::LoadAddressMisaligned(*tval),
+            AccessType::Store(tval) => TrapType::StoreAddressMisaligned(*tval),
+            AccessType::Amo(tval) => TrapType::StoreAddressMisaligned(*tval), // todo! ???
         }
     }
 }

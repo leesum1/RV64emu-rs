@@ -1,10 +1,10 @@
-use std::{rc::Rc};
+use std::rc::Rc;
 
 use core::cell::Cell;
 
 use crate::{
     rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
-    rv64core::traptype::{TrapType, RVmutex},
+    rv64core::traptype::{RVmutex, TrapType},
     rv64core::{
         cache::cache_system::CacheSystem,
         inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
@@ -273,7 +273,7 @@ impl Mmu {
     pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
         //check whether the address is aligned
         if !check_aligned(addr, len) {
-            return Err(TrapType::LoadAddressMisaligned(addr));
+            return Err(self.access_type.throw_addr_misaligned_exception());
         }
         // no mmu
         //if the machine is without mmu,then we need not do page table walk,just return the physical address
@@ -303,7 +303,7 @@ impl Mmu {
 
     pub fn translate(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
-            return Err(TrapType::LoadAddressMisaligned(addr));
+            return Err(self.access_type.throw_addr_misaligned_exception());
         }
         if self.no_mmu() {
             return Ok(addr);
@@ -315,7 +315,7 @@ impl Mmu {
 
     pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
-            return Err(TrapType::StoreAddressMisaligned(addr));
+            return Err(self.access_type.throw_addr_misaligned_exception());
         }
 
         // no mmu
