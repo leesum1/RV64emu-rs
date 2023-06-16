@@ -1,5 +1,6 @@
 extern crate riscv64_emu;
 
+use std::io::{stdin, Write};
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
@@ -14,14 +15,13 @@ use std::{
     thread,
     time::Duration,
 };
-use std::{
-    io::{stdin, Write},
-};
 
 use clap::Parser;
 
 use log::{debug, info, LevelFilter};
-use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim, rv64core::traptype::RVmutex};
+use riscv64_emu::{
+    device::device_16550a::Device16550aUART, rv64core::traptype::RVmutex, rvsim::RVsim,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{

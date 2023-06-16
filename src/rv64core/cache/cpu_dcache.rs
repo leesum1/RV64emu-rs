@@ -1,5 +1,3 @@
-
-
 use crate::rv64core::bus::Bus;
 use crate::rv64core::inst::inst_base::RVerr;
 use crate::rv64core::traptype::RVmutex;
@@ -110,18 +108,6 @@ impl CpuDcache {
                 self.read(addr, len)
             })
 
-        // self.caches
-        //     .iter_mut()
-        //     .find(|cache_line| cache_line.hit(tag))
-        //     .map(|cache_line| {
-        //         self.hit += 1;
-        //         Ok(cache_line.read(offset, len))
-        //     })
-        //     .unwrap_or_else(|| {
-        //         self.miss += 1;
-        //         self.alloc_cache_line(addr);
-        //         self.read(addr, len)
-        //     })
     }
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
         if !self.cacheble(addr) {
@@ -143,20 +129,6 @@ impl CpuDcache {
                 self.alloc_cache_line(addr);
                 self.write(addr, data, len)
             })
-
-        // self.caches
-        //     .iter_mut()
-        //     .find(|cache_line| cache_line.hit(tag))
-        //     .map(|cache_line| {
-        //         self.hit += 1;
-        //         cache_line.write(offset, data, len);
-        //         Ok(0)
-        //     })
-        //     .unwrap_or_else(|| {
-        //         self.miss += 1;
-        //         self.alloc_cache_line(addr);
-        //         self.write(addr, data, len)
-        //     })
     }
     pub fn clear(&mut self) {
         let mut bus = self.bus.borrow_mut();
@@ -168,8 +140,9 @@ impl CpuDcache {
                     bus.write(addr + i as u64, data, 8).unwrap();
                 }
             }
-            cache_line.clear()
+            // cache_line.clear()
         });
+        self.caches.clear();
     }
 
     pub fn show_perf(&self) {

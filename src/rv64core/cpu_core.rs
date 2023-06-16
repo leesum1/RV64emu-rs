@@ -161,9 +161,7 @@ impl CpuCore {
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
-        if self.pc == 0x8000_21d0 || self.pc == 0x80002218 {
-            println!("br");
-        }
+
         assert!(self.pc % 2 == 0, "pc must be aligned to 2");
         self.fetch_from_mem(self.pc, 4)
     }
