@@ -46,17 +46,19 @@ impl Gpr {
 
     pub fn read(&self, idx: u64) -> u64 {
         assert!(idx < 32);
-        match idx {
-            0 => 0,
-            _ => self.regs[idx as usize],
+        if idx == 0 {
+            0
+        } else {
+            self.regs.get(idx as usize).copied().unwrap_or(0)
         }
     }
     pub fn write(&mut self, idx: u64, data: u64) {
         assert!(idx < 32);
-        match idx {
-            0 => (),
-            _ => self.regs[idx as usize] = data,
-        };
+        if idx != 0 {
+            if let Some(x) = self.regs.get_mut(idx as usize) {
+                *x = data;
+            }
+        }
     }
     pub fn get_register_name(num: u64) -> &'static str {
         assert!(num < 32);

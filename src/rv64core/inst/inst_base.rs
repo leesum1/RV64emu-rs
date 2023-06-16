@@ -1382,7 +1382,7 @@ pub enum PrivilegeLevels {
     Machine = 3,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum AccessType {
     Load(u64),
     Store(u64),
@@ -1396,8 +1396,27 @@ impl PartialEq for AccessType {
         discriminant(self) == discriminant(other)
     }
 }
+#[test]
+fn access_type_test() {
+    let a = AccessType::Store(1);
+
+    assert_eq!(a, AccessType::Store(0));
+    assert!(a.is_store());
+    assert!(!a.is_load());
+}
 
 impl AccessType {
+    // only check eume type without data
+    pub fn is_store(&self) -> bool {
+        self == &AccessType::Store(0) || self == &AccessType::Amo(0)
+    }
+    pub fn is_load(&self) -> bool {
+        self == &AccessType::Load(0)
+    }
+    pub fn is_fetch(&self) -> bool {
+        self == &AccessType::Fetch(0)
+    }
+
     pub fn throw_page_exception(&self) -> TrapType {
         match self {
             AccessType::Fetch(tval) => TrapType::InstructionPageFault(*tval),
