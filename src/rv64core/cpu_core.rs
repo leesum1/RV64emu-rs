@@ -1,13 +1,12 @@
 use core::cell::Cell;
 
 use std::{
-    fs::File,
     io::Write,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use log::{debug, info, warn};
+use log::warn;
 
 use crate::{
     difftest::difftest_trait::Difftest,
@@ -15,7 +14,7 @@ use crate::{
     rv64core::csr_regs::CsrRegs,
     rv64core::csr_regs_define::XipIn,
     rv64core::gpr::Gpr,
-    rv64core::inst::inst_base::{AccessType, FesvrCmd, PrivilegeLevels},
+    rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
     rv64core::traptype::TrapType,
 };
@@ -84,9 +83,9 @@ impl CpuCoreBuild {
 
         let cache_system = RVmutex::new(CacheSystem::new(self.shared_bus.clone()).into());
 
-        let mut mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
+        let mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
         {
-            let mut bus_u = mmu_u.caches.borrow_mut().bus.clone();
+            let bus_u = mmu_u.caches.borrow_mut().bus.clone();
             let mut bus_u = bus_u.borrow_mut();
 
             let mtime = bus_u.clint.instance.add_hart(xip.clone());
@@ -134,11 +133,11 @@ unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
         if check_aligned(addr, 4) {
-            // #[warn(clippy::needless_return)]
-            // return self.read(addr, size, AccessType::Fetch(addr));
+            #[warn(clippy::needless_return)]
             return self.icahce_read(addr, 4);
         } else {
             #[cfg(not(feature = "rv_c"))]
+            #[warn(clippy::needless_return)]
             return Err(TrapType::LoadAddressMisaligned(addr));
         }
 
@@ -149,11 +148,15 @@ impl CpuCore {
             // Read two bytes at a time from memory and store them in data_bytes.
             for i in (0..size).step_by(2) {
                 // Read a byte from memory.
-                let byte = self.read(addr + i, 2, AccessType::Fetch(addr + i))?;
+                let byte = self.icahce_read(addr + i, 2)?;
                 // Convert the byte to a byte array and copy it into data_bytes.
                 let src = u16::to_le_bytes(byte as u16);
                 let dest_range = i as usize..(i + 2) as usize;
                 data_bytes[dest_range].copy_from_slice(&src[..]);
+
+                if is_compressed_instruction(u32::from_le_bytes(data_bytes)) {
+                    return Ok(u32::from_le_bytes(data_bytes) as u64);
+                }
             }
             // Convert data_bytes to a u64 and return it.
             Ok(u32::from_le_bytes(data_bytes) as u64)
@@ -162,7 +165,7 @@ impl CpuCore {
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
 
-        assert!(self.pc % 2 == 0, "pc must be aligned to 2");
+        // assert!(self.pc % 2 == 0, "pc must be aligned to 2");
         self.fetch_from_mem(self.pc, 4)
     }
 
@@ -235,6 +238,8 @@ impl CpuCore {
 
     #[cfg(feature = "support_am")]
     pub fn halt(&mut self) -> usize {
+        use log::info;
+
         let a0 = self.gpr.read_by_name("a0");
 
         if let 0 = a0 {
@@ -384,13 +389,18 @@ impl CpuCore {
         }
     }
 
-    pub fn read(&mut self, addr: u64, len: u64, access_type: AccessType) -> Result<u64, TrapType> {
+    pub fn read(
+        &mut self,
+        addr: u64,
+        len: usize,
+        access_type: AccessType,
+    ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(&access_type);
 
         #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
         #[cfg(feature = "data_cache")]
-        match self.cache_system.borrow_mut().dcache.read(paddr, len as usize) {
+        match self.cache_system.borrow_mut().dcache.read(paddr, len) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
@@ -398,22 +408,23 @@ impl CpuCore {
         self.mmu.do_read(addr, len)
     }
 
-    pub fn icahce_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+    pub fn icahce_read(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {
         let access_type = AccessType::Fetch(addr);
         self.mmu.update_access_type(&access_type);
         let paddr = self.mmu.translate(addr, len)?;
-        match self.cache_system.borrow_mut().icache.read(paddr) {
+
+        assert_ne!(len, 0, "icache read len is zero");
+        match self.cache_system.borrow_mut().icache.read(paddr, len) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
-
     }
 
     pub fn write(
         &mut self,
         addr: u64,
         data: u64,
-        len: u64,
+        len: usize,
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(&access_type);
@@ -422,12 +433,11 @@ impl CpuCore {
             .cache_system
             .borrow_mut()
             .dcache
-            .write(paddr, data, len as usize)
+            .write(paddr, data, len)
         {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
-
     }
 
     pub fn lr_sc_reservation_set(&mut self, addr: u64) {
@@ -455,7 +465,6 @@ impl CpuCore {
     // pub fn lr_sc_reservation_clear(&mut self) {
     //     self.lr_sc_set.lock().unwrap().clear();
     // }
-
 }
 
 impl Difftest for CpuCore {

@@ -126,7 +126,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
             cpu.cache_system.borrow_mut().dcache.clear();
-            cpu.cache_system.borrow_mut().icache.clear_inst();
+            cpu.cache_system.borrow_mut().icache.clear();
             Ok(())
         },
     },

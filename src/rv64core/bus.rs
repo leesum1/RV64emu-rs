@@ -64,7 +64,7 @@ impl Bus {
     }
 
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, RVerr> {
-        if !check_aligned(addr, len as u64) {
+        if !check_aligned(addr, len) {
             warn!("bus read:{:x},{:x}", addr, len);
             return Err(RVerr::AddrMisalign);
         }
@@ -99,7 +99,7 @@ impl Bus {
     }
 
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
-        if !check_aligned(addr, len as u64) {
+        if !check_aligned(addr,len) {
             return Err(RVerr::AddrMisalign);
         }
 

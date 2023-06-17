@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, ops};
+use std::{fs::File, io::Write, ops, time::Instant};
 
 use elf::{
     abi::{EM_RISCV, PT_LOAD},
@@ -10,7 +10,8 @@ use crate::rv64core::{
     bus::Bus,
     cpu_core::{CpuCore, CpuState},
     // csr_regs_define::Misa,
-    inst::inst_base::FesvrCmd, traptype::RVmutex,
+    inst::inst_base::FesvrCmd,
+    traptype::RVmutex,
 };
 
 #[derive(Default)]
@@ -127,10 +128,13 @@ impl RVsim {
             .iter_mut()
             .for_each(|hart| hart.cpu_state = CpuState::Running);
 
+        let start_time = Instant::now();
+
         while self
             .harts
             .iter()
             .all(|hart| hart.cpu_state == CpuState::Running)
+            && start_time.elapsed().as_secs() < 30
         {
             self.harts.iter_mut().for_each(|hart| {
                 hart.execute(5000);

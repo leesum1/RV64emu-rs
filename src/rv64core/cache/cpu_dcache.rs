@@ -3,6 +3,7 @@ use crate::rv64core::inst::inst_base::RVerr;
 use crate::rv64core::traptype::RVmutex;
 use log::info;
 
+const DCACHE_SIZE: usize = 128;
 #[derive(Clone)]
 struct CacheLine {
     valid: bool,
@@ -29,7 +30,7 @@ impl CacheLine {
         self.dirty
     }
     pub fn read(&mut self, addr: usize, len: usize) -> u64 {
-        self.inc_lru();
+        // self.inc_lru();
 
         let mut des = 0_u64.to_le_bytes();
         des[..len].copy_from_slice(&self.data[addr..(len + addr)]);
@@ -56,7 +57,6 @@ impl CacheLine {
 
 pub struct CpuDcache {
     bus: RVmutex<Bus>,
-    // caches: Vec<CacheLine>,
     caches: hashbrown::HashMap<u64, CacheLine>,
     hit: u64,
     miss: u64,
@@ -83,16 +83,27 @@ impl CpuDcache {
         addr & !0x3f
     }
     #[cfg(feature = "data_cache")]
-    fn cacheble(&self, addr: u64) -> bool {
+    fn cacheable(&self, addr: u64) -> bool {
         (0x80000000..0x80000000 + 0x8000000).contains(&addr)
     }
     #[cfg(not(feature = "data_cache"))]
-    fn cacheble(&self, addr: u64) -> bool {
+    fn cacheable(&self, addr: u64) -> bool {
         false
     }
 
+    // random remove a item from caches
+    fn remove_random(&mut self) -> Option<CacheLine> {
+        let (key, _) = self
+            .caches
+            .iter()
+            .next()
+            .map(|(k, _)| (*k, ()))
+            .unwrap_or_default();
+        self.caches.remove(&key)
+    }
+
     pub fn read(&mut self, addr: u64, len: usize) -> Result<u64, RVerr> {
-        if !self.cacheble(addr) {
+        if !self.cacheable(addr) {
             let mut bus = self.bus.borrow_mut();
             return bus.read(addr, len);
         }
@@ -111,10 +122,9 @@ impl CpuDcache {
                 self.alloc_cache_line(addr);
                 self.read(addr, len)
             })
-
     }
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
-        if !self.cacheble(addr) {
+        if !self.cacheable(addr) {
             let mut bus = self.bus.borrow_mut();
             return bus.write(addr, data, len);
         }
@@ -167,6 +177,7 @@ impl CpuDcache {
             let data = bus.read(cacheline_base + i as u64, 8).unwrap();
             cache_data[i..(i + 8)].copy_from_slice(&data.to_le_bytes());
         }
+        drop(bus);
 
         let new_line = CacheLine {
             valid: true,
@@ -176,53 +187,20 @@ impl CpuDcache {
             data: cache_data,
         };
 
-        self.caches.insert(tag, new_line);
-
-        let need_write_back = false;
-        // // todo! read from memory
-        // let need_write_back = self
-        //     .caches
-        //     .iter_mut()
-        //     .find(|(_, cache_line)| !cache_line.valid)
-        //     .map(|(_, cache_line)| {
-        //         cache_line.valid = true;
-        //         cache_line.dirty = false;
-        //         cache_line.lru = 0;
-        //         cache_line.tag = tag;
-        //         cache_line.data = cache_data;
-        //     })
-        //     .is_none();
+        let need_write_back = self.caches.len() >= DCACHE_SIZE;
 
         if need_write_back {
-            panic!("123");
-            let (_, cache_line) = self
-                .caches
-                .iter_mut()
-                .min_by_key(|(_, cache_line)| cache_line.lru)
-                .unwrap();
+            let mut cache_line_wb: CacheLine = self.remove_random().expect("remove_random err");
+            let mut bus = self.bus.borrow_mut();
 
-            let addr = cache_line.tag << 6;
+            let addr = cache_line_wb.tag << 6;
             for i in (0..64).step_by(8) {
-                let data = cache_line.read(i, 8);
+                let data: u64 = cache_line_wb.read(i, 8);
                 bus.write(addr + i as u64, data, 8).unwrap();
             }
-
-            cache_line.valid = true;
-            cache_line.dirty = false;
-            cache_line.lru = 0;
-            cache_line.tag = tag;
-            cache_line.data = cache_data;
         };
+        self.caches.insert(tag, new_line);
     }
-
-    // fn write_back(&mut self, cacheline: &mut CacheLine) {
-    //     let mut bus = self.bus.borrow_mut();
-    //     let addr = cacheline.tag << 6;
-    //     for i in (0..64).step_by(8) {
-    //         let data = cacheline.read(i, 8);
-    //         bus.write(addr + i as u64, data, 8).unwrap();
-    //     }
-    // }
 }
 
 // impl Default for CpuDcache {

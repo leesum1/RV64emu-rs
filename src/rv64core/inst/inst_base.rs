@@ -1511,9 +1511,9 @@ pub fn check_area(start: u64, len: u64, addr: u64) -> bool {
     (addr >= start) && (addr < (start + len))
 }
 
-pub fn check_aligned(addr: u64, len: u64) -> bool {
+pub fn check_aligned(addr: u64, len: usize) -> bool {
     // assert!(addr & (len - 1) == 0, "bus address not aligned");
-    addr & (len - 1) == 0
+    addr & (len as u64 - 1) == 0
 }
 
 pub fn is_compressed_instruction(inst: u32) -> bool {

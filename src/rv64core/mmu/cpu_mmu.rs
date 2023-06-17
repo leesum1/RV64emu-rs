@@ -270,7 +270,7 @@ impl Mmu {
         machine_mdoe || satp_bare_mode
     }
 
-    pub fn do_read(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+    pub fn do_read(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {
         //check whether the address is aligned
         if !check_aligned(addr, len) {
             return Err(self.access_type.throw_addr_misaligned_exception());
@@ -282,7 +282,7 @@ impl Mmu {
                 .caches
                 .borrow_mut()
                 .dcache
-                .read(addr, len as usize)
+                .read(addr, len)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
         // has mmu,
@@ -297,11 +297,11 @@ impl Mmu {
         self.caches
             .borrow_mut()
             .dcache
-            .read(self.pa.raw(), len as usize)
+            .read(self.pa.raw(), len)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 
-    pub fn translate(&mut self, addr: u64, len: u64) -> Result<u64, TrapType> {
+    pub fn translate(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
             return Err(self.access_type.throw_addr_misaligned_exception());
         }
@@ -313,7 +313,7 @@ impl Mmu {
         self.page_table_walk()
     }
 
-    pub fn do_write(&mut self, addr: u64, data: u64, len: u64) -> Result<u64, TrapType> {
+    pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
             return Err(self.access_type.throw_addr_misaligned_exception());
         }
@@ -324,7 +324,7 @@ impl Mmu {
                 .caches
                 .borrow_mut()
                 .dcache
-                .write(addr, data, len as usize)
+                .write(addr, data, len)
                 .map_or(Err(self.access_type.throw_access_exception()), Ok);
         }
 
@@ -339,7 +339,7 @@ impl Mmu {
         self.caches
             .borrow_mut()
             .dcache
-            .write(self.pa.raw(), data, len as usize)
+            .write(self.pa.raw(), data, len)
             .map_or(Err(self.access_type.throw_access_exception()), Ok)
     }
 

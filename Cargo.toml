@@ -35,7 +35,7 @@ device_sdl2 = ["dep:sdl2", "support_am"]
 rv_debug_trace = ["dep:capstone"]
 
 
-caches = ["decode_cache", "inst_cache"]
+caches = ["decode_cache","inst_cache"]
 inst_cache = []
 data_cache = []
 decode_cache = []
@@ -55,8 +55,9 @@ name = "simple_system"
 # sacrificing debug info. With this profile (like in the standard
 # release profile), the debug info and the stack traces will still be available.
 [profile.release]
-# lto = true
-debug = 1
+lto = true
+opt-level = 3
+# debug = 1
 
 
 # A release-like profile that is tuned to be fast, even when being fast

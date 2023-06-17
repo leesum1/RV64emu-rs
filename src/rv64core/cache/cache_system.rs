@@ -24,7 +24,7 @@ impl CacheSystem {
     }
 
     pub fn clear(&mut self) {
-        self.icache.clear_inst();
+        self.icache.clear();
         self.dcache.clear();
     }
 }

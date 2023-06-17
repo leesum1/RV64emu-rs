@@ -1,6 +1,6 @@
 use std::{
     env,
-    path::PathBuf, rc::Rc,
+    path::PathBuf,
 };
 extern crate riscv64_emu;
 
