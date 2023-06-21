@@ -1,5 +1,5 @@
 # Introduction
-
+![run_linux](https://cdn.jsdelivr.net/gh/leesum1/doc/img/leesum1.gif)
 RV64emu is a riscv64 emulator written in rust, it is still under development. It can run `CoreMark`,`RT-thread` and `Linux` now. And it is easy to add new devices and support new instructions. The RV64emu is now as a crate, you can use it in your project,and it is also a standalone emulator, you can run it directly.Due to RUST's cross-platform feature, it can run on Linux, Windows and MacOS.Even on the embedded device, such as ESP32 and STM32 which support embeded rust.
 
 ISA Specification:
@@ -54,26 +54,6 @@ When you build the project, you will get a standalone emulator, you can run it d
 |rv_m|support rv_m extension||
 |rv_a|support rv_a extension||
 
-
-default features
-
-```toml
-default = ["default_isa","caches"]
-device_sdl2 = ["dep:sdl2","support_am"]
-rv_debug_trace = ["dep:capstone"]
-caches = ["inst_cache", "decode_cache"]
-
-default_isa = ["rv_c","rv_m","rv_a"]
-rv_c = []
-rv_m = []
-rv_a = []
-inst_cache = []
-decode_cache = []
-data_cache = []
-support_am = []
-expr_mutithread = []
-
-
 ```
 
 
@@ -95,6 +75,9 @@ run `Linux`
 ```bash
 cargo run --release -- --img ./ready_to_run/linux.bin
 ```
+# Build linux kernel by yourself
+> Please refer to [rv64emu-sdk](https://github.com/leesum1/rv64emu-sdk) for details.
+
 # Test
 **test with `riscv-tests`**
 

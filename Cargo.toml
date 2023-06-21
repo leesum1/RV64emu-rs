@@ -56,7 +56,6 @@ name = "simple_system"
 # release profile), the debug info and the stack traces will still be available.
 [profile.release]
 lto = true
-opt-level = 3
 # debug = 1
 
 
