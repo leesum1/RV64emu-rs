@@ -4,11 +4,10 @@ use core::cell::Cell;
 
 use crate::{
     rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
-    rv64core::traptype::{RVmutex, TrapType},
     rv64core::{
         cache::cache_system::CacheSystem,
-        inst::inst_base::{check_aligned, AccessType, PrivilegeLevels},
-    },
+        inst::inst_base::{check_aligned, AccessType, PrivilegeLevels}, traptype::TrapType,
+    }, tools::RVmutex,
 };
 
 use super::{

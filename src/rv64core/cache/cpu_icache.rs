@@ -1,7 +1,7 @@
 use hashbrown::HashMap;
 use log::info;
 
-use crate::rv64core::{bus::Bus, inst::inst_base::RVerr, traptype::RVmutex};
+use crate::{rv64core::{bus::Bus, inst::inst_base::RVerr}, tools::RVmutex};
 
 const ICACHE_SIZE: usize = 4096*10;
 

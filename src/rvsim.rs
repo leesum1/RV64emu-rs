@@ -6,13 +6,12 @@ use elf::{
 };
 use log::{info, warn};
 
-use crate::rv64core::{
+use crate::{rv64core::{
     bus::Bus,
     cpu_core::{CpuCore, CpuState},
     // csr_regs_define::Misa,
     inst::inst_base::FesvrCmd,
-    traptype::RVmutex,
-};
+}, tools::RVmutex};
 
 #[derive(Default)]
 pub struct RVsim {

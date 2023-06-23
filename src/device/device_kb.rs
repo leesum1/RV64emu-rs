@@ -1,9 +1,6 @@
-use ring_channel::RingReceiver;
-use sdl2::{
-    keyboard::{Keycode, Scancode},
-};
+use sdl2::keyboard::{Keycode, Scancode};
 
-use crate::device::device_trait::DeviceBase;
+use crate::{device::device_trait::DeviceBase, tools::Fifobounded};
 
 // int keymap[256] = { 0,0,0,0,43,60,58,45,31,46,47,48,36,49,50,51,62,61,37,38,
 //     29,32,44,33,35,59,30,57,34,56,15,16,17,18,19,20,21,22,23,
@@ -52,12 +49,12 @@ impl DeviceKbItem {
 }
 
 pub struct DeviceKB {
-    rx_am_key: RingReceiver<DeviceKbItem>,
-    rx_sdl_key: RingReceiver<Keycode>,
+    rx_am_key: Fifobounded<DeviceKbItem>,
+    rx_sdl_key: Fifobounded<Keycode>,
 }
 
 impl DeviceKB {
-    pub fn new(rx_am_key: RingReceiver<DeviceKbItem>, rx_sdl_key: RingReceiver<Keycode>) -> Self {
+    pub fn new(rx_am_key: Fifobounded<DeviceKbItem>, rx_sdl_key: Fifobounded<Keycode>) -> Self {
         DeviceKB {
             rx_am_key,
             rx_sdl_key,
@@ -65,13 +62,16 @@ impl DeviceKB {
     }
 
     fn get_am_key(&mut self) -> u32 {
-        self.rx_am_key
-            .try_recv()
-            .map_or(0, |item| item.get_am_keycode())
+        // self.rx_am_key
+        //     .try_recv()
+        //     .map_or(0, |item| item.get_am_keycode())
+
+        self.rx_am_key.pop().map_or(0, |item| item.get_am_keycode())
     }
 
     fn get_sdl_key(&mut self) -> u32 {
-        self.rx_sdl_key.try_recv().map_or(0, |k_code| k_code as u32)
+        // self.rx_sdl_key.try_recv().map_or(0, |k_code| k_code as u32)
+        self.rx_sdl_key.pop().map_or(0, |k_code| k_code as u32)
     }
 }
 

@@ -1,4 +1,10 @@
+pub mod tools;
+
 extern crate riscv64_emu;
+
+use clap::Parser;
+use riscv64_emu::tools::FifoUnbounded;
+use riscv64_emu::tools::Fifobounded;
 
 use std::io::{stdin, Write};
 #[allow(unused_imports)]
@@ -16,12 +22,8 @@ use std::{
     time::Duration,
 };
 
-use clap::Parser;
-
 use log::{debug, info, LevelFilter};
-use riscv64_emu::{
-    device::device_16550a::Device16550aUART, rv64core::traptype::RVmutex, rvsim::RVsim,
-};
+use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
@@ -36,13 +38,12 @@ cfg_if::cfg_if! {
             event::Event,
             keyboard::{Keycode, Scancode},
         };
-        use ring_channel::*;
-        use riscv64_emu::rv64core::cpu_core::CpuCore;
     }
 }
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::riscv64_emu::trace::traces::Traces;
+use crate::tools::RVmutex;
 use crate::{
     riscv64_emu::device::{
         device_dram::DeviceDram,
@@ -137,8 +138,14 @@ fn main() {
         name: "XIPFLASH",
     });
 
-    let (uart_getc_tx, uart_getc_rx) = crossbeam_channel::bounded::<u8>(64);
-    let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(4096 * 2);
+    // let (uart_getc_tx, uart_getc_rx) = crossbeam_channel::bounded::<u8>(64);
+    // let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(4096 * 2);
+
+    let uart_tx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
+    let uart_rx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
+
+    let rx_fifo = uart_rx_fifo.clone();
+
     thread::spawn(move || loop {
         let mut buf = [0; 1];
         if let Ok(n) = stdin().read(&mut buf) {
@@ -146,17 +153,22 @@ fn main() {
                 panic!("Read {} characters into a 1 byte buffer", n);
             }
             if n == 1 {
-                uart_getc_tx.send(buf[0]).unwrap();
+                // uart_getc_tx.send(buf[0]).unwrap();
+                rx_fifo.push(buf[0]);
             }
             // Nothing needs to be sent for n == 0
         }
         // std::thread::sleep(Duration::from_millis(100));
     });
 
+    let tx_fifo = uart_tx_fifo.clone();
     thread::spawn(move || loop {
-        uart_putc_rx.try_iter().for_each(|c| {
-            print!("{}", c as char);
-        });
+        while !tx_fifo.is_empty() {
+            if let Some(c) = tx_fifo.pop() {
+                print!("{}", c as char)
+            }
+        }
+
         io::stdout().flush().unwrap();
         std::thread::sleep(Duration::from_millis(50));
     });
@@ -171,7 +183,7 @@ fn main() {
         name: "AM_UART",
     });
     // device 16650_uart
-    let device_16650_uart = Device16550aUART::new(uart_putc_tx.clone(), uart_getc_rx.clone());
+    let device_16650_uart = Device16550aUART::new(uart_tx_fifo.clone(), uart_rx_fifo.clone());
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: 0x1000_0000,
@@ -181,7 +193,7 @@ fn main() {
     });
 
     // device sifive_uart
-    let device_sifive_uart = DeviceSifiveUart::new(uart_putc_tx, uart_getc_rx);
+    let device_sifive_uart = DeviceSifiveUart::new(uart_tx_fifo, uart_rx_fifo);
 
     bus_u
         .borrow_mut()
@@ -288,12 +300,11 @@ fn main() {
 }
 
 #[cfg(feature = "device_sdl2")]
-fn send_key_event(tx: &mut RingSender<DeviceKbItem>, val: Scancode, keydown: bool) {
-    tx.send(DeviceKbItem {
+fn send_key_event(tx: &Fifobounded<DeviceKbItem>, val: Scancode, keydown: bool) {
+    tx.force_push(DeviceKbItem {
         scancode: val,
         is_keydown: keydown,
-    })
-    .expect("Key event send error");
+    });
 }
 #[cfg(feature = "device_sdl2")]
 fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBool>) {
@@ -340,19 +351,14 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
         name: device_name,
     });
 
-    // device kb
+    let kb_am_fifo = Fifobounded::<DeviceKbItem>::new(crossbeam_queue::ArrayQueue::new(16));
 
-    let (kb_am_tx, kb_am_rx): (RingSender<DeviceKbItem>, RingReceiver<DeviceKbItem>) =
-        ring_channel(NonZeroUsize::new(16).unwrap());
+    let kb_sdl_fifo =
+        Fifobounded::<sdl2::keyboard::Keycode>::new(crossbeam_queue::ArrayQueue::new(16));
 
-    let (kb_sdl_tx, kb_sdl_rx): (
-        RingSender<sdl2::keyboard::Keycode>,
-        RingReceiver<sdl2::keyboard::Keycode>,
-    ) = ring_channel(NonZeroUsize::new(16).unwrap());
+    let device_kb = DeviceKB::new(kb_am_fifo.clone(), kb_sdl_fifo.clone());
 
-    let device_kb = DeviceKB::new(kb_am_rx, kb_sdl_rx);
     let device_name = device_kb.get_name();
-
     bus_u.borrow_mut().add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
@@ -360,9 +366,12 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
         name: device_name,
     });
     // device mouse
-    let (mouse_sdl_tx, mouse_sdl_rx): (RingSender<DeviceMouseItem>, RingReceiver<DeviceMouseItem>) =
-        ring_channel(NonZeroUsize::new(1).unwrap());
-    let device_mouse = DeviceMouse::new(mouse_sdl_rx);
+    // let (mouse_sdl_tx, mouse_sdl_rx): (Fifobounded<DeviceMouseItem>, Fifobounded<DeviceMouseItem>) =
+    //     ring_channel(NonZeroUsize::new(1).unwrap());
+
+    let mouse_fifo = Fifobounded::<DeviceMouseItem>::new(crossbeam_queue::ArrayQueue::new(16));
+
+    let device_mouse = DeviceMouse::new(mouse_fifo.clone());
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: MOUSE_ADDR,
@@ -374,18 +383,18 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
     handle_sdl_event(
         signal_term_sdl_event,
         event_system,
-        kb_am_tx,
-        kb_sdl_tx,
-        mouse_sdl_tx,
+        kb_am_fifo,
+        kb_sdl_fifo,
+        mouse_fifo,
     );
 }
 #[cfg(feature = "device_sdl2")]
 fn handle_sdl_event(
     signal_term: Arc<AtomicBool>,
     static_event: &'static sdl2::EventSubsystem,
-    mut kb_am_tx: RingSender<DeviceKbItem>,
-    mut kb_sdl_tx: RingSender<Keycode>,
-    mut mouse_sdl_tx: RingSender<DeviceMouseItem>,
+    kb_am_tx: Fifobounded<DeviceKbItem>,
+    kb_sdl_tx: Fifobounded<Keycode>,
+    mouse_sdl_tx: Fifobounded<DeviceMouseItem>,
 ) {
     thread::spawn(move || {
         let _event_system = static_event;
@@ -394,13 +403,11 @@ fn handle_sdl_event(
         while !signal_term.load(Ordering::Relaxed) {
             let mouse_state = event_pump.mouse_state();
 
-            mouse_sdl_tx
-                .send(DeviceMouseItem {
-                    x: (mouse_state.x() / 2) as u32,
-                    y: (mouse_state.y() / 2) as u32,
-                    mouse_btn_state: mouse_state.to_sdl_state(),
-                })
-                .expect("Mouse event send error");
+            mouse_sdl_tx.force_push(DeviceMouseItem {
+                x: (mouse_state.x() / 2) as u32,
+                y: (mouse_state.y() / 2) as u32,
+                mouse_btn_state: mouse_state.to_sdl_state(),
+            });
 
             for event in event_pump.poll_iter() {
                 match event {
@@ -408,15 +415,15 @@ fn handle_sdl_event(
                     Event::KeyUp {
                         scancode: Some(val),
                         ..
-                    } => send_key_event(&mut kb_am_tx, val, false),
+                    } => send_key_event(&kb_am_tx, val, false),
 
                     Event::KeyDown {
                         scancode: Some(val),
                         keycode: Some(sdl_key_code),
                         ..
                     } => {
-                        send_key_event(&mut kb_am_tx, val, true);
-                        kb_sdl_tx.send(sdl_key_code).unwrap();
+                        send_key_event(&kb_am_tx, val, true);
+                        kb_sdl_tx.force_push(sdl_key_code);
                     }
 
                     _ => (),

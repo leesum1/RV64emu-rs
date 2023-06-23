@@ -1,6 +1,7 @@
-use ring_channel::RingReceiver;
 
 use device_trait::DeviceBase;
+
+use crate::tools::Fifobounded;
 
 use super::device_trait;
 
@@ -25,12 +26,12 @@ impl DeviceMouseItem {
 }
 
 pub struct DeviceMouse {
-    rx_mouse: RingReceiver<DeviceMouseItem>,
+    rx_mouse: Fifobounded<DeviceMouseItem>,
     mouse_state: DeviceMouseItem,
 }
 
 impl DeviceMouse {
-    pub fn new(rx_mouse: RingReceiver<DeviceMouseItem>) -> Self {
+    pub fn new(rx_mouse: Fifobounded<DeviceMouseItem>) -> Self {
         DeviceMouse {
             rx_mouse,
             mouse_state: DeviceMouseItem::new(),
@@ -41,7 +42,7 @@ impl DeviceMouse {
 impl DeviceBase for DeviceMouse {
     fn do_read(&mut self, addr: u64, len: usize) -> u64 {
 
-        if let Ok(item) = self.rx_mouse.try_recv() {
+        if let Some(item) = self.rx_mouse.pop() {
             self.mouse_state = item
         }
 

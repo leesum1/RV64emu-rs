@@ -1,7 +1,6 @@
 use core::cell::Cell;
 
 use std::{
-    io::Write,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -16,7 +15,7 @@ use crate::{
     rv64core::gpr::Gpr,
     rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
-    rv64core::traptype::TrapType,
+    rv64core::traptype::TrapType, tools::RVmutex,
 };
 
 #[cfg(feature = "rv_debug_trace")]
@@ -26,7 +25,6 @@ use super::{
     cache::cache_system::CacheSystem,
     inst::inst_base::{check_aligned, is_compressed_instruction},
     mmu::cpu_mmu::Mmu,
-    traptype::RVmutex,
 };
 
 #[derive(PartialEq)]

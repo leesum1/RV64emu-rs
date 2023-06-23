@@ -1,6 +1,6 @@
 use bitfield_struct::bitfield;
 
-use crate::device::device_trait::DeviceBase;
+use crate::{device::device_trait::DeviceBase, tools::FifoUnbounded};
 
 const RBR: u64 = 0x00; // Receive Buffer Register (read only)
 const THR: u64 = 0x00; // Transmit Holding Register (write only)
@@ -184,16 +184,14 @@ impl Uart16550aIN {
     }
 }
 
-type Rxfifo = crossbeam_channel::Receiver<u8>;
-type Txfifo = crossbeam_channel::Sender<u8>;
 pub struct Device16550aUART {
     regs: Uart16550aIN,
-    rxfifo: Rxfifo,
-    txfifo: Txfifo,
+    rxfifo: FifoUnbounded<u8>,
+    txfifo: FifoUnbounded<u8>,
 }
 
 impl Device16550aUART {
-    pub fn new(uart_tx: Txfifo, uart_rx: Rxfifo) -> Self {
+    pub fn new(uart_tx: FifoUnbounded<u8>, uart_rx: FifoUnbounded<u8>) -> Self {
         Device16550aUART {
             regs: Uart16550aIN::new(),
             txfifo: uart_tx,
@@ -217,12 +215,14 @@ impl Device16550aUART {
         // io::stdout().flush().unwrap();
         // println!("{:x}", ch);
         let c = ch as u8;
-        self.txfifo.send(c).unwrap();
+        // self.txfifo.send(c).unwrap();
+        self.txfifo.push(c);
         self.regs.lsr.set_thr_empty(true);
     }
 
     fn get_char(&mut self) -> u8 {
-        self.regs.rbr = self.rxfifo.try_recv().unwrap_or(0);
+        // self.regs.rbr = self.rxfifo.try_recv().unwrap_or(0);
+        self.regs.rbr = self.rxfifo.pop().unwrap_or(0);
         self.regs.rbr
     }
 }

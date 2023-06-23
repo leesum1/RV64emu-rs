@@ -12,8 +12,8 @@ use riscv64_emu::{
     },
     rv64core::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild, CpuState}, traptype::RVmutex,
-    },
+        cpu_core::{CpuCoreBuild, CpuState}
+    }, tools::RVmutex,
 };
 
 fn main() {

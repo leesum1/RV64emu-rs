@@ -2,7 +2,7 @@ extern crate riscv64_emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use riscv64_emu::{rv64core::traptype::RVmutex, rvsim::RVsim};
+use riscv64_emu::{rvsim::RVsim, tools::RVmutex};
 
 use crate::{
     riscv64_emu::device::device_dram::DeviceDram,

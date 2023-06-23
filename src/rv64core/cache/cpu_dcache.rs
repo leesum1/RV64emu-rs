@@ -1,6 +1,7 @@
 use crate::rv64core::bus::Bus;
 use crate::rv64core::inst::inst_base::RVerr;
-use crate::rv64core::traptype::RVmutex;
+use crate::tools::RVmutex;
+
 use log::info;
 
 const DCACHE_SIZE: usize = 128;
@@ -87,7 +88,7 @@ impl CpuDcache {
         (0x80000000..0x80000000 + 0x8000000).contains(&addr)
     }
     #[cfg(not(feature = "data_cache"))]
-    fn cacheable(&self, addr: u64) -> bool {
+    fn cacheable(&self, _addr: u64) -> bool {
         false
     }
 

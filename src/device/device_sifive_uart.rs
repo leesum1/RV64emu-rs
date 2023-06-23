@@ -1,11 +1,9 @@
-use std::{
-    cell::Cell,
-    rc::Rc,
-};
+use core::cell::Cell;
+use std::rc::Rc;
 
 use bitfield_struct::bitfield;
 
-use crate::device::device_trait::DeviceBase;
+use crate::{device::device_trait::DeviceBase, tools::FifoUnbounded};
 
 const TXDATA: usize = 0x00;
 const RXDATA: usize = 0x04;
@@ -85,18 +83,18 @@ impl SifiveUartIN {
         }
     }
 }
-type Rxfifo = crossbeam_channel::Receiver<u8>;
-type Txfifo = crossbeam_channel::Sender<u8>;
+
+
 pub struct DeviceSifiveUart {
     regs: Box<SifiveUartIN>,
     pub irq_pending: Rc<Cell<bool>>,
 
-    rxfifo: Rxfifo,
-    txfifo: Txfifo,
+    rxfifo: FifoUnbounded<u8>,
+    txfifo: FifoUnbounded<u8>,
 }
 
 impl DeviceSifiveUart {
-    pub fn new(uart_tx: Txfifo, uart_rx: Rxfifo) -> Self {
+    pub fn new(uart_tx: FifoUnbounded<u8>, uart_rx: FifoUnbounded<u8>) -> Self {
         DeviceSifiveUart {
             regs: Box::new(SifiveUartIN::new()),
             txfifo: uart_tx,
@@ -109,18 +107,20 @@ impl DeviceSifiveUart {
         // print!("{c}");
         // io::stdout().flush().unwrap();
         let c = ch as u8;
-        self.txfifo.send(c).unwrap();
+        // self.txfifo.send(c).unwrap();
+        self.txfifo.push(c);
     }
 
     pub fn get_rxdata(&mut self) -> u32 {
         let empty = self.rxfifo.is_empty();
-        let data = self.rxfifo.try_recv().map_or(0, |x| x as u64);
+        // let data = self.rxfifo.try_recv().map_or(0, |x| x as u64);
+        let data = self.rxfifo.pop().map_or(0, |x| x as u64);
+
         self.regs.rxdata = Rxdata::new().with_empty(empty).with_data(data as u8);
         // debug!("sifive_uart: get_rxdata: {:?}", self.regs.rxdata);
         self.regs.rxdata.0
     }
     pub fn get_txdata(&mut self) -> u32 {
-
         // we don't have a real txdata register, so we just return 0
         self.regs.txdata.set_full(false);
         // debug!("sifive_uart: get_txdata: {:?}", self.regs.txdata);
@@ -174,7 +174,7 @@ impl DeviceBase for DeviceSifiveUart {
         self.regs.ip.set_txwm(txwm_pending);
 
         // update irq_pending
-        let has_irq = 0!=(self.regs.ip.0 & self.regs.ie.0);
+        let has_irq = 0 != (self.regs.ip.0 & self.regs.ie.0);
         // println!("ie:{:?}", self.regs.ie);
         // debug!("sifive_uart: irq_pending: {}", has_irq);
         self.irq_pending.set(has_irq);

@@ -1,4 +1,4 @@
-use crate::rv64core::{bus::Bus, traptype::RVmutex};
+use crate::{rv64core::bus::Bus, tools::RVmutex};
 
 use super::{cpu_dcache::CpuDcache, cpu_icache::CpuIcache};
 
