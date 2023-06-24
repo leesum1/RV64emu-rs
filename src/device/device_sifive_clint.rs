@@ -1,4 +1,8 @@
-use crate::rv64core::csr_regs_define::{CsrShare, XipIn};
+use alloc::vec::Vec;
+
+use crate::{rv64core::csr_regs_define::XipIn, tools::CsrShare};
+
+use super::device_trait::DeviceBase;
 
 const MSIP_BASE: u64 = 0x0;
 const MSIP_PER_HART: u64 = 0x4;
@@ -8,8 +12,7 @@ const MTIMECMP_BASE: u64 = 0x4000;
 const MTIMECMP_PER_HART: u64 = 0x8;
 const MTIMECMP_END: u64 = MTIME_BASE - 1;
 const MTIME_BASE: u64 = 0xBFF8;
-const MTIME_BASE_END: u64 = 0xBFF8+7;
-
+const MTIME_BASE_END: u64 = 0xBFF8 + 7;
 
 pub struct DeviceClint {
     pub start: u64,
@@ -75,7 +78,25 @@ impl Clint {
         self.mitme.clone()
     }
 
-    pub fn do_read(&mut self, addr: u64, len: usize) -> u64 {
+    fn mtime_inc(&mut self, inc: usize) {
+        let mut mitme = self.mitme.get();
+        mitme += inc as u64;
+        self.mitme.set(mitme);
+    }
+
+    pub fn tick(&mut self, inc: usize) {
+        self.mtime_inc(inc);
+        for hart in self.harts.iter_mut() {
+            let level = self.mitme.get() >= hart.mtimecmp;
+            let mut xip = hart.xip.get();
+            xip.set_mtip(level);
+            hart.xip.set(xip);
+        }
+    }
+}
+
+impl DeviceBase for Clint {
+    fn do_read(&mut self, addr: u64, len: usize) -> u64 {
         match (addr, len) {
             (MSIP_BASE..=MSIP_END, 4) => {
                 let hart_id = (addr - MSIP_BASE) / MSIP_PER_HART;
@@ -99,14 +120,14 @@ impl Clint {
                     true => mitme >> 32,
                     false => mitme,
                 }
-            },
+            }
             _ => {
                 panic!("clint read:{:x},{:x}", addr, len);
             }
         }
     }
 
-    pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
+    fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         match (addr, len) {
             (MSIP_BASE..=MSIP_END, 4) => {
                 let hart_id = (addr - MSIP_BASE) / MSIP_PER_HART;
@@ -132,20 +153,8 @@ impl Clint {
         0
     }
 
-    fn mtime_inc(&mut self, inc: usize) {
-        let mut mitme = self.mitme.get();
-        mitme += inc as u64;
-        self.mitme.set(mitme);
-    }
-
-    pub fn tick(&mut self, inc: usize) {
-        self.mtime_inc(inc);
-        for hart in self.harts.iter_mut() {
-            let level = self.mitme.get() >= hart.mtimecmp;
-            let mut xip = hart.xip.get();
-            xip.set_mtip(level);
-            hart.xip.set(xip);
-        }
+    fn get_name(&self) -> &'static str {
+        "Sifive CLINT"
     }
 }
 

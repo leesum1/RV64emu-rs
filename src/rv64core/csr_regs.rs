@@ -1,10 +1,11 @@
-use std::{cell::Cell, rc::Rc};
+use core::cell::Cell;
 
+use alloc::rc::Rc;
 use hashbrown::HashMap;
 
 use crate::{
     rv64core::csr_regs_define::{
-        CommonCSR, Counter, Csr, CsrEnum, CsrShare, Medeleg, MedelegIn, Mideleg, MidelegIn, Misa,
+        CommonCSR, Counter, Csr, CsrEnum, Medeleg, MedelegIn, Mideleg, MidelegIn, Misa,
         ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn, Xstatus, XstatusIn,
         Xtvec, XtvecIn,
     },
@@ -16,6 +17,7 @@ use crate::{
         CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, CSR_TSELECT, MASK_ALL,
     },
     rv64core::traptype::TrapType,
+    tools::CsrShare,
 };
 
 pub struct CsrRegs {
@@ -66,7 +68,7 @@ impl CsrRegs {
             .with_mxr(true)
             .with_sd(true);
 
-        let mstatus_mask = XstatusIn::from(u64::MAX).with_uxl(0);
+        let mstatus_wmask = XstatusIn::from(u64::MAX).with_uxl(0);
 
         // read only
         let misa = misa_val;
@@ -75,8 +77,8 @@ impl CsrRegs {
         let mvendorid = CommonCSR::new_noshare(0);
         let mimpid = CommonCSR::new_noshare(0);
         // important csrs
-        let xstatus_share = Rc::new(Cell::new(mstatus_val));
-        let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_mask.into());
+        let xstatus_share = CsrShare::new(mstatus_val.into());
+        let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_wmask.into());
         let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
 
         let sip_mask = XieIn::new().with_seie(true).with_ssie(true).with_stie(true);

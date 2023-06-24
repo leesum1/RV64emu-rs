@@ -2,10 +2,9 @@ extern crate riscv64_emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use riscv64_emu::{rvsim::RVsim, tools::RVmutex};
+use riscv64_emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RVmutex};
 
 use crate::{
-    riscv64_emu::device::device_dram::DeviceDram,
     riscv64_emu::device::device_trait::{DeviceBase, MEM_BASE},
     riscv64_emu::rv64core::bus::{Bus, DeviceType},
     riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
@@ -32,18 +31,18 @@ fn start_test(img: &str) -> bool {
         .build();
 
     // device dram
-    let mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
+    let mem: DeviceMemory = DeviceMemory::new(128 * 1024 * 1024);
     let device_name = mem.get_name();
     bus_u.borrow_mut().add_device(DeviceType {
         start: MEM_BASE,
-        len: mem.capacity as u64,
-        instance: mem.into(),
+        len: mem.size() as u64,
+        instance: Box::new(mem),
         name: device_name,
     });
 
     let mut sim = RVsim::new(vec![cpu]);
 
-    sim.load_elf(img);
+    sim.load_image(img);
 
     sim.run()
 }

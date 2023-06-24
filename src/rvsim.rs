@@ -1,17 +1,27 @@
-use std::{fs::File, io::Write, ops, time::Instant};
+use core::ops;
 
+#[cfg(feature = "std")]
+use std::{fs::File, io::Write};
+
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use elf::{
     abi::{EM_RISCV, PT_LOAD},
     endian::AnyEndian,
 };
 use log::{info, warn};
 
-use crate::{rv64core::{
-    bus::Bus,
-    cpu_core::{CpuCore, CpuState},
-    // csr_regs_define::Misa,
-    inst::inst_base::FesvrCmd,
-}, tools::RVmutex};
+use crate::{
+    rv64core::{
+        bus::Bus,
+        cpu_core::{CpuCore, CpuState},
+        // csr_regs_define::Misa,
+        inst::inst_base::FesvrCmd,
+    },
+    tools::RVmutex,
+};
 
 #[derive(Default)]
 pub struct RVsim {
@@ -79,12 +89,8 @@ impl RVsim {
             self.get_symbol_values();
         }
     }
-
-    pub fn load_elf(&mut self, file_name: &str) {
-        let file_data = std::fs::read(file_name).unwrap();
-
-        let elf_data = elf::ElfBytes::<AnyEndian>::minimal_parse(&file_data);
-
+    fn _load_elf(&mut self, slice: &[u8]) {
+        let elf_data = elf::ElfBytes::<AnyEndian>::minimal_parse(slice);
         if let Ok(elf_data) = elf_data {
             let ehdr: elf::file::FileHeader<AnyEndian> = elf_data.ehdr;
             // Check e_machine
@@ -99,66 +105,81 @@ impl RVsim {
                 let data = elf_data.segment_data(&p).unwrap();
                 assert_eq!(data.len(), p.p_filesz as usize);
                 let mut bus = self.bus.borrow_mut();
-                // todo! write 8 bytes at a time
-                for addr in (p.p_paddr)..(p.p_paddr + p.p_filesz) {
-                    bus.write(addr, data[(addr - p.p_paddr) as usize].into(), 1)
-                        .unwrap();
-                }
+
+                bus.copy_from_slice(p.p_paddr, data).unwrap();
+
             });
-            info!("Elf file match,elf load success:{}", file_name);
+            info!("Elf file match,elf load success");
 
             // Collect elf symbols into self.elf_symbols(hashmap)
             self.collect_elf_symbols(&elf_data);
         } else {
             let boot_pc = self.harts.get(0).unwrap().pc;
             let mut bus = self.bus.borrow_mut();
+            bus.copy_from_slice(boot_pc, slice).unwrap();
 
-            // todo! write 8 bytes at a time
-            for (i, data) in file_data.iter().enumerate() {
-                bus.write(boot_pc + i as u64, (*data).into(), 1).unwrap();
-            }
-            info!("Elf file not match, bin load success:{}", file_name);
+            info!("Elf file not match, bin load success");
         }
+    }
+
+    #[cfg(feature = "std")]
+    pub fn load_image(&mut self, file_name: &str) {
+        let file_data = std::fs::read(file_name).unwrap();
+        self._load_elf(&file_data);
+    }
+    pub fn load_image_from_slice(&mut self, slice: &[u8]) {
+        self._load_elf(slice);
+    }
+
+    pub fn prepare_to_run(&mut self) {
+        self.harts
+            .iter_mut()
+            .for_each(|hart| hart.cpu_state = CpuState::Running);
+    }
+
+    pub fn run_once(&mut self) {
+        self.harts.iter_mut().for_each(|hart| {
+            hart.execute(5000);
+        });
+        let mut bus = self.bus.borrow_mut();
+        bus.update();
+        bus.clint.instance.tick(5000 / 10);
+        bus.plic.instance.tick();
+        drop(bus);
+
+        #[cfg(feature = "std")]
+        self.check_to_host();
+    }
+    // true: exit, false: abort
+    pub fn is_finish(&self) -> bool {
+        self.harts
+            .iter()
+            .any(|hart| hart.cpu_state != CpuState::Running)
+    }
+
+    pub fn is_exit_normal(&self) -> bool {
+        self.harts
+            .iter()
+            .all(|hart| hart.cpu_state == CpuState::Stop)
     }
 
     // true: exit, false: abort
     pub fn run(&mut self) -> bool {
-        self.harts
-            .iter_mut()
-            .for_each(|hart| hart.cpu_state = CpuState::Running);
+        self.prepare_to_run();
 
-        let start_time = Instant::now();
-
-        while self
-            .harts
-            .iter()
-            .all(|hart| hart.cpu_state == CpuState::Running)
-            && start_time.elapsed().as_secs() < 30
-        {
-            self.harts.iter_mut().for_each(|hart| {
-                hart.execute(5000);
-                let mut bus = self.bus.borrow_mut();
-                bus.update();
-                // bus.clint.instance.tick(5000 / 100);
-                bus.clint.instance.tick(500);
-                bus.plic.instance.tick();
-            });
-            self.check_to_host();
+        while !self.is_finish() {
+            self.run_once();
         }
+        #[cfg(feature = "std")]
         self.dump_signature();
-
-        self.harts.iter().all(|hart| {
-            hart.cache_system.borrow_mut().show_perf();
-            hart.cpu_state != CpuState::Abort
-        })
+        self.is_exit_normal()
     }
+
     // for riscv-tests
     // It seems in riscv-tests ends with end code
     // written to a certain physical memory address
-    // (0x80001000 in mose test cases) so checking
-    // the data in the address and terminating the test
-    // if non-zero data is written.
-    // End code 1 seems to mean pass.
+    // (0x80001000 in mose test cases)
+    #[cfg(feature = "std")]
     pub fn check_to_host(&mut self) {
         if self.tohost.is_none() {
             return;
@@ -168,7 +189,7 @@ impl RVsim {
         let mut bus_u = self.bus.borrow_mut();
         let tohost = self.tohost.unwrap_or(0x8000_1000);
         let data = bus_u.read(tohost, 8).unwrap();
-        // !! must clear mem
+        // !! must clear mem after read
         bus_u.write(tohost, 0, 8).unwrap();
         // debug!("check to host: {:#x}", data);
         let cmd = FesvrCmd::from(data);
@@ -194,6 +215,7 @@ impl RVsim {
     }
 
     // for riscof
+    #[cfg(feature = "std")]
     pub fn dump_signature(&mut self) {
         if self.signature_file.is_none() {
             return;
@@ -220,10 +242,3 @@ impl RVsim {
         );
     }
 }
-
-// pub struct HartConfig {
-//     isa_futrue: Misa,
-//     mmu_futrue: u32,
-//     mode: u32,
-//     boot_pc: u64,
-// }

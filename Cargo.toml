@@ -6,22 +6,26 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.1.4", features = ["derive"] }
 
-
+cfg-if = "1.0.0"
+log = "0.4.17"
 hashbrown = "0.13.2"
 bitfield-struct = "0.3.2"
 enum_dispatch = "0.3.11"
-crossbeam-channel = "0.5.7"
-log = "0.4.17"
 
+# enable no_std support
+elf = {version="0.7.2",default-features = false,features = []}
+crossbeam-queue = { version = "0.3.8", default-features = false ,features = ["alloc"]}
+
+
+crossbeam-channel = {version="0.5.7",optional = true}
 sdl2 = { version = "0.35", optional = true }
 capstone = { version = "0.11.0", optional = true }
 
-cfg-if = "1.0.0"
+
+clap = { version = "4.1.4", features = ["derive"] }
 simple_logger = "4.1.0"
-elf = "0.7.2"
-crossbeam-queue = { version = "0.3.8", default-features = false ,features = ["alloc"]}
+
 
 
 [features]
@@ -31,9 +35,15 @@ crossbeam-queue = { version = "0.3.8", default-features = false ,features = ["al
 # default = ["device_sdl2"]rv_debug_trace
 # default = ["caches"]
 
-default = ["default_isa", "caches","device_sdl2"]
-device_sdl2 = ["dep:sdl2", "support_am"]
-rv_debug_trace = ["dep:capstone"]
+default = ["default_isa","std"]
+
+
+device_sdl2 = ["dep:sdl2", "support_am","std"]
+rv_debug_trace = ["dep:capstone","dep:crossbeam-channel","std"]
+
+
+std = ["alloc"]
+alloc = []
 
 
 caches = ["decode_cache", "inst_cache"]
@@ -48,8 +58,8 @@ rv_a = []
 support_am = []
 
 
-[[example]]
-name = "simple_system"
+# [[example]]
+# name = "simple_system"
 
 
 # The default release profile. It contains all optimizations, without

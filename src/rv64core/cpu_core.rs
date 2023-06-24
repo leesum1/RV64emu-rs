@@ -1,10 +1,6 @@
 use core::cell::Cell;
 
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
-
+use alloc::rc::Rc;
 use log::warn;
 
 use crate::{
@@ -15,7 +11,8 @@ use crate::{
     rv64core::gpr::Gpr,
     rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
-    rv64core::traptype::TrapType, tools::RVmutex,
+    rv64core::traptype::TrapType,
+    tools::RVmutex,
 };
 
 #[cfg(feature = "rv_debug_trace")]
@@ -95,7 +92,6 @@ impl CpuCoreBuild {
             }
         }
 
-        let share_amo = mmu_u.caches.borrow_mut().bus.borrow_mut().amo_mutex.clone();
         CpuCore {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
@@ -108,7 +104,6 @@ impl CpuCoreBuild {
             cpu_state: CpuState::Stop,
             #[cfg(feature = "rv_debug_trace")]
             trace_sender: self.trace_sender.clone(),
-            amo_mutex: share_amo,
         }
     }
 }
@@ -122,7 +117,6 @@ pub struct CpuCore {
     pub pc: u64,
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
-    pub amo_mutex: Arc<Mutex<()>>,
     pub cpu_state: CpuState,
     #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
@@ -187,7 +181,7 @@ impl CpuCore {
                 (i.operation)(self, inst, self.pc) // return
             }
             None => {
-                warn!("inst err,pc:{:X},inst:{:x}", self.pc, inst);
+                warn!("IllegalInstruction,pc:{:X},inst:{:x}", self.pc, inst);
                 Err(TrapType::IllegalInstruction(inst.into()))
             }
         }
@@ -221,10 +215,7 @@ impl CpuCore {
                         self.handle_exceptions(trap_type);
                         continue;
                     }
-
                     self.handle_interrupt();
-                    // self.mmu.bus.borrow_mut().update();
-
                     // Increment the instruction counter
                     let instret = self.csr_regs.instret.get();
                     self.csr_regs.instret.set(instret + 1);
@@ -308,9 +299,6 @@ impl CpuCore {
         }
     }
 
-    // pub fn get_bus(&self) -> RVmutex<Bus> {
-    //     self.mmu.bus.clone()
-    // }
 
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
@@ -445,8 +433,6 @@ impl CpuCore {
             .bus
             .borrow_mut()
             .lr_sc_set
-            .lock()
-            .unwrap()
             .set(addr);
     }
     pub fn lr_sc_reservation_check_and_clear(&mut self, addr: u64) -> bool {
@@ -456,8 +442,6 @@ impl CpuCore {
             .bus
             .borrow_mut()
             .lr_sc_set
-            .lock()
-            .unwrap()
             .check_and_clear(addr)
     }
     // pub fn lr_sc_reservation_clear(&mut self) {

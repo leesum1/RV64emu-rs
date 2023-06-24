@@ -1,8 +1,6 @@
 // #![allow(unused)]
 use core::{cmp::Ordering, mem::discriminant};
 
-use std::io::{self, Write};
-
 use bitfield_struct::bitfield;
 
 use crate::rv64core::{cpu_core::CpuCore, traptype::TrapType};
@@ -1488,8 +1486,12 @@ impl FesvrCmd {
     pub fn character_device_write(&self) {
         if (self.cmd() == 1) && self.is_character_device() {
             let c = char::from_u32(self.tohost() as u32).unwrap();
-            print!("{c}");
-            io::stdout().flush().unwrap();
+            #[cfg(feature = "std")]
+            {
+                use std::io::{stdout, Write};
+                print!("{c}");
+                stdout().flush().unwrap();
+            }
         }
     }
 

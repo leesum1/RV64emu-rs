@@ -1,19 +1,18 @@
-use std::{
-    env,
-    path::PathBuf,
-};
+use std::{env, path::PathBuf};
 extern crate riscv64_emu;
 
 use riscv64_emu::{
     device::{
-        device_dram::DeviceDram,
+        device_am_uart::DeviceUart,
+        device_memory::DeviceMemory,
         device_trait::{DeviceBase, MEM_BASE, SERIAL_PORT},
-        device_uart::DeviceUart,
     },
     rv64core::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild, CpuState}
-    }, tools::RVmutex,
+        cpu_core::{CpuCoreBuild, CpuState},
+    },
+    rvsim::RVsim,
+    tools::{fifo_unbounded_new, RVmutex},
 };
 
 fn main() {
@@ -33,50 +32,51 @@ fn main() {
     // 1. the first instruction is executed at 0x8000_0000
     // 2. hart0 id is 0
     // 3. smode is enabled
-    let mut hart0 = CpuCoreBuild::new(bus_u.clone())
+    let hart0 = CpuCoreBuild::new(bus_u.clone())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)
         .build();
 
     // create device dram with 128MB capacity
-    // load binary file to dram start address (0x8000_0000)
     // Mount the dram under the bus
-    let mut mem: DeviceDram = DeviceDram::new(128 * 1024 * 1024);
-    mem.load_binary(bin_path.to_str().unwrap());
+    let mem: DeviceMemory = DeviceMemory::new(128 * 1024 * 1024);
+
     let device_name = mem.get_name();
     bus_u.borrow_mut().add_device(DeviceType {
         start: MEM_BASE,
-        len: mem.capacity as u64,
-        instance: mem.into(),
+        len: mem.size() as u64,
+        instance: Box::new(mem),
         name: device_name,
     });
 
+    let uart0_tx_fifo = fifo_unbounded_new::<u8>();
+
     // device uart
-    let uart = DeviceUart::new();
+    let uart = DeviceUart::new(uart0_tx_fifo.clone());
     let device_name = uart.get_name();
     bus_u.borrow_mut().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
-        instance: uart.into(),
+        instance: Box::new(uart),
         name: device_name,
     });
 
     // print bus device map
-    println!("{0}", bus_u.borrow_mut());
+    println!("{0}", bus_u.borrow());
 
-    hart0.cpu_state = CpuState::Running;
-    let mut cycle: u64 = 0;
-    while hart0.cpu_state == CpuState::Running {
-        hart0.execute(1);
+    let harts = vec![hart0];
+    let mut sim = RVsim::new(harts);
 
-        // update clint and plic every 128 cycles
-        if cycle % 128 == 0 {
-            bus_u.borrow_mut().update();
-            bus_u.borrow_mut().clint.instance.tick(128);
-            bus_u.borrow_mut().plic.instance.tick();
+    // run simulation
+    let bin_data = std::fs::read(bin_path).unwrap();
+    sim.load_image_from_slice(&bin_data);
+    sim.prepare_to_run();
+    while !sim.is_finish() {
+        sim.run_once();
+
+        while let Some(c) = uart0_tx_fifo.pop() {
+            print!("{}", c as char);
         }
-        cycle += 1;
     }
-    println!("total:{cycle}");
 }

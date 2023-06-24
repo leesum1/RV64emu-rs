@@ -1,13 +1,15 @@
-use std::rc::Rc;
+
 
 use core::cell::Cell;
 
+use alloc::rc::Rc;
+
 use crate::{
-    rv64core::csr_regs_define::{CsrShare, SatpIn, StapMode, XstatusIn},
+    rv64core::csr_regs_define::{SatpIn, StapMode, XstatusIn},
     rv64core::{
         cache::cache_system::CacheSystem,
         inst::inst_base::{check_aligned, AccessType, PrivilegeLevels}, traptype::TrapType,
-    }, tools::RVmutex,
+    }, tools::{RVmutex, CsrShare},
 };
 
 use super::{

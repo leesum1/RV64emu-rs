@@ -29,7 +29,7 @@ impl CpuIcache {
         (0x80000000..0x80000000 + 0x8000000).contains(&addr)
     }
     #[cfg(not(feature = "inst_cache"))]
-    fn cacheble(&self, addr: u64) -> bool {
+    fn cacheble(&self, _addr: u64) -> bool {
         false
     }
     // todo len:2,4

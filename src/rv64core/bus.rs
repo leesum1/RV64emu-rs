@@ -1,11 +1,12 @@
-use std::sync::{Arc, Mutex};
-
+use alloc::vec::Vec;
+use alloc::{boxed::Box, string::ToString};
 use log::warn;
 
 use crate::{
     device::{
+        device_sifive_clint::{Clint, DeviceClint},
         device_sifive_plic::{DevicePlic, SifvePlic},
-        device_trait::{DeviceBase, DeviceEnume}, device_sifive_clint::{DeviceClint, Clint},
+        device_trait::DeviceBase,
     },
     rv64core::inst::{
         inst_base::{check_aligned, check_area},
@@ -18,7 +19,7 @@ use super::inst::inst_base::RVerr;
 pub struct DeviceType {
     pub start: u64,
     pub len: u64,
-    pub instance: DeviceEnume,
+    pub instance: Box<dyn DeviceBase>,
     pub name: &'static str,
 }
 
@@ -28,8 +29,7 @@ pub struct Bus {
     pub clint: DeviceClint,
     pub plic: DevicePlic,
     pub devices: Vec<DeviceType>,
-    pub lr_sc_set: Arc<Mutex<LrScReservation>>, // for rv64a inst
-    pub amo_mutex: Arc<Mutex<()>>,             // for rv64a inst
+    pub lr_sc_set: LrScReservation, // for rv64a inst
 }
 
 unsafe impl Send for Bus {}
@@ -54,8 +54,7 @@ impl Bus {
             devices: vec![],
             clint,
             plic,
-            lr_sc_set: Arc::new(Mutex::new(LrScReservation::new())),
-            amo_mutex: Arc::new(Mutex::new(())),
+            lr_sc_set: LrScReservation::new(),
         }
     }
 
@@ -99,7 +98,7 @@ impl Bus {
     }
 
     pub fn write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, RVerr> {
-        if !check_aligned(addr,len) {
+        if !check_aligned(addr, len) {
             return Err(RVerr::AddrMisalign);
         }
 
@@ -134,6 +133,71 @@ impl Bus {
         }
     }
 
+    pub fn copy_from_slice(&mut self, addr: u64, data: &[u8]) -> Result<(), RVerr> {
+
+        let mut special_device = || -> Result<(), RVerr> {
+            if check_area(self.clint.start, self.clint.len, addr) {
+                self.clint
+                    .instance
+                    .copy_from_slice(addr - self.clint.start, data);
+                Ok(())
+            } else if check_area(self.plic.start, self.plic.len, addr) {
+                self.plic
+                    .instance
+                    .copy_from_slice(addr - self.plic.start, data);
+                Ok(())
+            } else {
+                warn!("can not find device,read addr{addr:X}");
+                // panic!("can not find device,read addr{addr:X}");
+
+                Err(RVerr::NotFindDevice)
+            }
+        };
+
+        let general_device = self
+            .devices
+            .iter_mut()
+            .find(|device| check_area(device.start, device.len, addr))
+            .map(|device| device.instance.copy_from_slice(addr - device.start, data));
+
+        match general_device {
+            Some(val) => Ok(val),
+            None => special_device(),
+        }
+    }
+
+    pub fn copy_to_slice(&mut self, addr: u64, data: &mut [u8]) -> Result<(), RVerr> {
+        let general_device = self
+            .devices
+            .iter_mut()
+            .find(|device| check_area(device.start, device.len, addr))
+            .map(|device| device.instance.copy_to_slice(addr - device.start, data));
+
+        let mut special_device = || -> Result<(), RVerr> {
+            if check_area(self.clint.start, self.clint.len, addr) {
+                self.clint
+                    .instance
+                    .copy_to_slice(addr - self.clint.start, data);
+                Ok(())
+            } else if check_area(self.plic.start, self.plic.len, addr) {
+                self.plic
+                    .instance
+                    .copy_to_slice(addr - self.plic.start, data);
+                Ok(())
+            } else {
+                warn!("can not find device,read addr{addr:X}");
+                // panic!("can not find device,read addr{addr:X}");
+
+                Err(RVerr::NotFindDevice)
+            }
+        };
+
+        match general_device {
+            Some(val) => Ok(val),
+            None => special_device(),
+        }
+    }
+
     pub fn update(&mut self) {
         self.devices
             .iter_mut()
@@ -147,8 +211,8 @@ impl Default for Bus {
     }
 }
 
-impl std::fmt::Display for Bus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Bus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let x = self.devices.iter().map(|device| {
             format_args!(
                 "name:{:15} Area:0X{:08X}-->0X{:08X},len:0X{:08X}\n",

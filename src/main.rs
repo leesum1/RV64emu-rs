@@ -4,6 +4,7 @@ extern crate riscv64_emu;
 
 use clap::Parser;
 use riscv64_emu::tools::FifoUnbounded;
+#[allow(unused_imports)]
 use riscv64_emu::tools::Fifobounded;
 
 use std::io::{stdin, Write};
@@ -28,11 +29,11 @@ use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
         use riscv64_emu::device::{
-            device_kb::{DeviceKB, DeviceKbItem},
-            device_mouse::{DeviceMouse, DeviceMouseItem},
+            device_am_kb::{DeviceKB, DeviceKbItem},
+            device_am_mouse::{DeviceMouse, DeviceMouseItem},
             device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
-            device_vga::DeviceVGA,
-            device_vgactl::DeviceVGACTL,
+            device_am_vga::DeviceVGA,
+            device_am_vgactl::DeviceVGACTL,
         };
         use sdl2::{
             event::Event,
@@ -46,13 +47,13 @@ use crate::riscv64_emu::trace::traces::Traces;
 use crate::tools::RVmutex;
 use crate::{
     riscv64_emu::device::{
-        device_dram::DeviceDram,
-        device_rtc::DeviceRTC,
+        device_am_rtc::DeviceRTC,
+        device_am_uart::DeviceUart,
+        device_memory::DeviceMemory,
         device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE},
-        device_uart::DeviceUart,
     },
     riscv64_emu::rv64core::bus::{Bus, DeviceType},
     riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
@@ -102,6 +103,7 @@ fn main() {
     let signal_term_cpucore = signal_term.clone();
 
     #[allow(unused_variables)]
+    #[allow(clippy::redundant_clone)]
     let signal_term_sdl_event = signal_term.clone();
     #[allow(unused_variables)]
     #[allow(clippy::redundant_clone)]
@@ -110,31 +112,31 @@ fn main() {
     let bus_u: RVmutex<Bus> = RVmutex::new(Bus::new().into());
 
     // device dram len:0X08000000
-    let mem = DeviceDram::new(128 * 1024 * 1024);
+    let mem = DeviceMemory::new(0x0800000);
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: MEM_BASE,
-        len: mem.capacity as u64,
-        instance: mem.into(),
+        len: mem.size() as u64,
+        instance: Box::new(mem),
         name: "RAM",
     });
 
     // device dtcm
-    let dtcm = DeviceDram::new(128 * 1024 * 1024);
+    let dtcm = DeviceMemory::new(128 * 1024 * 1024);
     bus_u.borrow_mut().add_device(DeviceType {
         start: 0x9000_0000,
-        len: dtcm.capacity as u64,
-        instance: dtcm.into(),
+        len: dtcm.size() as u64,
+        instance: Box::new(dtcm),
         name: "DTCM",
     });
 
     // device flash len:0X01000000
-    let falsh = DeviceDram::new(128 * 1024 * 1024);
+    let falsh = DeviceMemory::new(128 * 1024 * 1024);
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: 0x3000_0000,
-        len: falsh.capacity as u64,
-        instance: falsh.into(),
+        len: falsh.size() as u64,
+        instance: Box::new(falsh),
         name: "XIPFLASH",
     });
 
@@ -174,12 +176,12 @@ fn main() {
     });
 
     // device uart
-    let uart = DeviceUart::new();
+    let uart = DeviceUart::new(uart_tx_fifo.clone());
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: SERIAL_PORT,
         len: 1,
-        instance: uart.into(),
+        instance: Box::new(uart),
         name: "AM_UART",
     });
     // device 16650_uart
@@ -188,7 +190,7 @@ fn main() {
     bus_u.borrow_mut().add_device(DeviceType {
         start: 0x1000_0000,
         len: 0x1000,
-        instance: device_16650_uart.into(),
+        instance: Box::new(device_16650_uart),
         name: "16550a_uart",
     });
 
@@ -204,7 +206,7 @@ fn main() {
     bus_u.borrow_mut().add_device(DeviceType {
         start: SIFIVE_UART_BASE,
         len: 0x1000,
-        instance: device_sifive_uart.into(),
+        instance: Box::new(device_sifive_uart),
         name: "Sifive_Uart",
     });
 
@@ -215,7 +217,7 @@ fn main() {
     bus_u.borrow_mut().add_device(DeviceType {
         start: RTC_ADDR,
         len: 8,
-        instance: rtc.into(),
+        instance: Box::new(rtc),
         name: device_name,
     });
 
@@ -281,7 +283,7 @@ fn main() {
     let cpu_main = thread::spawn(move || {
         let mut sim = RVsim::new(hart_vec);
         if let Some(ram_img) = args.img {
-            sim.load_elf(&ram_img);
+            sim.load_image(&ram_img);
         }
         if let Some(signature_file) = args.signature {
             sim.set_signature_file(signature_file);
@@ -337,7 +339,7 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
     bus_u.borrow_mut().add_device(DeviceType {
         start: VGACTL_ADDR,
         len: 8,
-        instance: vgactl.into(),
+        instance: Box::new(vgactl),
         name: device_name,
     });
 
@@ -347,7 +349,7 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
     bus_u.borrow_mut().add_device(DeviceType {
         start: FB_ADDR,
         len: DeviceVGA::get_size() as u64,
-        instance: vga.into(),
+        instance: Box::new(vga),
         name: device_name,
     });
 
@@ -362,7 +364,7 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
     bus_u.borrow_mut().add_device(DeviceType {
         start: KBD_ADDR,
         len: 8,
-        instance: device_kb.into(),
+        instance: Box::new(device_kb),
         name: device_name,
     });
     // device mouse
@@ -376,7 +378,7 @@ fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBoo
     bus_u.borrow_mut().add_device(DeviceType {
         start: MOUSE_ADDR,
         len: 16,
-        instance: device_mouse.into(),
+        instance: Box::new(device_mouse),
         name: "Mouse",
     });
 

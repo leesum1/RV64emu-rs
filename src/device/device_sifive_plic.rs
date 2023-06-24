@@ -1,5 +1,6 @@
-use std::{cell::Cell, cmp::Ordering, rc::Rc};
+use core::{cell::Cell, cmp::Ordering};
 
+use alloc::{rc::Rc, vec::Vec};
 use bitfield_struct::bitfield;
 use log::warn;
 

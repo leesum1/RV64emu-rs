@@ -1,6 +1,6 @@
 use core::cell::Cell;
-use std::rc::Rc;
 
+use alloc::{boxed::Box, rc::Rc};
 use bitfield_struct::bitfield;
 
 use crate::{device::device_trait::DeviceBase, tools::FifoUnbounded};
@@ -83,7 +83,6 @@ impl SifiveUartIN {
         }
     }
 }
-
 
 pub struct DeviceSifiveUart {
     regs: Box<SifiveUartIN>,

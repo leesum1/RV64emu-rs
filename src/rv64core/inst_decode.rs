@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use hashbrown::HashMap;
 
 #[cfg(feature = "rv_a")]
@@ -48,6 +49,7 @@ impl InstDecode {
             .find(|x| x.mask & inst_i == x.match_data)
             .copied();
 
+        #[cfg(feature = "decode_cache")]
         if let Some(slow) = slowpath {
             self.inst_hash.insert(inst_i, slow);
         }
