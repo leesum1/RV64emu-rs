@@ -20,7 +20,7 @@ use crate::{
         // csr_regs_define::Misa,
         inst::inst_base::FesvrCmd,
     },
-    tools::RVmutex,
+    tools::RcRefCell,
 };
 
 #[derive(Default)]
@@ -31,7 +31,7 @@ pub struct RVsim {
     /* riscof tests */
     signature_range: Option<ops::Range<u64>>,
     signature_file: Option<String>,
-    bus: RVmutex<Bus>,
+    bus: RcRefCell<Bus>,
     harts: Vec<CpuCore>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,

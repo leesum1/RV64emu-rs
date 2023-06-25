@@ -1,7 +1,7 @@
 use hashbrown::HashMap;
 use log::info;
 
-use crate::{rv64core::{bus::Bus, inst::inst_base::RVerr}, tools::RVmutex};
+use crate::{rv64core::{bus::Bus, inst::inst_base::RVerr}, tools::RcRefCell};
 
 const ICACHE_SIZE: usize = 4096*10;
 
@@ -9,14 +9,14 @@ struct InstPack {
     inst: u32,
 }
 pub struct CpuIcache {
-    bus: RVmutex<Bus>,
+    bus: RcRefCell<Bus>,
     inst_hash: HashMap<u64, InstPack>,
     hit: u64,
     miss: u64,
 }
 
 impl CpuIcache {
-    pub fn new(bus: RVmutex<Bus>) -> Self {
+    pub fn new(bus: RcRefCell<Bus>) -> Self {
         CpuIcache {
             bus,
             inst_hash: HashMap::new(),

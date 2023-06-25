@@ -8,8 +8,8 @@ use crate::{
     rv64core::csr_regs_define::{SatpIn, StapMode, XstatusIn},
     rv64core::{
         cache::cache_system::CacheSystem,
-        inst::inst_base::{check_aligned, AccessType, PrivilegeLevels}, traptype::TrapType,
-    }, tools::{RVmutex, CsrShare},
+        inst::inst_base::{AccessType, PrivilegeLevels}, traptype::TrapType,
+    }, tools::{RcRefCell, RcCell, check_aligned},
 };
 
 use super::{
@@ -20,10 +20,10 @@ use super::{
 const PAGESIZE: u64 = 4096; // 2 ^ 12
 
 pub struct Mmu {
-    pub caches: RVmutex<CacheSystem>,
+    pub caches: RcRefCell<CacheSystem>,
     pub access_type: AccessType,
-    mstatus: CsrShare<XstatusIn>,
-    satp: CsrShare<SatpIn>,
+    mstatus: RcCell<XstatusIn>,
+    satp: RcCell<SatpIn>,
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
@@ -39,10 +39,10 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(
-        caches: RVmutex<CacheSystem>,
+        caches: RcRefCell<CacheSystem>,
         privilege: Rc<Cell<PrivilegeLevels>>,
-        mstatus: CsrShare<XstatusIn>,
-        satp: CsrShare<SatpIn>,
+        mstatus: RcCell<XstatusIn>,
+        satp: RcCell<SatpIn>,
     ) -> Self {
         Mmu {
             caches,

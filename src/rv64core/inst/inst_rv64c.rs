@@ -1,4 +1,4 @@
-use crate::rv64core::{inst::inst_base::*, traptype::TrapType};
+use crate::{rv64core::{inst::inst_base::*, traptype::TrapType}, tools::check_aligned};
 
 #[cfg(feature = "rvc_debug_trace")]
 use crate::trace::traces::TraceType;

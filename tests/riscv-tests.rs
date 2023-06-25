@@ -2,7 +2,7 @@ extern crate riscv64_emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use riscv64_emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RVmutex};
+use riscv64_emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell};
 
 use crate::{
     riscv64_emu::device::device_trait::{DeviceBase, MEM_BASE},
@@ -22,7 +22,7 @@ fn get_riscv_tests_path() -> std::path::PathBuf {
 // ture: pass, false: fail
 fn start_test(img: &str) -> bool {
     // let bus_u = Rc::new(Mutex::new(Bus::new()));
-    let bus_u: RVmutex<Bus> = RVmutex::new(Bus::new().into());
+    let bus_u: RcRefCell<Bus> = RcRefCell::new(Bus::new().into());
 
     let cpu = CpuCoreBuild::new(bus_u.clone())
         .with_boot_pc(0x8000_0000)

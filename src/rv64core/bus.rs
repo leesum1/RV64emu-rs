@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 use alloc::{boxed::Box, string::ToString};
 use log::warn;
 
+use crate::tools::{check_aligned, check_area};
 use crate::{
     device::{
         device_sifive_clint::{Clint, DeviceClint},
@@ -9,7 +10,6 @@ use crate::{
         device_trait::DeviceBase,
     },
     rv64core::inst::{
-        inst_base::{check_aligned, check_area},
         inst_rv64a::LrScReservation,
     },
 };

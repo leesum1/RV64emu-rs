@@ -17,28 +17,28 @@ use crate::{
         CSR_SSCRATCH, CSR_SSTATUS, CSR_STVAL, CSR_STVEC, CSR_TIME, CSR_TSELECT, MASK_ALL,
     },
     rv64core::traptype::TrapType,
-    tools::CsrShare,
+    tools::RcCell,
 };
 
 pub struct CsrRegs {
     pub csr_map: HashMap<u64, CsrEnum>,
     pub cur_priv: PrivilegeLevels,
-    pub xstatus: CsrShare<XstatusIn>,
-    pub xip: CsrShare<XipIn>,
-    pub xie: CsrShare<XieIn>,
-    pub mtvec: CsrShare<XtvecIn>,
-    pub stvec: CsrShare<XtvecIn>,
-    pub mcause: CsrShare<XcauseIn>,
-    pub scause: CsrShare<XcauseIn>,
-    pub medeleg: CsrShare<MedelegIn>,
-    pub mideleg: CsrShare<MidelegIn>,
-    pub mepc: CsrShare<u64>,
-    pub sepc: CsrShare<u64>,
-    pub satp: CsrShare<SatpIn>,
-    pub mtval: CsrShare<u64>,
-    pub stval: CsrShare<u64>,
-    pub cycle: CsrShare<u64>,
-    pub instret: CsrShare<u64>,
+    pub xstatus: RcCell<XstatusIn>,
+    pub xip: RcCell<XipIn>,
+    pub xie: RcCell<XieIn>,
+    pub mtvec: RcCell<XtvecIn>,
+    pub stvec: RcCell<XtvecIn>,
+    pub mcause: RcCell<XcauseIn>,
+    pub scause: RcCell<XcauseIn>,
+    pub medeleg: RcCell<MedelegIn>,
+    pub mideleg: RcCell<MidelegIn>,
+    pub mepc: RcCell<u64>,
+    pub sepc: RcCell<u64>,
+    pub satp: RcCell<SatpIn>,
+    pub mtval: RcCell<u64>,
+    pub stval: RcCell<u64>,
+    pub cycle: RcCell<u64>,
+    pub instret: RcCell<u64>,
 }
 
 impl CsrRegs {
@@ -77,7 +77,7 @@ impl CsrRegs {
         let mvendorid = CommonCSR::new_noshare(0);
         let mimpid = CommonCSR::new_noshare(0);
         // important csrs
-        let xstatus_share = CsrShare::new(mstatus_val.into());
+        let xstatus_share = RcCell::new(mstatus_val.into());
         let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_wmask.into());
         let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
 
@@ -195,7 +195,7 @@ impl CsrRegs {
         }
     }
 
-    pub fn add_mtime(&mut self, mtime: CsrShare<u64>) {
+    pub fn add_mtime(&mut self, mtime: RcCell<u64>) {
         let time = Counter::new(mtime);
         self.csr_map.insert(CSR_TIME.into(), time.into());
     }

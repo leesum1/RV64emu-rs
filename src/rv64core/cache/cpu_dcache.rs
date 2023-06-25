@@ -1,6 +1,6 @@
 use crate::rv64core::bus::Bus;
 use crate::rv64core::inst::inst_base::RVerr;
-use crate::tools::RVmutex;
+use crate::tools::RcRefCell;
 
 use log::info;
 
@@ -57,14 +57,14 @@ impl CacheLine {
 }
 
 pub struct CpuDcache {
-    bus: RVmutex<Bus>,
+    bus: RcRefCell<Bus>,
     caches: hashbrown::HashMap<u64, CacheLine>,
     hit: u64,
     miss: u64,
 }
 
 impl CpuDcache {
-    pub fn new(bus: RVmutex<Bus>) -> Self {
+    pub fn new(bus: RcRefCell<Bus>) -> Self {
         // let caches = vec![CacheLine::new(); 32];
         let caches = hashbrown::HashMap::new();
         CpuDcache {

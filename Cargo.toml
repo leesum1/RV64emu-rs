@@ -66,7 +66,7 @@ support_am = []
 # sacrificing debug info. With this profile (like in the standard
 # release profile), the debug info and the stack traces will still be available.
 [profile.release]
-lto = true
+# lto = true
 # debug = 1
 
 

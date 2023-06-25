@@ -44,7 +44,7 @@ cfg_if::cfg_if! {
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::riscv64_emu::trace::traces::Traces;
-use crate::tools::RVmutex;
+use crate::tools::RcRefCell;
 use crate::{
     riscv64_emu::device::{
         device_am_rtc::DeviceRTC,
@@ -109,7 +109,7 @@ fn main() {
     #[allow(clippy::redundant_clone)]
     let signal_term_uart = signal_term.clone();
 
-    let bus_u: RVmutex<Bus> = RVmutex::new(Bus::new().into());
+    let bus_u: RcRefCell<Bus> = RcRefCell::new(Bus::new().into());
 
     // device dram len:0X08000000
     let mem = DeviceMemory::new(0x0800000);
@@ -309,7 +309,7 @@ fn send_key_event(tx: &Fifobounded<DeviceKbItem>, val: Scancode, keydown: bool) 
     });
 }
 #[cfg(feature = "device_sdl2")]
-fn create_sdl2_devices(bus_u: RVmutex<Bus>, signal_term_sdl_event: Arc<AtomicBool>) {
+fn create_sdl2_devices(bus_u: RcRefCell<Bus>, signal_term_sdl_event: Arc<AtomicBool>) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga

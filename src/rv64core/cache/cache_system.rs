@@ -1,15 +1,15 @@
-use crate::{rv64core::bus::Bus, tools::RVmutex};
+use crate::{rv64core::bus::Bus, tools::RcRefCell};
 
 use super::{cpu_dcache::CpuDcache, cpu_icache::CpuIcache};
 
 pub struct CacheSystem {
     pub icache: CpuIcache,
     pub dcache: CpuDcache,
-    pub bus: RVmutex<Bus>,
+    pub bus: RcRefCell<Bus>,
 }
 
 impl CacheSystem {
-    pub fn new(bus: RVmutex<Bus>) -> Self {
+    pub fn new(bus: RcRefCell<Bus>) -> Self {
         let icache = CpuIcache::new(bus.clone());
         let dcache = CpuDcache::new(bus.clone());
         CacheSystem {

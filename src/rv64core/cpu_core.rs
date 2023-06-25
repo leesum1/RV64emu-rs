@@ -12,7 +12,7 @@ use crate::{
     rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
     rv64core::traptype::TrapType,
-    tools::RVmutex,
+    tools::{RcRefCell, check_aligned},
 };
 
 #[cfg(feature = "rv_debug_trace")]
@@ -20,7 +20,7 @@ use crate::trace::traces::TraceType;
 
 use super::{
     cache::cache_system::CacheSystem,
-    inst::inst_base::{check_aligned, is_compressed_instruction},
+    inst::inst_base::is_compressed_instruction,
     mmu::cpu_mmu::Mmu,
 };
 
@@ -32,14 +32,14 @@ pub enum CpuState {
 }
 pub struct CpuCoreBuild {
     hart_id: usize,
-    shared_bus: RVmutex<Bus>,
+    shared_bus: RcRefCell<Bus>,
     boot_pc: u64,
     smode: bool,
     #[cfg(feature = "rv_debug_trace")]
     trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 impl CpuCoreBuild {
-    pub fn new(shared_bus: RVmutex<Bus>) -> Self {
+    pub fn new(shared_bus: RcRefCell<Bus>) -> Self {
         CpuCoreBuild {
             hart_id: 0,
             shared_bus,
@@ -76,7 +76,7 @@ impl CpuCoreBuild {
         // let mtime = csr_regs_u.time.clone();
         let xip = csr_regs_u.xip.clone();
 
-        let cache_system = RVmutex::new(CacheSystem::new(self.shared_bus.clone()).into());
+        let cache_system = RcRefCell::new(CacheSystem::new(self.shared_bus.clone()).into());
 
         let mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
         {
@@ -113,7 +113,7 @@ pub struct CpuCore {
     pub csr_regs: CsrRegs,
     pub mmu: Mmu,
     pub decode: InstDecode,
-    pub cache_system: RVmutex<CacheSystem>,
+    pub cache_system: RcRefCell<CacheSystem>,
     pub pc: u64,
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,

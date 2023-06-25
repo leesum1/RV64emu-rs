@@ -6,7 +6,7 @@ use enum_dispatch::enum_dispatch;
 use crate::{
     rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::traptype::TrapType,
-    tools::CsrShare,
+    tools::RcCell,
 };
 
 use super::inst::inst_base::RVerr;
@@ -66,16 +66,16 @@ impl Csr for ReadOnlyCSR {
 }
 
 pub struct CommonCSR {
-    inner: CsrShare<u64>,
+    inner: RcCell<u64>,
 }
 
 impl CommonCSR {
-    pub fn new(share: CsrShare<u64>) -> Self {
+    pub fn new(share: RcCell<u64>) -> Self {
         Self { inner: share }
     }
     pub fn new_noshare(data: u64) -> Self {
         Self {
-            inner: CsrShare::new(data.into()),
+            inner: RcCell::new(data.into()),
         }
     }
 }
@@ -230,13 +230,13 @@ impl XstatusIn {
 }
 
 pub struct Xstatus {
-    inner: CsrShare<XstatusIn>,
+    inner: RcCell<XstatusIn>,
     rmask: u64,
     wmask: u64,
 }
 
 impl Xstatus {
-    pub fn new(share: CsrShare<XstatusIn>, rmask: u64, wmask: u64) -> Self {
+    pub fn new(share: RcCell<XstatusIn>, rmask: u64, wmask: u64) -> Self {
         Self {
             inner: share,
             rmask,
@@ -299,11 +299,11 @@ impl XtvecIn {
 }
 
 pub struct Xtvec {
-    inner: CsrShare<XtvecIn>,
+    inner: RcCell<XtvecIn>,
 }
 
 impl Xtvec {
-    pub fn new(share: CsrShare<XtvecIn>) -> Self {
+    pub fn new(share: RcCell<XtvecIn>) -> Self {
         Self { inner: share }
     }
 }
@@ -356,12 +356,12 @@ pub struct XieIn {
 }
 
 pub struct Xie {
-    inner: CsrShare<XieIn>,
+    inner: RcCell<XieIn>,
     mask: u64,
 }
 
 impl Xie {
-    pub fn new(share: CsrShare<XieIn>, mask: u64) -> Self {
+    pub fn new(share: RcCell<XieIn>, mask: u64) -> Self {
         Self { inner: share, mask }
     }
 }
@@ -428,12 +428,12 @@ impl XipIn {
 }
 
 pub struct Xip {
-    inner: CsrShare<XipIn>,
+    inner: RcCell<XipIn>,
     mask: u64,
 }
 
 impl Xip {
-    pub fn new(share: CsrShare<XipIn>, mask: u64) -> Self {
+    pub fn new(share: RcCell<XipIn>, mask: u64) -> Self {
         Self { inner: share, mask }
     }
 }
@@ -457,11 +457,11 @@ pub struct XcauseIn {
 }
 
 pub struct Xcause {
-    inner: CsrShare<XcauseIn>,
+    inner: RcCell<XcauseIn>,
 }
 
 impl Xcause {
-    pub fn new(share: CsrShare<XcauseIn>) -> Self {
+    pub fn new(share: RcCell<XcauseIn>) -> Self {
         Self { inner: share }
     }
 }
@@ -501,11 +501,11 @@ pub struct MedelegIn {
 }
 
 pub struct Medeleg {
-    inner: CsrShare<MedelegIn>,
+    inner: RcCell<MedelegIn>,
 }
 
 impl Medeleg {
-    pub fn new(share: CsrShare<MedelegIn>) -> Self {
+    pub fn new(share: RcCell<MedelegIn>) -> Self {
         Self { inner: share }
     }
 }
@@ -613,7 +613,7 @@ impl From<PMPcfgIn> for u64 {
         val.0 as u64
     }
 }
-pub type PMPcfgShare = CsrShare<Box<PMPcfg>>;
+pub type PMPcfgShare = RcCell<Box<PMPcfg>>;
 #[bitfield(u64)]
 pub struct PMPcfg {
     #[bits(8)]
@@ -721,12 +721,12 @@ impl SatpIn {
 }
 
 pub struct Satp {
-    inner: CsrShare<SatpIn>,
-    xstatus: CsrShare<XstatusIn>,
+    inner: RcCell<SatpIn>,
+    xstatus: RcCell<XstatusIn>,
 }
 
 impl Satp {
-    pub fn new(share: CsrShare<SatpIn>, xstatus_share: CsrShare<XstatusIn>) -> Self {
+    pub fn new(share: RcCell<SatpIn>, xstatus_share: RcCell<XstatusIn>) -> Self {
         Satp {
             inner: share,
             xstatus: xstatus_share,
@@ -773,11 +773,11 @@ impl Csr for Satp {
 }
 
 pub struct Counter {
-    inner: CsrShare<u64>,
+    inner: RcCell<u64>,
 }
 
 impl Counter {
-    pub fn new(share: CsrShare<u64>) -> Self {
+    pub fn new(share: RcCell<u64>) -> Self {
         Counter { inner: share }
     }
 }

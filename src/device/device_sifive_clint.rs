@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{rv64core::csr_regs_define::XipIn, tools::CsrShare};
+use crate::{rv64core::csr_regs_define::XipIn, tools::RcCell};
 
 use super::device_trait::DeviceBase;
 
@@ -25,11 +25,11 @@ pub struct DeviceClint {
 // xip is a shared resource with cpu core
 struct ClintHart {
     mtimecmp: u64,
-    xip: CsrShare<XipIn>,
+    xip: RcCell<XipIn>,
 }
 
 impl ClintHart {
-    pub fn new(xip_share: CsrShare<XipIn>) -> Self {
+    pub fn new(xip_share: RcCell<XipIn>) -> Self {
         ClintHart {
             mtimecmp: u64::MAX,
             xip: xip_share,
@@ -62,18 +62,18 @@ impl ClintHart {
 
 pub struct Clint {
     harts: Vec<ClintHart>,
-    mitme: CsrShare<u64>,
+    mitme: RcCell<u64>,
 }
 
 impl Clint {
     pub fn new() -> Self {
         Clint {
             harts: vec![],
-            mitme: CsrShare::new(0.into()),
+            mitme: RcCell::new(0.into()),
         }
     }
     // add a hart,and return the shared mitme
-    pub fn add_hart(&mut self, xip_share: CsrShare<XipIn>) -> CsrShare<u64> {
+    pub fn add_hart(&mut self, xip_share: RcCell<XipIn>) -> RcCell<u64> {
         self.harts.push(ClintHart::new(xip_share));
         self.mitme.clone()
     }
