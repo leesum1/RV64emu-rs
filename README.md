@@ -1,6 +1,7 @@
 # Introduction
 ![run_linux](https://cdn.jsdelivr.net/gh/leesum1/doc/img/leesum1.gif)
-RV64emu is a riscv64 emulator written in rust, it is still under development. It can run `CoreMark`,`RT-thread` and `Linux` now. And it is easy to add new devices and support new instructions. The RV64emu is now as a crate, you can use it in your project,and it is also a standalone emulator, you can run it directly.Due to RUST's cross-platform feature, it can run on Linux, Windows and MacOS.Even on the embedded device, such as ESP32 and STM32 which support embeded rust.
+
+rv64emu is a riscv64 emulator written in rust,It can run `CoreMark`,`RT-thread` and `Linux` now. And it is easy to add new devices and support new instructions. The rv64emu is now as a crate, you can use it in your project,and it is also a standalone emulator, you can run it directly.Due to RUST's cross-platform feature, it can run on Linux, Windows and MacOS.Even on the embedded device, such as ESP32 and STM32 which support embeded rust.
 
 ISA Specification:
 - [x] RV64I
@@ -18,29 +19,12 @@ ISA Specification:
 - [ ] PMP
 
 # Example
-The simple example of using RV64emu as a crate.You can find it in `examples` directory.
+The simplest example of using rv64emu as a crate.You can find it in `examples` directory.
 
-# Standalone emulator
++ **simple_system**  : the simplest example, only have uart and dram
++ **ysyx_am_system** : support AM environment, use ebread to terminate emulation
++ **linux_system** : support linux, you can run linux directly
 
-When you build the project, you will get a standalone emulator, you can run it directly.
-
-## Device Map
-
-| NAME         | AREA           | LENGTH       |
-| ------------ | -------------- | --------- |
-| CLINT        | 0X02000000-->0X02010000 | 0X00010000 |
-| PLIC         | 0X0C000000-->0X10000000 | 0X04000000 |
-| DRAM         | 0X80000000-->0X88000000 | 0X08000000 |
-| UART(AM)         | 0XA00003F8-->0XA00003F9 | 0X00000001 |
-| RTC(AM)          | 0XA0000048-->0XA0000050 | 0X00000008 |
-| VGA_CTL(AM)      | 0XA0000100-->0XA0000108 | 0X00000008 |
-| VGA_FB(AM)       | 0XA1000000-->0XA1075300 | 0X00075300 |
-| KeyBorad_AM(AM)  | 0XA0000060-->0XA0000068 | 0X00000008 |
-| Mouse(AM)        | 0XA0000070-->0XA0000080 | 0X00000010 |
-| Sifive_Uart  | 0XC0000000-->0XC0001000 | 0X00001000 |
-
-
-## Build
 
 **features**
 
@@ -54,26 +38,29 @@ When you build the project, you will get a standalone emulator, you can run it d
 |rv_m|support rv_m extension||
 |rv_a|support rv_a extension||
 
-```
-
-
-For simplicity,default build are without debug trace
-```bash
-cargo build --release
-```
 
 # Run
-run `CoreMark`
+
+**Run abstract machine applications**
+
+The following command will run `hello.bin` ,which is a simple application in `ready_to_run` directory. And for details of `ysyx_am_system` example, please refer to `examples/ysyx_am_system.rs`.
+
 ```bash
-cargo run --release --features=device_sdl2 -- --img ./ready_to_run/coremark-riscv64-nemu.bin
+cargo run --release --example=ysyx_am_system --features="std device_sdl2" -- --img ready_to_run/hello.bin
 ```
-run `RT-thread`
+
+Apart from `hello.bin`, there are other applications in `ready_to_run` directory:
+- hello.bin
+- coremark-riscv64-nemu.bin
+- nanos-lite-riscv64-nemu.bin
+- rtthread.bin
+
+These applications above were build for `AM` environment.
+
+
+**Run linux**
 ```bash
-cargo run --release --features=device_sdl2 -- --img ./ready_to_run/rtthread.bin
-```
-run `Linux`
-```bash
-cargo run --release -- --img ./ready_to_run/linux.bin
+cargo run --release --example=linux_system -- --img ready_to_run/linux.elf
 ```
 # Build linux kernel by yourself
 > Please refer to [rv64emu-sdk](https://github.com/leesum1/rv64emu-sdk) for details.
@@ -88,7 +75,21 @@ cargo riscv-tests
 
 todo! 
 
+
+# No_std support
+
+What a magic feature of rust! You can run `rv64emu` on the embedded device, such as ESP32 and STM32 which support **embeded rust**.
+
+But before build your embeded project, you need to disable some features, such as `device_sdl2`,`rv_debug_trace`.
++ **device_sdl2**: because the embedded device does not support sdl2,and some devices, such as vga and keyboard are based on sdl2.
+
++ **rv_debug_trace**: because it used `crossbeam-channel` crate,which is not support `no_std`. More over, the embedded device does not support file system,and the log file is too large to store.
+
++ **caches**: because the embedded device does not have enough memory
+
+
 # reference
 - [riscv-rust](https://github.com/takahirox/riscv-rust)
 - [spike](https://github.com/riscv-software-src/riscv-isa-sim)
+- [abstract-machine](https://github.com/NJU-ProjectN/abstract-machine)
 
