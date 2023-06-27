@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf};
-extern crate riscv64_emu;
+extern crate rv64emu;
 
-use riscv64_emu::{
+use rv64emu::{
     device::{
         device_am_uart::DeviceUart,
         device_memory::DeviceMemory,

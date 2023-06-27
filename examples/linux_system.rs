@@ -1,9 +1,9 @@
-extern crate riscv64_emu;
+extern crate rv64emu;
 
 use clap::Parser;
 #[allow(unused_imports)]
-use riscv64_emu::tools::Fifobounded;
-use riscv64_emu::tools::{rc_refcell_new, FifoUnbounded};
+use rv64emu::tools::Fifobounded;
+use rv64emu::tools::{rc_refcell_new, FifoUnbounded};
 
 #[allow(unused_imports)]
 use std::{
@@ -25,17 +25,17 @@ use std::{
 };
 
 use log::{debug, info, LevelFilter};
-use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
+use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 #[cfg(feature = "rv_debug_trace")]
-use crate::riscv64_emu::trace::traces::Traces;
+use crate::rv64emu::trace::traces::Traces;
 use crate::{
-    riscv64_emu::device::{
+    rv64emu::device::{
         device_memory::DeviceMemory, device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart, device_trait::MEM_BASE,
     },
-    riscv64_emu::rv64core::bus::{Bus, DeviceType},
-    riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
+    rv64emu::rv64core::bus::{Bus, DeviceType},
+    rv64emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
 #[derive(Parser, Debug)]
@@ -57,7 +57,13 @@ struct Args {
     /// optional:Write torture test signature to FILE
     signature: Option<String>,
 }
-
+// -------------Device Tree MAP-------------
+// name:CLINT           Area:0X02000000-->0X02010000,len:0X00010000
+// name:PLIC            Area:0X0C000000-->0X10000000,len:0X04000000
+// name:RAM             Area:0X80000000-->0X88000000,len:0X08000000
+// name:XIPFLASH        Area:0X30000000-->0X38000000,len:0X08000000
+// name:16550a_uart     Area:0X10000000-->0X10001000,len:0X00001000
+// name:Sifive_Uart     Area:0XC0000000-->0XC0001000,len:0X00001000
 fn main() {
     simple_logger::SimpleLogger::new()
         .with_level(LevelFilter::Debug)
@@ -105,6 +111,7 @@ fn main() {
 
     let rx_fifo = uart_rx_fifo.clone();
     let tx_fifo = uart_tx_fifo.clone();
+    let signal_term_uart = signal_term.clone();
     thread::spawn(move || loop {
         let mut buf = [0; 1];
         if let Ok(n) = stdin().read(&mut buf) {
@@ -119,13 +126,16 @@ fn main() {
         std::thread::sleep(Duration::from_millis(100));
     });
 
-    thread::spawn(move || loop {
+    let uart_tx_thread = thread::spawn(move || loop {
         while !tx_fifo.is_empty() {
             if let Some(c) = tx_fifo.pop() {
                 print!("{}", c as char)
             }
         }
         io::stdout().flush().unwrap();
+        if signal_term_uart.load(Ordering::Relaxed) {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(50));
     });
 
@@ -180,7 +190,7 @@ fn main() {
         cfg_if::cfg_if! {
                 if #[cfg(feature = "rv_debug_trace")] {
                 let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                let cpu: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_trace(trace_tx)
@@ -229,4 +239,5 @@ fn main() {
         handle.join().unwrap();
     }
     cpu_main.join().unwrap();
+    uart_tx_thread.join().unwrap();
 }

@@ -1,13 +1,13 @@
-extern crate riscv64_emu;
+extern crate rv64emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use riscv64_emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell};
+use rv64emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell};
 
 use crate::{
-    riscv64_emu::device::device_trait::{DeviceBase, MEM_BASE},
-    riscv64_emu::rv64core::bus::{Bus, DeviceType},
-    riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
+    rv64emu::device::device_trait::{DeviceBase, MEM_BASE},
+    rv64emu::rv64core::bus::{Bus, DeviceType},
+    rv64emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
 fn get_riscv_tests_path() -> std::path::PathBuf {

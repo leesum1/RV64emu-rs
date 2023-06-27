@@ -1,5 +1,5 @@
 [package]
-name = "riscv64-emu"
+name = "rv64emu"
 version = "0.1.0"
 edition = "2021"
 
@@ -28,6 +28,10 @@ sdl2 = { version = "0.35", optional = true }
 clap = { version = "4.1.4", features = ["derive"] }
 simple_logger = "4.1.0"
 
+
+[lib]
+name = "rv64emu"
+path = "src/lib.rs"
 
 [[example]]
 name = "simple_system"

@@ -1,11 +1,10 @@
-extern crate riscv64_emu;
+extern crate rv64emu;
 
 use clap::Parser;
-use riscv64_emu::tools::{FifoUnbounded, rc_refcell_new};
 #[allow(unused_imports)]
-use riscv64_emu::tools::Fifobounded;
+use rv64emu::tools::Fifobounded;
+use rv64emu::tools::{rc_refcell_new, FifoUnbounded};
 
-use std::io::{stdin, Write};
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
@@ -20,13 +19,17 @@ use std::{
     thread,
     time::Duration,
 };
+use std::{
+    io::{stdin, Write},
+    thread::sleep,
+};
 
 use log::{debug, info, LevelFilter};
-use riscv64_emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
+use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "device_sdl2")]{
-        use riscv64_emu::device::{
+        use rv64emu::device::{
             device_am_kb::{DeviceKB, DeviceKbItem},
             device_am_mouse::{DeviceMouse, DeviceMouseItem},
             device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
@@ -40,11 +43,11 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::riscv64_emu::tools::RcRefCell;
+use crate::rv64emu::tools::RcRefCell;
 #[cfg(feature = "rv_debug_trace")]
-use crate::riscv64_emu::trace::traces::Traces;
+use crate::rv64emu::trace::traces::Traces;
 use crate::{
-    riscv64_emu::device::{
+    rv64emu::device::{
         device_am_rtc::DeviceRTC,
         device_am_uart::DeviceUart,
         device_memory::DeviceMemory,
@@ -53,8 +56,8 @@ use crate::{
         device_trait::DeviceBase,
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT},
     },
-    riscv64_emu::rv64core::bus::{Bus, DeviceType},
-    riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
+    rv64emu::rv64core::bus::{Bus, DeviceType},
+    rv64emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
 // /* 各个设备地址 */
@@ -103,6 +106,7 @@ fn main() {
 
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
+    let signal_term_uart = signal_term.clone();
 
     #[allow(unused_variables)]
     #[allow(clippy::redundant_clone)]
@@ -137,6 +141,7 @@ fn main() {
     let uart_rx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
 
     let rx_fifo = uart_rx_fifo.clone();
+    let tx_fifo = uart_tx_fifo.clone();
 
     thread::spawn(move || loop {
         let mut buf = [0; 1];
@@ -152,14 +157,16 @@ fn main() {
         std::thread::sleep(Duration::from_millis(100));
     });
 
-    let tx_fifo = uart_tx_fifo.clone();
-    thread::spawn(move || loop {
+    let uart_tx_thread = thread::spawn(move || loop {
         while !tx_fifo.is_empty() {
             if let Some(c) = tx_fifo.pop() {
                 print!("{}", c as char)
             }
         }
         io::stdout().flush().unwrap();
+        if signal_term_uart.load(Ordering::Relaxed) {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(50));
     });
 
@@ -181,7 +188,6 @@ fn main() {
         instance: Box::new(device_16650_uart),
         name: "16550a_uart",
     });
-
 
     // device rtc
     let rtc = DeviceRTC::new();
@@ -221,7 +227,7 @@ fn main() {
         cfg_if::cfg_if! {
                 if #[cfg(feature = "rv_debug_trace")] {
                 let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                let cpu: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_trace(trace_tx)
@@ -240,7 +246,7 @@ fn main() {
 
                 trace_handle.push(trace_thread);
             } else {
-                let hart: riscv64_emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_smode(true)
@@ -272,6 +278,7 @@ fn main() {
         handle.join().unwrap();
     }
     cpu_main.join().unwrap();
+    uart_tx_thread.join().unwrap();
 }
 
 #[cfg(feature = "device_sdl2")]
@@ -352,7 +359,7 @@ fn create_sdl2_devices(bus_u: RcRefCell<Bus>, signal_term_sdl_event: Arc<AtomicB
         start: MOUSE_ADDR,
         len: 16,
         instance: Box::new(device_mouse),
-        name: "Mouse",
+        name: "AM_Mouse",
     });
 
     handle_sdl_event(
