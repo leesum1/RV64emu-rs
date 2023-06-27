@@ -34,6 +34,6 @@ impl DeviceBase for DeviceVGACTL {
     }
 
     fn get_name(&self) -> &'static str {
-        "VGA_CTL"
+        "AM_VGA_CTL"
     }
 }

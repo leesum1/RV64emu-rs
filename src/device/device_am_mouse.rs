@@ -65,6 +65,6 @@ impl DeviceBase for DeviceMouse {
     }
 
     fn get_name(&self) -> &'static str {
-        "Mouse"
+        "AM_Mouse"
     }
 }

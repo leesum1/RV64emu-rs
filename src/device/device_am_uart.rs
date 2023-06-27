@@ -24,6 +24,6 @@ impl DeviceBase for DeviceUart {
     }
 
     fn get_name(&self) -> &'static str {
-        "UART"
+        "AM_UART"
     }
 }

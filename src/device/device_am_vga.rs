@@ -73,7 +73,7 @@ impl DeviceBase for DeviceVGA {
     }
 
     fn get_name(&self) -> &'static str {
-        "VGA_FB"
+        "AM_VGA_FB"
     }
 }
 

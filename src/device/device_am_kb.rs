@@ -89,6 +89,6 @@ impl DeviceBase for DeviceKB {
     }
 
     fn get_name(&self) -> &'static str {
-        "KeyBorad_AM"
+        "AM_KeyBorad"
     }
 }

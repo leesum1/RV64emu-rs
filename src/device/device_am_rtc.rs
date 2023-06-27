@@ -39,7 +39,7 @@ impl DeviceBase for DeviceRTC {
     }
 
     fn get_name(&self) -> &'static str {
-        "RTC"
+        "AM_RTC"
     }
 }
 
