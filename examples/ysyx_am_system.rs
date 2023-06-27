@@ -1,9 +1,7 @@
-pub mod tools;
-
 extern crate riscv64_emu;
 
 use clap::Parser;
-use riscv64_emu::tools::FifoUnbounded;
+use riscv64_emu::tools::{FifoUnbounded, rc_refcell_new};
 #[allow(unused_imports)]
 use riscv64_emu::tools::Fifobounded;
 
@@ -42,9 +40,9 @@ cfg_if::cfg_if! {
     }
 }
 
+use crate::riscv64_emu::tools::RcRefCell;
 #[cfg(feature = "rv_debug_trace")]
 use crate::riscv64_emu::trace::traces::Traces;
-use crate::tools::RcRefCell;
 use crate::{
     riscv64_emu::device::{
         device_am_rtc::DeviceRTC,
@@ -53,7 +51,7 @@ use crate::{
         device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
-        device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT, SIFIVE_UART_BASE},
+        device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT},
     },
     riscv64_emu::rv64core::bus::{Bus, DeviceType},
     riscv64_emu::rv64core::cpu_core::CpuCoreBuild,
@@ -99,6 +97,10 @@ fn main() {
         .unwrap();
     let args = Args::parse();
 
+    if args.img.is_none() && args.xipflash.is_none() {
+        panic!("Please specify the img or xipflash");
+    }
+
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
 
@@ -109,25 +111,16 @@ fn main() {
     #[allow(clippy::redundant_clone)]
     let signal_term_uart = signal_term.clone();
 
-    let bus_u: RcRefCell<Bus> = RcRefCell::new(Bus::new().into());
+    let bus_u = rc_refcell_new(Bus::new());
 
     // device dram len:0X08000000
-    let mem = DeviceMemory::new(0x0800000);
+    let mem = DeviceMemory::new(128 * 1024 * 1024);
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: MEM_BASE,
         len: mem.size() as u64,
         instance: Box::new(mem),
         name: "RAM",
-    });
-
-    // device dtcm
-    let dtcm = DeviceMemory::new(128 * 1024 * 1024);
-    bus_u.borrow_mut().add_device(DeviceType {
-        start: 0x9000_0000,
-        len: dtcm.size() as u64,
-        instance: Box::new(dtcm),
-        name: "DTCM",
     });
 
     // device flash len:0X01000000
@@ -139,9 +132,6 @@ fn main() {
         instance: Box::new(falsh),
         name: "XIPFLASH",
     });
-
-    // let (uart_getc_tx, uart_getc_rx) = crossbeam_channel::bounded::<u8>(64);
-    // let (uart_putc_tx, uart_putc_rx) = crossbeam_channel::bounded::<u8>(4096 * 2);
 
     let uart_tx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
     let uart_rx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
@@ -155,12 +145,11 @@ fn main() {
                 panic!("Read {} characters into a 1 byte buffer", n);
             }
             if n == 1 {
-                // uart_getc_tx.send(buf[0]).unwrap();
                 rx_fifo.push(buf[0]);
             }
             // Nothing needs to be sent for n == 0
         }
-        // std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(100));
     });
 
     let tx_fifo = uart_tx_fifo.clone();
@@ -170,7 +159,6 @@ fn main() {
                 print!("{}", c as char)
             }
         }
-
         io::stdout().flush().unwrap();
         std::thread::sleep(Duration::from_millis(50));
     });
@@ -194,21 +182,6 @@ fn main() {
         name: "16550a_uart",
     });
 
-    // device sifive_uart
-    let device_sifive_uart = DeviceSifiveUart::new(uart_tx_fifo, uart_rx_fifo);
-
-    bus_u
-        .borrow_mut()
-        .plic
-        .instance
-        .register_irq_source(SIFIVE_UART_IRQ, Rc::clone(&device_sifive_uart.irq_pending));
-
-    bus_u.borrow_mut().add_device(DeviceType {
-        start: SIFIVE_UART_BASE,
-        len: 0x1000,
-        instance: Box::new(device_sifive_uart),
-        name: "Sifive_Uart",
-    });
 
     // device rtc
     let rtc = DeviceRTC::new();
@@ -234,7 +207,7 @@ fn main() {
             x.trim_start_matches(|c| c == '0' || c == 'x' || c == 'X'),
             16,
         )
-        .unwrap()
+        .expect("boot_pc is not a valid hex number")
     } else {
         0x8000_0000
     };

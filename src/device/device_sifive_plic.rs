@@ -236,7 +236,7 @@ impl SifvePlic {
             let irq_id = item.id;
             self.irq_pending[irq_id as usize / 32].set_bool(irq_id % 32, pending_bit);
         }
-        // Update the xip
+        // Update the xip (mip or sip)
         for c in &self.context {
             let int_flag = self.irq_sources.iter().any(|item| {
                 let irq_id = item.id;

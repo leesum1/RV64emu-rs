@@ -1,4 +1,4 @@
-pub const SIFIVE_UART_BASE: u64 = 0xc0000000;
+
 
 pub const MEM_BASE: u64 = 0x80000000;
 pub const DEVICE_BASE: u64 = 0xa0000000;

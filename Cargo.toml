@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 cfg-if = "1.0.0"
 log = "0.4.17"
 hashbrown = "0.13.2"
@@ -14,32 +13,42 @@ bitfield-struct = "0.3.2"
 enum_dispatch = "0.3.11"
 
 # enable no_std support
-elf = {version="0.7.2",default-features = false,features = []}
-crossbeam-queue = { version = "0.3.8", default-features = false ,features = ["alloc"]}
+elf = { version = "0.7.2", default-features = false, features = [] }
+crossbeam-queue = { version = "0.3.8", default-features = false, features = [
+    "alloc",
+] }
 
-
-crossbeam-channel = {version="0.5.7",optional = true}
-sdl2 = { version = "0.35", optional = true }
+# std support
 capstone = { version = "0.11.0", optional = true }
+crossbeam-channel = { version = "0.5.7", optional = true }
+sdl2 = { version = "0.35", optional = true }
 
 
+[dev-dependencies]
 clap = { version = "4.1.4", features = ["derive"] }
 simple_logger = "4.1.0"
 
 
+[[example]]
+name = "simple_system"
+required-features = ["std","support_am"]
+
+[[example]]
+name = "ysyx_am_system"
+required-features = ["std", "device_sdl2"]
+
+[[example]]
+name = "linux_system"
+required-features = ["std"]
+
 
 [features]
-# default = ["rv_debug_trace","support_am"]
-# default = ["support_am","rv_c","rv_debug_trace"]
 
-# default = ["device_sdl2"]rv_debug_trace
-# default = ["caches"]
-
-default = ["default_isa","std"]
+default = ["default_isa", "std", "caches"]
 
 
-device_sdl2 = ["dep:sdl2", "support_am","std"]
-rv_debug_trace = ["dep:capstone","dep:crossbeam-channel","std"]
+device_sdl2 = ["dep:sdl2", "support_am", "std"]
+rv_debug_trace = ["dep:capstone", "dep:crossbeam-channel", "std"]
 
 
 std = ["alloc"]
@@ -48,7 +57,7 @@ alloc = []
 
 caches = ["decode_cache", "inst_cache"]
 inst_cache = []
-data_cache = []
+data_cache = []  # actually no performance improvement
 decode_cache = []
 
 default_isa = ["rv_c", "rv_m", "rv_a"]
@@ -58,15 +67,11 @@ rv_a = []
 support_am = []
 
 
-# [[example]]
-# name = "simple_system"
-
-
 # The default release profile. It contains all optimizations, without
 # sacrificing debug info. With this profile (like in the standard
 # release profile), the debug info and the stack traces will still be available.
 [profile.release]
-# lto = true
+lto = true
 # debug = 1
 
 

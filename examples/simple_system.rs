@@ -9,10 +9,10 @@ use riscv64_emu::{
     },
     rv64core::{
         bus::{Bus, DeviceType},
-        cpu_core::{CpuCoreBuild, CpuState},
+        cpu_core::CpuCoreBuild,
     },
     rvsim::RVsim,
-    tools::{fifo_unbounded_new, RcRefCell},
+    tools::{fifo_unbounded_new, RcRefCell, rc_refcell_new},
 };
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
     // create system bus, which functions are as follows
     // 1. manage all devices,including plic,clint,and sram
     // 2. shared by all harts
-    let bus_u = RcRefCell::new(Bus::new().into());
+    let bus_u = rc_refcell_new(Bus::new());
 
     // create hart0 with smode support, some additional features are as follows
     // 1. the first instruction is executed at 0x8000_0000

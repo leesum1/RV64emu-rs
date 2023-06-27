@@ -7,7 +7,7 @@ use log::info;
 const DCACHE_SIZE: usize = 128;
 #[derive(Clone)]
 struct CacheLine {
-    valid: bool,
+    // valid: bool,
     dirty: bool,
     lru: u8,
     tag: u64,
@@ -15,18 +15,18 @@ struct CacheLine {
 }
 
 impl CacheLine {
-    pub fn new() -> Self {
-        CacheLine {
-            valid: false,
-            dirty: false,
-            lru: 0,
-            tag: 0,
-            data: [0; 64],
-        }
-    }
-    pub fn hit(&self, tag: u64) -> bool {
-        self.valid && self.tag == tag
-    }
+    // pub fn new() -> Self {
+    //     CacheLine {
+    //         valid: false,
+    //         dirty: false,
+    //         lru: 0,
+    //         tag: 0,
+    //         data: [0; 64],
+    //     }
+    // }
+    // pub fn hit(&self, tag: u64) -> bool {
+    //     self.valid && self.tag == tag
+    // }
     pub fn dirty(&self) -> bool {
         self.dirty
     }
@@ -49,11 +49,11 @@ impl CacheLine {
         // self.lru += 1;
     }
 
-    pub fn clear(&mut self) {
-        self.valid = false;
-        self.dirty = false;
-        self.lru = 0;
-    }
+    // pub fn clear(&mut self) {
+    //     self.valid = false;
+    //     self.dirty = false;
+    //     self.lru = 0;
+    // }
 }
 
 pub struct CpuDcache {
@@ -181,7 +181,6 @@ impl CpuDcache {
         drop(bus);
 
         let new_line = CacheLine {
-            valid: true,
             dirty: false,
             lru: 0,
             tag,
