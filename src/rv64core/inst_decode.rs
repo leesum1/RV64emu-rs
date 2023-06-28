@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use hashbrown::HashMap;
+use log::info;
 
 #[cfg(feature = "rv_a")]
 use crate::rv64core::inst::inst_rv64a::INSTRUCTIONS_A;
@@ -13,9 +14,14 @@ use crate::rv64core::{
     inst::inst_rv64z::INSTRUCTIONS_Z,
 };
 
+const DECODE_CACHE_SIZE: usize = 1024;
+
 pub struct InstDecode {
     inst_vec: Vec<&'static Instruction>,
     inst_hash: HashMap<u32, &'static Instruction>,
+    pub hit: u64,
+    pub miss: u64,
+    remove_count: u64,
 }
 
 impl InstDecode {
@@ -35,6 +41,9 @@ impl InstDecode {
         InstDecode {
             inst_vec: i_vec,
             inst_hash: HashMap::new(),
+            hit: 0,
+            miss: 0,
+            remove_count: 0,
         }
     }
 
@@ -51,14 +60,46 @@ impl InstDecode {
 
         #[cfg(feature = "decode_cache")]
         if let Some(slow) = slowpath {
+            if self.inst_hash.len() >= DECODE_CACHE_SIZE {
+                self.remove_random();
+            }
             self.inst_hash.insert(inst_i, slow);
         }
-
         slowpath
     }
 
-    pub fn fast_path(&self, inst_i: u32) -> Option<&Instruction> {
-        self.hash_get(inst_i).copied()
+    pub fn fast_path(&mut self, inst_i: u32) -> Option<&Instruction> {
+        // self.hash_get(inst_i).copied()
+        let ret = self.inst_hash.get(&inst_i).copied();
+        if ret.is_some() {
+            self.hit += 1;
+        } else {
+            self.miss += 1;
+        }
+        ret
+    }
+
+    // random remove a item from caches
+    fn remove_random(&mut self) -> Option<&Instruction> {
+        let (key, _) = self
+            .inst_hash
+            .iter()
+            .next()
+            .map(|(k, _)| (*k, ()))
+            .unwrap_or_default();
+        self.remove_count += 1;
+        self.inst_hash.remove(&key)
+    }
+
+    pub fn show_perf(&self) {
+        info!(
+            "decode cache hit: {}, miss: {}, remove: {}",
+            self.hit, self.miss, self.remove_count
+        );
+        info!(
+            "decode cache hit rate: {:.2}%",
+            self.hit as f64 / (self.hit + self.miss) as f64 * 100.0
+        )
     }
 }
 

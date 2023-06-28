@@ -164,6 +164,12 @@ impl RVsim {
             .all(|hart| hart.cpu_state == CpuState::Stop)
     }
 
+    fn show_perf(&self){
+        self.harts.iter().for_each(|hart|{
+            hart.show_perf();
+        });
+    }
+
     // true: exit, false: abort
     pub fn run(&mut self) -> bool {
         self.prepare_to_run();
@@ -173,6 +179,7 @@ impl RVsim {
         }
         #[cfg(feature = "std")]
         self.dump_signature();
+        self.show_perf();
         self.is_exit_normal()
     }
 

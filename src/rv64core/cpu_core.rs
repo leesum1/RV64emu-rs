@@ -12,16 +12,14 @@ use crate::{
     rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
     rv64core::inst_decode::InstDecode,
     rv64core::traptype::TrapType,
-    tools::{RcRefCell, check_aligned},
+    tools::{check_aligned, RcRefCell},
 };
 
 #[cfg(feature = "rv_debug_trace")]
 use crate::trace::traces::TraceType;
 
 use super::{
-    cache::cache_system::CacheSystem,
-    inst::inst_base::is_compressed_instruction,
-    mmu::cpu_mmu::Mmu,
+    cache::cache_system::CacheSystem, inst::inst_base::is_compressed_instruction, mmu::cpu_mmu::Mmu,
 };
 
 #[derive(PartialEq)]
@@ -191,6 +189,10 @@ impl CpuCore {
         let is_rvc = is_compressed_instruction(inst);
         self.npc = self.pc.wrapping_add(if is_rvc { 2 } else { 4 });
     }
+    pub fn show_perf(&self){
+        self.cache_system.borrow().show_perf();
+        self.decode.show_perf();
+    }
 
     pub fn execute(&mut self, num: usize) {
         for _ in 0..num {
@@ -298,7 +300,6 @@ impl CpuCore {
             self.cur_priv.set(PrivilegeLevels::Machine);
         }
     }
-
 
     pub fn handle_interrupt(&mut self) {
         // read necessary csrs
