@@ -87,6 +87,9 @@ But before build your embeded project, you need to disable some features, such a
 
 + **caches**: because the embedded device does not have enough memory
 
+## No_std examples
++ [nostd_esp32s3](https://github.com/leesum1/rv64emu_nostd_esp32s3) :A no_std example about how to use rv64emu in esp32s3.
+
 
 # reference
 - [riscv-rust](https://github.com/takahirox/riscv-rust)
