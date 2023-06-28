@@ -48,7 +48,7 @@ required-features = ["std"]
 
 [features]
 
-default = ["default_isa", "std", "caches"]
+default = ["default_isa", "std", "caches","device_sdl2"]
 
 
 device_sdl2 = ["dep:sdl2", "support_am", "std"]

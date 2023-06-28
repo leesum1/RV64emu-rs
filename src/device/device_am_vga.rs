@@ -1,6 +1,5 @@
 use std::{cell::Cell, rc::Rc};
 
-
 use sdl2::{pixels::PixelFormatEnum, render::WindowCanvas};
 
 use crate::device::device_trait::DeviceBase;
@@ -19,7 +18,7 @@ pub struct DeviceVGA {
 
 impl DeviceVGA {
     pub fn new(canvas_w: WindowCanvas, rx: VgactlRx) -> Self {
-        let buff = vec![0_u8;VGA_BUF_SIZE].into_boxed_slice();
+        let buff = vec![0_u8; VGA_BUF_SIZE].into_boxed_slice();
 
         DeviceVGA {
             vga_canvas: canvas_w,
@@ -58,7 +57,7 @@ impl DeviceBase for DeviceVGA {
         let data_bytes = data.to_le_bytes();
         self.pix_buf[(addr as usize)..(addr as usize + len)].copy_from_slice(&data_bytes[..(len)]);
 
-        data   
+        data
     }
 
     fn do_update(&mut self) {
@@ -82,7 +81,7 @@ mod test_vga {
 
     use std::thread;
 
-    fn test2() {
+    fn _test2() {
         //https://github.com/Rust-SDL2/rust-sdl2/issues/1063
         let sdl2 = sdl2::init().expect("failed to initialize SDL2");
         let _timer_system = sdl2.timer().expect("failed to initialize timer subsystem");

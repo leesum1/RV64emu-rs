@@ -11,8 +11,9 @@ use elf::{
     abi::{EM_RISCV, PT_LOAD},
     endian::AnyEndian,
 };
-use log::{info, warn};
+use log::info;
 
+#[allow(unused_imports)]
 use crate::{
     rv64core::{
         bus::Bus,
@@ -204,7 +205,7 @@ impl RVsim {
                 self.harts
                     .iter_mut()
                     .for_each(|hart| hart.cpu_state = CpuState::Abort);
-                warn!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
+                info!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
             }
         }
         cmd.character_device_write();
@@ -230,7 +231,7 @@ impl RVsim {
             sig_range.start, sig_range.end
         );
         fd.map_or_else(
-            |err| warn!("{err}"),
+            |err| info!("{err}"),
             |mut file| {
                 let mut bus_u = self.bus.borrow_mut();
                 for i in sig_range.step_by(4) {

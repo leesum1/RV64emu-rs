@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{vec::Vec, boxed::Box};
 use log::info;
 
 use crate::device::device_trait::DeviceBase;

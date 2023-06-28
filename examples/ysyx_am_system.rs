@@ -21,7 +21,7 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, info, LevelFilter};
+use log::{info, LevelFilter};
 use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 use rv64emu::device::{
@@ -44,7 +44,6 @@ use crate::{
         device_am_rtc::DeviceRTC,
         device_am_uart::DeviceUart,
         device_memory::DeviceMemory,
-        device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT},
     },
@@ -100,6 +99,8 @@ fn main() {
 
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
+    #[allow(clippy::redundant_clone)]
+    #[allow(unused_variables)]
     let signal_term_uart = signal_term.clone();
 
     #[allow(unused_variables)]
@@ -174,7 +175,7 @@ fn main() {
         name: "AM_UART",
     });
     // device 16650_uart
-    let device_16650_uart = Device16550aUART::new(uart_tx_fifo.clone(), uart_rx_fifo.clone());
+    let device_16650_uart = Device16550aUART::new(uart_tx_fifo, uart_rx_fifo);
 
     bus_u.borrow_mut().add_device(DeviceType {
         start: 0x1000_0000,
@@ -266,7 +267,7 @@ fn main() {
         signal_term_cpucore.store(true, Ordering::Release);
     });
 
-    create_sdl2_devices(bus_u.clone(), signal_term_sdl_event, ready_to_run);
+    create_sdl2_devices(bus_u, signal_term_sdl_event, ready_to_run);
 
     // wait for all trace threads to finish
     for handle in trace_handle {
@@ -295,8 +296,7 @@ fn create_sdl2_devices(
     // 3. device mouse
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let event_system = sdl_context.event().expect("fail");
-    let event_system: &'static sdl2::EventSubsystem = Box::leak(Box::new(event_system));
+    let event_pump: sdl2::EventPump = sdl_context.event_pump().expect("fail to get event_pump");
 
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
@@ -363,7 +363,7 @@ fn create_sdl2_devices(
 
     handle_sdl_event(
         signal_term_sdl_event,
-        event_system,
+        event_pump,
         kb_am_fifo,
         kb_sdl_fifo,
         mouse_fifo,
@@ -373,16 +373,12 @@ fn create_sdl2_devices(
 
 fn handle_sdl_event(
     signal_term: Arc<AtomicBool>,
-    static_event: &'static sdl2::EventSubsystem,
+    mut event_pump: sdl2::EventPump,
     kb_am_tx: Fifobounded<DeviceKbItem>,
     kb_sdl_tx: Fifobounded<Keycode>,
     mouse_sdl_tx: Fifobounded<DeviceMouseItem>,
     ready_to_run: Arc<AtomicBool>,
 ) {
-    let _event_system = static_event;
-    let _sdl_context = _event_system.sdl();
-    let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-
     // send signal to sim thread, all devices are ready
     ready_to_run.store(true, Ordering::Release);
     while !signal_term.load(Ordering::Relaxed) {

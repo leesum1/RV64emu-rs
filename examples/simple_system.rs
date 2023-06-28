@@ -12,7 +12,7 @@ use rv64emu::{
         cpu_core::CpuCoreBuild,
     },
     rvsim::RVsim,
-    tools::{fifo_unbounded_new, RcRefCell, rc_refcell_new},
+    tools::{fifo_unbounded_new, rc_refcell_new},
 };
 
 fn main() {
