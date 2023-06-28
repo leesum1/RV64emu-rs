@@ -5,6 +5,7 @@ use clap::Parser;
 use rv64emu::tools::Fifobounded;
 use rv64emu::tools::{rc_refcell_new, FifoUnbounded};
 
+use std::io::{stdin, Write};
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
@@ -19,29 +20,21 @@ use std::{
     thread,
     time::Duration,
 };
-use std::{
-    io::{stdin, Write},
-    thread::sleep,
-};
 
 use log::{debug, info, LevelFilter};
 use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "device_sdl2")]{
-        use rv64emu::device::{
-            device_am_kb::{DeviceKB, DeviceKbItem},
-            device_am_mouse::{DeviceMouse, DeviceMouseItem},
-            device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
-            device_am_vga::DeviceVGA,
-            device_am_vgactl::DeviceVGACTL,
-        };
-        use sdl2::{
-            event::Event,
-            keyboard::{Keycode, Scancode},
-        };
-    }
-}
+use rv64emu::device::{
+    device_am_kb::{DeviceKB, DeviceKbItem},
+    device_am_mouse::{DeviceMouse, DeviceMouseItem},
+    device_am_vga::DeviceVGA,
+    device_am_vgactl::DeviceVGACTL,
+    device_trait::{FB_ADDR, KBD_ADDR, MOUSE_ADDR, VGACTL_ADDR},
+};
+use sdl2::{
+    event::Event,
+    keyboard::{Keycode, Scancode},
+};
 
 use crate::rv64emu::tools::RcRefCell;
 #[cfg(feature = "rv_debug_trace")]
@@ -51,7 +44,6 @@ use crate::{
         device_am_rtc::DeviceRTC,
         device_am_uart::DeviceUart,
         device_memory::DeviceMemory,
-        device_sifive_plic::SIFIVE_UART_IRQ,
         device_sifive_uart::DeviceSifiveUart,
         device_trait::DeviceBase,
         device_trait::{MEM_BASE, RTC_ADDR, SERIAL_PORT},
@@ -101,8 +93,10 @@ fn main() {
     let args = Args::parse();
 
     if args.img.is_none() && args.xipflash.is_none() {
-        panic!("Please specify the img or xipflash");
+        panic!("Please specify the img or xipflash\n");
     }
+
+    let ready_to_run = Arc::new(AtomicBool::new(false));
 
     let signal_term = Arc::new(AtomicBool::new(false));
     let signal_term_cpucore = signal_term.clone();
@@ -170,7 +164,7 @@ fn main() {
         std::thread::sleep(Duration::from_millis(50));
     });
 
-    // device uart
+    // device am_uart
     let uart = DeviceUart::new(uart_tx_fifo.clone());
 
     bus_u.borrow_mut().add_device(DeviceType {
@@ -199,12 +193,6 @@ fn main() {
         instance: Box::new(rtc),
         name: device_name,
     });
-
-    #[cfg(feature = "device_sdl2")]
-    create_sdl2_devices(bus_u.clone(), signal_term_sdl_event);
-
-    // show device address map
-    debug!("{0}", bus_u.borrow_mut());
 
     let hart_num: usize = args.num_harts.unwrap_or(1);
 
@@ -259,7 +247,12 @@ fn main() {
     // create another thread to simmulate the harts
     // while the main thread is used to handle sdl events
     // which will be send to the coresponding devices through ring_channel
+    let ready_to_run_sim = ready_to_run.clone();
     let cpu_main = thread::spawn(move || {
+        // wait for all devices to be ready
+        while !ready_to_run_sim.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(100));
+        }
         let mut sim = RVsim::new(hart_vec);
         if let Some(ram_img) = args.img {
             sim.load_image(&ram_img);
@@ -267,11 +260,13 @@ fn main() {
         if let Some(signature_file) = args.signature {
             sim.set_signature_file(signature_file);
         }
-
         sim.run();
 
+        // send signal to all other threads
         signal_term_cpucore.store(true, Ordering::Release);
     });
+
+    create_sdl2_devices(bus_u.clone(), signal_term_sdl_event, ready_to_run);
 
     // wait for all trace threads to finish
     for handle in trace_handle {
@@ -281,15 +276,18 @@ fn main() {
     uart_tx_thread.join().unwrap();
 }
 
-#[cfg(feature = "device_sdl2")]
 fn send_key_event(tx: &Fifobounded<DeviceKbItem>, val: Scancode, keydown: bool) {
     tx.force_push(DeviceKbItem {
         scancode: val,
         is_keydown: keydown,
     });
 }
-#[cfg(feature = "device_sdl2")]
-fn create_sdl2_devices(bus_u: RcRefCell<Bus>, signal_term_sdl_event: Arc<AtomicBool>) {
+
+fn create_sdl2_devices(
+    bus_u: RcRefCell<Bus>,
+    signal_term_sdl_event: Arc<AtomicBool>,
+    ready_to_run: Arc<AtomicBool>,
+) {
     /*--------init sdl --------*/
     // subsequnt devices are base on sdl2 api
     // 1. device vga
@@ -347,10 +345,8 @@ fn create_sdl2_devices(bus_u: RcRefCell<Bus>, signal_term_sdl_event: Arc<AtomicB
         instance: Box::new(device_kb),
         name: device_name,
     });
-    // device mouse
-    // let (mouse_sdl_tx, mouse_sdl_rx): (Fifobounded<DeviceMouseItem>, Fifobounded<DeviceMouseItem>) =
-    //     ring_channel(NonZeroUsize::new(1).unwrap());
 
+    // device am_mouse
     let mouse_fifo = Fifobounded::<DeviceMouseItem>::new(crossbeam_queue::ArrayQueue::new(16));
 
     let device_mouse = DeviceMouse::new(mouse_fifo.clone());
@@ -362,56 +358,62 @@ fn create_sdl2_devices(bus_u: RcRefCell<Bus>, signal_term_sdl_event: Arc<AtomicB
         name: "AM_Mouse",
     });
 
+    info!("{0}", bus_u.borrow_mut());
+    info!("start sdl event loop");
+
     handle_sdl_event(
         signal_term_sdl_event,
         event_system,
         kb_am_fifo,
         kb_sdl_fifo,
         mouse_fifo,
+        ready_to_run,
     );
 }
-#[cfg(feature = "device_sdl2")]
+
 fn handle_sdl_event(
     signal_term: Arc<AtomicBool>,
     static_event: &'static sdl2::EventSubsystem,
     kb_am_tx: Fifobounded<DeviceKbItem>,
     kb_sdl_tx: Fifobounded<Keycode>,
     mouse_sdl_tx: Fifobounded<DeviceMouseItem>,
+    ready_to_run: Arc<AtomicBool>,
 ) {
-    thread::spawn(move || {
-        let _event_system = static_event;
-        let _sdl_context = _event_system.sdl();
-        let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
-        while !signal_term.load(Ordering::Relaxed) {
-            let mouse_state = event_pump.mouse_state();
+    let _event_system = static_event;
+    let _sdl_context = _event_system.sdl();
+    let mut event_pump = _sdl_context.event_pump().expect("fail to get event_pump");
 
-            mouse_sdl_tx.force_push(DeviceMouseItem {
-                x: (mouse_state.x() / 2) as u32,
-                y: (mouse_state.y() / 2) as u32,
-                mouse_btn_state: mouse_state.to_sdl_state(),
-            });
+    // send signal to sim thread, all devices are ready
+    ready_to_run.store(true, Ordering::Release);
+    while !signal_term.load(Ordering::Relaxed) {
+        let mouse_state = event_pump.mouse_state();
 
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => process::exit(0),
-                    Event::KeyUp {
-                        scancode: Some(val),
-                        ..
-                    } => send_key_event(&kb_am_tx, val, false),
+        mouse_sdl_tx.force_push(DeviceMouseItem {
+            x: (mouse_state.x() / 2) as u32,
+            y: (mouse_state.y() / 2) as u32,
+            mouse_btn_state: mouse_state.to_sdl_state(),
+        });
 
-                    Event::KeyDown {
-                        scancode: Some(val),
-                        keycode: Some(sdl_key_code),
-                        ..
-                    } => {
-                        send_key_event(&kb_am_tx, val, true);
-                        kb_sdl_tx.force_push(sdl_key_code);
-                    }
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => process::exit(0),
+                Event::KeyUp {
+                    scancode: Some(val),
+                    ..
+                } => send_key_event(&kb_am_tx, val, false),
 
-                    _ => (),
+                Event::KeyDown {
+                    scancode: Some(val),
+                    keycode: Some(sdl_key_code),
+                    ..
+                } => {
+                    send_key_event(&kb_am_tx, val, true);
+                    kb_sdl_tx.force_push(sdl_key_code);
                 }
+
+                _ => (),
             }
-            std::thread::sleep(Duration::from_millis(100));
         }
-    });
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
