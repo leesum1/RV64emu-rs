@@ -1,5 +1,6 @@
 use core::ops;
 
+use std::time::SystemTime;
 #[cfg(feature = "std")]
 use std::{fs::File, io::Write};
 
@@ -36,14 +37,18 @@ pub struct RVsim {
     harts: Vec<CpuCore>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
+    // system time
+    time: Option<SystemTime>,
 }
 
 impl RVsim {
     pub fn new(harts: Vec<CpuCore>) -> Self {
+        let time = SystemTime::now();
         let bus = harts[0].mmu.caches.borrow_mut().bus.clone();
         Self {
             harts,
             bus,
+            time: Some(time),
             ..Default::default()
         }
     }
@@ -108,7 +113,6 @@ impl RVsim {
                 let mut bus = self.bus.borrow_mut();
 
                 bus.copy_from_slice(p.p_paddr, data).unwrap();
-
             });
             info!("Elf file match,elf load success");
 
@@ -153,9 +157,12 @@ impl RVsim {
     }
     // true: exit, false: abort
     pub fn is_finish(&self) -> bool {
+        let time_finish = self.time.as_ref().unwrap().elapsed().unwrap().as_secs() > 20;
+
         self.harts
             .iter()
             .any(|hart| hart.cpu_state != CpuState::Running)
+            || time_finish
     }
 
     pub fn is_exit_normal(&self) -> bool {
@@ -164,8 +171,8 @@ impl RVsim {
             .all(|hart| hart.cpu_state == CpuState::Stop)
     }
 
-    fn show_perf(&self){
-        self.harts.iter().for_each(|hart|{
+    fn show_perf(&self) {
+        self.harts.iter().for_each(|hart| {
             hart.show_perf();
         });
     }

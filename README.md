@@ -3,13 +3,13 @@
 
 rv64emu is a riscv64 emulator written in rust,It can run `CoreMark`,`RT-thread` and `Linux` now. And it is easy to add new devices and support new instructions. The rv64emu is now as a crate, you can use it in your project,and it is also a standalone emulator, you can run it directly.Due to RUST's cross-platform feature, it can run on Linux, Windows and MacOS.Even on the embedded device, such as ESP32 and STM32 which support embeded rust.
 
-ISA Specification:
+**ISA Specification:**
 - [x] RV64I
 - [x] RV64M
 - [x] RV64A
+- [x] RV64C
 - [ ] RV64F
 - [ ] RV64D
-- [x] RV64C
 - [x] MachineMode
 - [x] SupervisorMode
 - [x] UserMode
@@ -17,6 +17,15 @@ ISA Specification:
 - [x] Sv48
 - [x] Sv57
 - [ ] PMP
+
+**Caches:**
+- [x] InstCache
+- [x] DecodeCache
+- [x] DataCache
+- [x] Tlb
+
+**Devices**
+
 
 # Example
 The simplest example of using rv64emu as a crate.You can find it in `examples` directory.

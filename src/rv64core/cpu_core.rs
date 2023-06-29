@@ -1,7 +1,7 @@
 use core::cell::Cell;
 
 use alloc::rc::Rc;
-use log::warn;
+use log::{warn, info};
 
 use crate::{
     difftest::difftest_trait::Difftest,
@@ -190,8 +190,13 @@ impl CpuCore {
         self.npc = self.pc.wrapping_add(if is_rvc { 2 } else { 4 });
     }
     pub fn show_perf(&self){
+
+        let cycle = self.csr_regs.cycle.get();
+        let instret = self.csr_regs.instret.get();
+        info!("cycle:{},instret:{}",cycle,instret);
         self.cache_system.borrow().show_perf();
         self.decode.show_perf();
+        self.mmu.show_perf();
     }
 
     pub fn execute(&mut self, num: usize) {

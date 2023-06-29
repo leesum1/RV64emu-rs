@@ -1,15 +1,17 @@
-
-
 use core::cell::Cell;
 
 use alloc::rc::Rc;
+use hashlink::LruCache;
+use log::info;
 
 use crate::{
     rv64core::csr_regs_define::{SatpIn, StapMode, XstatusIn},
     rv64core::{
         cache::cache_system::CacheSystem,
-        inst::inst_base::{AccessType, PrivilegeLevels}, traptype::TrapType,
-    }, tools::{RcRefCell, RcCell, check_aligned},
+        inst::inst_base::{AccessType, PrivilegeLevels},
+        traptype::TrapType,
+    },
+    tools::{check_aligned, RcCell, RcRefCell},
 };
 
 use super::{
@@ -19,6 +21,8 @@ use super::{
 
 const PAGESIZE: u64 = 4096; // 2 ^ 12
 
+const TLB_SIZE: usize = 256;
+
 pub struct Mmu {
     pub caches: RcRefCell<CacheSystem>,
     pub access_type: AccessType,
@@ -27,7 +31,9 @@ pub struct Mmu {
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
-
+    tlb: LruCache<u64, u64>,
+    tlb_hit: u64,
+    tlb_miss: u64,
     /* tmp val */
     i: i8,
     level: i8,
@@ -58,6 +64,9 @@ impl Mmu {
             va: Sv48VA::new().into(),
             pa: Sv48PA::new().into(),
             pte: Sv48PTE::new().into(),
+            tlb: LruCache::new(TLB_SIZE),
+            tlb_hit: 0,
+            tlb_miss: 0,
         }
     }
 
@@ -250,6 +259,10 @@ impl Mmu {
         self.va_translation_step7()?;
         self.va_translation_step8()?;
 
+        #[cfg(feature = "tlb_cache")]
+        self.tlb
+            .insert(self.va.raw() & (!0xfff), self.pa.raw() & (!0xfff));
+
         Ok(self.pa.raw())
     }
 
@@ -309,6 +322,14 @@ impl Mmu {
         if self.no_mmu() {
             return Ok(addr);
         }
+
+        #[cfg(feature = "tlb_cache")]
+        if let Some(val) = self.fast_path(addr & (!0xfff)) {
+            let offset = addr & 0xfff;
+            return Ok(val | offset);
+        }
+
+        // do page table walk
         self.va = self.get_vaops(addr);
         self.pa = self.get_paops(0);
         self.page_table_walk()
@@ -375,5 +396,27 @@ impl Mmu {
             StapMode::Sv57 => VAenume::Sv57VA(va_data.into()),
             _ => VAenume::Sv39VA(va_data.into()),
         }
+    }
+
+    pub fn fast_path(&mut self, va: u64) -> Option<u64> {
+        // self.hash_get(inst_i).copied()
+        let ret = self.tlb.get(&va).copied();
+        if ret.is_some() {
+            self.tlb_hit += 1;
+        } else {
+            self.tlb_miss += 1;
+        }
+        ret
+    }
+
+    pub fn show_perf(&self) {
+        info!("tlb hit: {}, tlb miss: {}", self.tlb_hit, self.tlb_miss);
+        info!(
+            "tlb hit rate: {}",
+            self.tlb_hit as f64 / (self.tlb_hit + self.tlb_miss) as f64
+        )
+    }
+    pub fn clear_tlb(&mut self) {
+        self.tlb.clear();
     }
 }

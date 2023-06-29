@@ -125,8 +125,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         match_data: MATCH_FENCE_I,
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
-            cpu.cache_system.borrow_mut().dcache.clear();
-            cpu.cache_system.borrow_mut().icache.clear();
+            cpu.cache_system.borrow_mut().clear();
             Ok(())
         },
     },
@@ -155,6 +154,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             } else {
                 // PASS icache-alias.S
                 cpu.cache_system.borrow_mut().clear();
+                cpu.mmu.clear_tlb();
                 Ok(())
             }
         },

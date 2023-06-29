@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 cfg-if = "1.0.0"
 log = "0.4.17"
-hashbrown = "0.13.2"
+hashbrown = "0.14"
 bitfield-struct = "0.3.2"
 enum_dispatch = "0.3.11"
 
@@ -22,6 +22,7 @@ crossbeam-queue = { version = "0.3.8", default-features = false, features = [
 capstone = { version = "0.11.0", optional = true }
 crossbeam-channel = { version = "0.5.7", optional = true }
 sdl2 = { version = "0.35", optional = true }
+hashlink = { git = "https://github.com/kyren/hashlink.git", package = "hashlink", branch = "master", default-features = false ,features = ["serde_impl"]}
 
 
 [dev-dependencies]
@@ -35,7 +36,7 @@ path = "src/lib.rs"
 
 [[example]]
 name = "simple_system"
-required-features = ["std","support_am"]
+required-features = ["std", "support_am"]
 
 [[example]]
 name = "ysyx_am_system"
@@ -59,10 +60,11 @@ std = ["alloc"]
 alloc = []
 
 
-caches = ["decode_cache", "inst_cache"]
+caches = ["decode_cache","tlb_cache","inst_cache"]
 inst_cache = []
-data_cache = []  # actually no performance improvement
+data_cache = []           # actually no performance improvement
 decode_cache = []
+tlb_cache = []            
 
 default_isa = ["rv_c", "rv_m", "rv_a"]
 rv_c = []

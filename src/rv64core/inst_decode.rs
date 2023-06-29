@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use hashbrown::HashMap;
+use hashlink::LruCache;
 use log::info;
 
 #[cfg(feature = "rv_a")]
@@ -14,11 +15,11 @@ use crate::rv64core::{
     inst::inst_rv64z::INSTRUCTIONS_Z,
 };
 
-const DECODE_CACHE_SIZE: usize = 1024;
+const DECODE_CACHE_SIZE: usize = 4096;
 
 pub struct InstDecode {
     inst_vec: Vec<&'static Instruction>,
-    inst_hash: HashMap<u32, &'static Instruction>,
+    inst_hash: LruCache<u32, &'static Instruction>,
     pub hit: u64,
     pub miss: u64,
     remove_count: u64,
@@ -38,16 +39,20 @@ impl InstDecode {
 
         i_vec.sort_by(|a: &&Instruction, b: &&Instruction| Instruction::inst_cmp(a, b));
 
+        // let x = LruCache::new(8192);
+        // let y = LinkedHashMap::new();
+
         InstDecode {
             inst_vec: i_vec,
-            inst_hash: HashMap::new(),
+            inst_hash: LruCache::new(DECODE_CACHE_SIZE),
             hit: 0,
             miss: 0,
             remove_count: 0,
         }
     }
 
-    fn hash_get(&self, inst_i: u32) -> Option<&&Instruction> {
+    fn hash_get(&mut self, inst_i: u32) -> Option<&&Instruction> {
+        // self.inst_hash.get(&inst_i)
         self.inst_hash.get(&inst_i)
     }
 
@@ -60,9 +65,6 @@ impl InstDecode {
 
         #[cfg(feature = "decode_cache")]
         if let Some(slow) = slowpath {
-            if self.inst_hash.len() >= DECODE_CACHE_SIZE {
-                self.remove_random();
-            }
             self.inst_hash.insert(inst_i, slow);
         }
         slowpath
