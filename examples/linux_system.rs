@@ -3,7 +3,10 @@ extern crate rv64emu;
 use clap::Parser;
 #[allow(unused_imports)]
 use rv64emu::tools::Fifobounded;
-use rv64emu::tools::{rc_refcell_new, FifoUnbounded};
+use rv64emu::{
+    config,
+    tools::{rc_refcell_new, FifoUnbounded},
+};
 
 #[allow(unused_imports)]
 use std::{
@@ -209,7 +212,7 @@ fn main() {
 
                 trace_handle.push(trace_thread);
             } else {
-                let hart = CpuCoreBuild::new(bus_u.clone())
+                let hart = CpuCoreBuild::new(bus_u.clone(),config::Config::new().into())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_smode(true)

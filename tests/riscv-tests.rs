@@ -2,7 +2,7 @@ extern crate rv64emu;
 use std::{fs, path::Path};
 
 use log::LevelFilter;
-use rv64emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell};
+use rv64emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell, config};
 
 use crate::{
     rv64emu::device::device_trait::{DeviceBase, MEM_BASE},
@@ -24,7 +24,7 @@ fn start_test(img: &str) -> bool {
     // let bus_u = Rc::new(Mutex::new(Bus::new()));
     let bus_u: RcRefCell<Bus> = RcRefCell::new(Bus::new().into());
 
-    let cpu = CpuCoreBuild::new(bus_u.clone())
+    let cpu = CpuCoreBuild::new(bus_u.clone(),config::Config::new().into())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)

@@ -1,9 +1,10 @@
 use core::cell::Cell;
 
 use alloc::rc::Rc;
-use log::{warn, info};
+use log::{info, warn};
 
 use crate::{
+    config::Config,
     difftest::difftest_trait::Difftest,
     rv64core::bus::Bus,
     rv64core::csr_regs::CsrRegs,
@@ -31,16 +32,18 @@ pub enum CpuState {
 pub struct CpuCoreBuild {
     hart_id: usize,
     shared_bus: RcRefCell<Bus>,
+    config: Rc<Config>,
     boot_pc: u64,
     smode: bool,
     #[cfg(feature = "rv_debug_trace")]
     trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
 impl CpuCoreBuild {
-    pub fn new(shared_bus: RcRefCell<Bus>) -> Self {
+    pub fn new(shared_bus: RcRefCell<Bus>, config: Rc<Config>) -> Self {
         CpuCoreBuild {
             hart_id: 0,
             shared_bus,
+            config,
             boot_pc: 0x8000_0000,
             #[cfg(feature = "rv_debug_trace")]
             trace_sender: None,
@@ -74,9 +77,16 @@ impl CpuCoreBuild {
         // let mtime = csr_regs_u.time.clone();
         let xip = csr_regs_u.xip.clone();
 
-        let cache_system = RcRefCell::new(CacheSystem::new(self.shared_bus.clone()).into());
+        let cache_system =
+            RcRefCell::new(CacheSystem::new(self.shared_bus.clone(), self.config.clone()).into());
 
-        let mmu_u = Mmu::new(cache_system.clone(), privi_u.clone(), xstatus, satp);
+        let mmu_u = Mmu::new(
+            cache_system.clone(),
+            privi_u.clone(),
+            xstatus,
+            satp,
+            self.config.clone(),
+        );
         {
             let bus_u = mmu_u.caches.borrow_mut().bus.clone();
             let mut bus_u = bus_u.borrow_mut();
@@ -102,6 +112,7 @@ impl CpuCoreBuild {
             cpu_state: CpuState::Stop,
             #[cfg(feature = "rv_debug_trace")]
             trace_sender: self.trace_sender.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -116,6 +127,7 @@ pub struct CpuCore {
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
     pub cpu_state: CpuState,
+    pub config: Rc<Config>,
     #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
@@ -189,11 +201,10 @@ impl CpuCore {
         let is_rvc = is_compressed_instruction(inst);
         self.npc = self.pc.wrapping_add(if is_rvc { 2 } else { 4 });
     }
-    pub fn show_perf(&self){
-
+    pub fn show_perf(&self) {
         let cycle = self.csr_regs.cycle.get();
         let instret = self.csr_regs.instret.get();
-        info!("cycle:{},instret:{}",cycle,instret);
+        info!("cycle:{},instret:{}", cycle, instret);
         self.cache_system.borrow().show_perf();
         self.decode.show_perf();
         self.mmu.show_perf();

@@ -235,7 +235,7 @@ fn main() {
 
                 trace_handle.push(trace_thread);
             } else {
-                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone(),config::Config::new().into())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_smode(true)

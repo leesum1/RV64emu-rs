@@ -11,7 +11,7 @@ use crate::{
         inst::inst_base::{AccessType, PrivilegeLevels},
         traptype::TrapType,
     },
-    tools::{check_aligned, RcCell, RcRefCell},
+    tools::{check_aligned, RcCell, RcRefCell}, config::Config,
 };
 
 use super::{
@@ -31,6 +31,7 @@ pub struct Mmu {
     cur_priv: Rc<Cell<PrivilegeLevels>>,
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
+    config: Rc<Config>,
     tlb: LruCache<u64, u64>,
     tlb_hit: u64,
     tlb_miss: u64,
@@ -46,9 +47,11 @@ pub struct Mmu {
 impl Mmu {
     pub fn new(
         caches: RcRefCell<CacheSystem>,
+  
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: RcCell<XstatusIn>,
         satp: RcCell<SatpIn>,
+        config: Rc<Config>,
     ) -> Self {
         Mmu {
             caches,
@@ -65,6 +68,7 @@ impl Mmu {
             pa: Sv48PA::new().into(),
             pte: Sv48PTE::new().into(),
             tlb: LruCache::new(TLB_SIZE),
+            config,
             tlb_hit: 0,
             tlb_miss: 0,
         }

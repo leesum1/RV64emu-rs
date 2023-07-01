@@ -6,7 +6,7 @@ use std::{fs::File, io::Write};
 
 use alloc::{
     string::{String, ToString},
-    vec::Vec,
+    vec::Vec, rc::Rc,
 };
 use elf::{
     abi::{EM_RISCV, PT_LOAD},
@@ -14,6 +14,7 @@ use elf::{
 };
 use log::info;
 
+use crate::config::Config;
 #[allow(unused_imports)]
 use crate::{
     rv64core::{
@@ -39,6 +40,8 @@ pub struct RVsim {
     elf_symbols: hashbrown::HashMap<String, u64>,
     // system time
     time: Option<SystemTime>,
+    // Config
+    config: Rc<Config>,
 }
 
 impl RVsim {

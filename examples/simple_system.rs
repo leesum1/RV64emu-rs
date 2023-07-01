@@ -32,7 +32,7 @@ fn main() {
     // 1. the first instruction is executed at 0x8000_0000
     // 2. hart0 id is 0
     // 3. smode is enabled
-    let hart0 = CpuCoreBuild::new(bus_u.clone())
+    let hart0 = CpuCoreBuild::new(bus_u.clone(), config::Config::new().into())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)
