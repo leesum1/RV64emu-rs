@@ -1,9 +1,10 @@
 use hashbrown::HashMap;
 use log::info;
 
-use crate::{rv64core::{bus::Bus, inst::inst_base::RVerr}, tools::RcRefCell};
-
-const ICACHE_SIZE: usize = 4096*10;
+use crate::{
+    rv64core::{bus::Bus, inst::inst_base::RVerr},
+    tools::RcRefCell,
+};
 
 struct InstPack {
     inst: u32,
@@ -11,26 +12,28 @@ struct InstPack {
 pub struct CpuIcache {
     bus: RcRefCell<Bus>,
     inst_hash: HashMap<u64, InstPack>,
+    icache_size: usize,
     hit: u64,
     miss: u64,
 }
 
 impl CpuIcache {
-    pub fn new(bus: RcRefCell<Bus>) -> Self {
+    pub fn new(bus: RcRefCell<Bus>, size: usize) -> Self {
         CpuIcache {
             bus,
             inst_hash: HashMap::new(),
+            icache_size: size,
             hit: 0,
             miss: 0,
         }
     }
-    #[cfg(feature = "inst_cache")]
+
     fn cacheble(&self, addr: u64) -> bool {
-        (0x80000000..0x80000000 + 0x8000000).contains(&addr)
-    }
-    #[cfg(not(feature = "inst_cache"))]
-    fn cacheble(&self, _addr: u64) -> bool {
-        false
+        if self.icache_size == 0 {
+            false
+        } else {
+            (0x80000000..0x80000000 + 0x8000000).contains(&addr)
+        }
     }
     // todo len:2,4
     pub fn read(&mut self, pc: u64, len: usize) -> Result<u64, RVerr> {
@@ -48,7 +51,7 @@ impl CpuIcache {
         match bus.read(addr, len) {
             Ok(data) => {
                 self.miss += 1;
-                if self.inst_hash.len() >= ICACHE_SIZE {
+                if self.inst_hash.len() >= self.icache_size {
                     drop(bus);
                     self.remove_random();
                 }

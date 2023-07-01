@@ -5,13 +5,14 @@ use hashlink::LruCache;
 use log::info;
 
 use crate::{
+    config::Config,
     rv64core::csr_regs_define::{SatpIn, StapMode, XstatusIn},
     rv64core::{
         cache::cache_system::CacheSystem,
         inst::inst_base::{AccessType, PrivilegeLevels},
         traptype::TrapType,
     },
-    tools::{check_aligned, RcCell, RcRefCell}, config::Config,
+    tools::{check_aligned, RcCell, RcRefCell},
 };
 
 use super::{
@@ -20,8 +21,6 @@ use super::{
 };
 
 const PAGESIZE: u64 = 4096; // 2 ^ 12
-
-const TLB_SIZE: usize = 256;
 
 pub struct Mmu {
     pub caches: RcRefCell<CacheSystem>,
@@ -47,7 +46,7 @@ pub struct Mmu {
 impl Mmu {
     pub fn new(
         caches: RcRefCell<CacheSystem>,
-  
+
         privilege: Rc<Cell<PrivilegeLevels>>,
         mstatus: RcCell<XstatusIn>,
         satp: RcCell<SatpIn>,
@@ -67,7 +66,7 @@ impl Mmu {
             va: Sv48VA::new().into(),
             pa: Sv48PA::new().into(),
             pte: Sv48PTE::new().into(),
-            tlb: LruCache::new(TLB_SIZE),
+            tlb: LruCache::new(config.tlb_size().unwrap_or(0)),
             config,
             tlb_hit: 0,
             tlb_miss: 0,
@@ -81,7 +80,6 @@ impl Mmu {
     // todo! check privilege mode
     fn va_translation_step1(&mut self) -> Result<u8, TrapType> {
         assert_ne!(self.mmu_effective_priv, PrivilegeLevels::Machine); // check privilege mode
-                                                                       // self.pagesize = 4096; // 2 ^ 12
         self.level = self.satp_mode.get_levels() as i8;
         self.i = self.level - 1;
         self.a = self.satp.get().ppn() * PAGESIZE;
@@ -263,11 +261,16 @@ impl Mmu {
         self.va_translation_step7()?;
         self.va_translation_step8()?;
 
-        #[cfg(feature = "tlb_cache")]
-        self.tlb
-            .insert(self.va.raw() & (!0xfff), self.pa.raw() & (!0xfff));
+        if !self.no_tlb() {
+            self.tlb
+                .insert(self.va.raw() & (!0xfff), self.pa.raw() & (!0xfff));
+        }
 
         Ok(self.pa.raw())
+    }
+
+    fn no_tlb(&self) -> bool {
+        self.tlb.capacity() == 0
     }
 
     fn no_mmu(&mut self) -> bool {
@@ -327,10 +330,11 @@ impl Mmu {
             return Ok(addr);
         }
 
-        #[cfg(feature = "tlb_cache")]
-        if let Some(val) = self.fast_path(addr & (!0xfff)) {
-            let offset = addr & 0xfff;
-            return Ok(val | offset);
+        if !self.no_tlb() {
+            if let Some(val) = self.fast_path(addr & (!0xfff)) {
+                let offset = addr & 0xfff;
+                return Ok(val | offset);
+            }
         }
 
         // do page table walk

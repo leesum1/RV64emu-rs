@@ -4,7 +4,6 @@ use crate::tools::RcRefCell;
 
 use log::info;
 
-const DCACHE_SIZE: usize = 128;
 #[derive(Clone)]
 struct CacheLine {
     // valid: bool,
@@ -59,17 +58,19 @@ impl CacheLine {
 pub struct CpuDcache {
     bus: RcRefCell<Bus>,
     caches: hashbrown::HashMap<u64, CacheLine>,
+    dcache_size: usize,
     hit: u64,
     miss: u64,
 }
 
 impl CpuDcache {
-    pub fn new(bus: RcRefCell<Bus>) -> Self {
+    pub fn new(bus: RcRefCell<Bus>, dcache_size: usize) -> Self {
         // let caches = vec![CacheLine::new(); 32];
         let caches = hashbrown::HashMap::new();
         CpuDcache {
             bus,
             caches,
+            dcache_size,
             hit: 0,
             miss: 0,
         }
@@ -83,13 +84,12 @@ impl CpuDcache {
     fn cacheline_base(&self, addr: u64) -> u64 {
         addr & !0x3f
     }
-    #[cfg(feature = "data_cache")]
     fn cacheable(&self, addr: u64) -> bool {
-        (0x80000000..0x80000000 + 0x8000000).contains(&addr)
-    }
-    #[cfg(not(feature = "data_cache"))]
-    fn cacheable(&self, _addr: u64) -> bool {
-        false
+        if self.dcache_size == 0 {
+            false
+        } else {
+            (0x80000000..0x80000000 + 0x8000000).contains(&addr)
+        }
     }
 
     // random remove a item from caches
@@ -187,7 +187,7 @@ impl CpuDcache {
             data: cache_data,
         };
 
-        let need_write_back = self.caches.len() >= DCACHE_SIZE;
+        let need_write_back = self.caches.len() >= self.dcache_size;
 
         if need_write_back {
             let mut cache_line_wb: CacheLine = self.remove_random().expect("remove_random err");

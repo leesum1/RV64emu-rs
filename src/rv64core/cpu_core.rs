@@ -104,7 +104,7 @@ impl CpuCoreBuild {
             gpr: Gpr::new(),
             csr_regs: csr_regs_u,
             mmu: mmu_u,
-            decode: InstDecode::new(),
+            decode: InstDecode::new(self.config.clone()),
             cache_system,
             pc: self.boot_pc,
             npc: self.boot_pc,
@@ -172,15 +172,7 @@ impl CpuCore {
     }
 
     pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
-        let inst_op = if cfg!(feature = "decode_cache") {
-            let decode_cache_hit = self.decode.fast_path(inst);
-            match decode_cache_hit {
-                Some(operation) => Some(operation),
-                None => self.decode.slow_path(inst),
-            }
-        } else {
-            self.decode.slow_path(inst)
-        };
+        let inst_op = self.decode.fast_path(inst);
 
         match inst_op {
             Some(i) => {

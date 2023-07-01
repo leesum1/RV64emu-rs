@@ -3,7 +3,10 @@ extern crate rv64emu;
 use clap::Parser;
 #[allow(unused_imports)]
 use rv64emu::tools::Fifobounded;
-use rv64emu::tools::{rc_refcell_new, FifoUnbounded};
+use rv64emu::{
+    config::{self, Config},
+    tools::{rc_refcell_new, FifoUnbounded},
+};
 
 use std::io::{stdin, Write};
 #[allow(unused_imports)]
@@ -208,6 +211,13 @@ fn main() {
     };
 
     info!("boot_pc:0x{:x}", boot_pc);
+
+    let mut config = Config::new();
+    config.set_tlb_size(256);
+    config.set_icache_size(4096);
+    config.set_decode_cache_size(4096);
+    let config = Rc::new(config);
+
     let mut hart_vec = Vec::new();
     #[allow(unused_mut)]
     let mut trace_handle: Vec<thread::JoinHandle<()>> = Vec::new();
@@ -216,7 +226,7 @@ fn main() {
         cfg_if::cfg_if! {
                 if #[cfg(feature = "rv_debug_trace")] {
                 let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone())
+                let cpu: = CpuCoreBuild::new(bus_u.clone(),config.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_trace(trace_tx)
@@ -235,7 +245,7 @@ fn main() {
 
                 trace_handle.push(trace_thread);
             } else {
-                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone(),config::Config::new().into())
+                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone(),config.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_smode(true)

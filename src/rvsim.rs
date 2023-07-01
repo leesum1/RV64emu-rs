@@ -39,7 +39,7 @@ pub struct RVsim {
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
     // system time
-    time: Option<SystemTime>,
+    // time: Option<SystemTime>,
     // Config
     config: Rc<Config>,
 }
@@ -51,7 +51,7 @@ impl RVsim {
         Self {
             harts,
             bus,
-            time: Some(time),
+            // time: Some(time),
             ..Default::default()
         }
     }
@@ -160,12 +160,12 @@ impl RVsim {
     }
     // true: exit, false: abort
     pub fn is_finish(&self) -> bool {
-        let time_finish = self.time.as_ref().unwrap().elapsed().unwrap().as_secs() > 20;
+        // let time_finish = self.time.as_ref().unwrap().elapsed().unwrap().as_secs() > 20;
 
         self.harts
             .iter()
             .any(|hart| hart.cpu_state != CpuState::Running)
-            || time_finish
+            // || time_finish
     }
 
     pub fn is_exit_normal(&self) -> bool {

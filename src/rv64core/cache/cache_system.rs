@@ -1,6 +1,6 @@
 use alloc::rc::Rc;
 
-use crate::{rv64core::bus::Bus, tools::RcRefCell, config::Config};
+use crate::{config::Config, rv64core::bus::Bus, tools::RcRefCell};
 
 use super::{cpu_dcache::CpuDcache, cpu_icache::CpuIcache};
 
@@ -12,9 +12,9 @@ pub struct CacheSystem {
 }
 
 impl CacheSystem {
-    pub fn new(bus: RcRefCell<Bus>,config: Rc<Config>) -> Self {
-        let icache = CpuIcache::new(bus.clone());
-        let dcache = CpuDcache::new(bus.clone());
+    pub fn new(bus: RcRefCell<Bus>, config: Rc<Config>) -> Self {
+        let icache = CpuIcache::new(bus.clone(), config.icache_size().unwrap_or(0));
+        let dcache = CpuDcache::new(bus.clone(),config.dcache_size().unwrap_or(0));
         CacheSystem {
             icache,
             dcache,
