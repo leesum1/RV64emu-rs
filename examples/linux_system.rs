@@ -201,7 +201,7 @@ fn main() {
         cfg_if::cfg_if! {
                 if #[cfg(feature = "rv_debug_trace")] {
                 let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu: = CpuCoreBuild::new(bus_u.clone(),config.clone())
+                let cpu = CpuCoreBuild::new(bus_u.clone(),config.clone())
                     .with_boot_pc(boot_pc)
                     .with_hart_id(hart_id)
                     .with_trace(trace_tx)

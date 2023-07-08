@@ -34,7 +34,7 @@ impl VAops for Sv48VA {
         self.offset() as usize
     }
 
-    fn set_offset(&mut self,val:usize) {
+    fn set_offset(&mut self, val: usize) {
         self.set_offset(val as u64);
     }
     fn raw(&self) -> u64 {
@@ -45,7 +45,7 @@ impl VAops for Sv48VA {
 #[bitfield(u64)]
 pub struct Sv48PA {
     #[bits(12)]
-    pub offset: u64,
+    pub offset: usize,
     #[bits(9)]
     pub ppn0: u64,
     #[bits(9)]
@@ -72,8 +72,8 @@ impl PAops for Sv48PA {
         self.offset() as usize
     }
 
-    fn set_offset(&mut self,val:usize) {
-        self.set_offset(val as u64);
+    fn set_offset(&mut self, val: usize) {
+        self.set_offset(val);
     }
     fn raw(&self) -> u64 {
         self.0
@@ -120,7 +120,6 @@ impl PTEops for Sv48PTE {
             _ => panic!("Sv48PTE ppn idx err:{idx}"),
         }
     }
-
 
     fn v(&self) -> bool {
         self.v()

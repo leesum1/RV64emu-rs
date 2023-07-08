@@ -48,7 +48,7 @@ impl VAops for Sv57VA {
 #[bitfield(u64)]
 pub struct Sv57PA {
     #[bits(12)]
-    pub offset: u64,
+    pub offset: usize,
     #[bits(9)]
     pub ppn0: u64,
     #[bits(9)]
@@ -79,7 +79,7 @@ impl PAops for Sv57PA {
     }
 
     fn set_offset(&mut self, val: usize) {
-        self.set_offset(val as u64);
+        self.set_offset(val);
     }
     fn raw(&self) -> u64 {
         self.0

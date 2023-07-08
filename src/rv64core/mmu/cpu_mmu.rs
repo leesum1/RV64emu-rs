@@ -2,7 +2,7 @@ use core::cell::Cell;
 
 use alloc::rc::Rc;
 use hashlink::LruCache;
-use log::info;
+use log::{info, debug};
 
 use crate::{
     config::Config,
@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     sv48::{Sv48PA, Sv48PTE, Sv48VA},
-    vm_info::{PAenume, PAops, PTEenume, PTEops, VAenume, VAops},
+    vm_info::{PAenume, PAops, PTEenume, PTEops, PageSize, TLBEntry, VAenume, VAops},
 };
 
 const PAGESIZE: u64 = 4096; // 2 ^ 12
@@ -31,7 +31,7 @@ pub struct Mmu {
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
     config: Rc<Config>,
-    tlb: LruCache<u64, u64>,
+    tlb: LruCache<u64, TLBEntry>,
     tlb_hit: u64,
     tlb_miss: u64,
     /* tmp val */
@@ -147,14 +147,13 @@ impl Mmu {
         // When SUM=0, S-mode memory accesses to pages that are
         // accessible by U-mode (U=1 in Figure 4.18) will fault.
         // When SUM=1, these accesses are permitted.
-        let sum_bit_check = || -> bool {
-            if self.mmu_effective_priv != PrivilegeLevels::Supervisor {
-                return true;
-            }
-            // in S-mode
-
-            self.mstatus.get().sum() || !self.pte.u()
-        };
+        // let sum_bit_check = || -> bool {
+        //     if self.mmu_effective_priv != PrivilegeLevels::Supervisor {
+        //         return true;
+        //     }
+        //     // in S-mode
+        //     self.mstatus.get().sum() || !self.pte.u()
+        // };
 
         match self.access_type {
             AccessType::Fetch(_) if !self.pte.x() => {
@@ -165,11 +164,11 @@ impl Mmu {
             // MXR has no effect when page-based virtual memory is not in effect.
             AccessType::Load(_)
                 if !(self.pte.r() || self.pte.x() & self.mstatus.get().mxr())
-                    || !sum_bit_check() =>
+                    || !self.check_sum_bit() =>
             {
                 return Err(self.access_type.throw_page_exception());
             }
-            AccessType::Store(_) | AccessType::Amo(_) if !self.pte.w() || !sum_bit_check() => {
+            AccessType::Store(_) | AccessType::Amo(_) if !self.pte.w() || !self.check_sum_bit() => {
                 return Err(self.access_type.throw_page_exception());
             }
             _ => {}
@@ -228,7 +227,7 @@ impl Mmu {
 
         if self.i > 0 {
             for idx in 0..self.i as u8 {
-                let va_ppn = self.va.get_ppn_by_idx(idx);
+                let va_ppn: u64 = self.va.get_ppn_by_idx(idx);
                 self.pa.set_ppn_by_idx(va_ppn, idx);
             }
         }
@@ -239,7 +238,22 @@ impl Mmu {
             self.pa.set_ppn_by_idx(pte_ppn, idx);
         }
 
+        if !self.no_tlb() {
+            self.tlb.insert(
+                self.va.raw() & (!0xfff),
+                TLBEntry::new(self.pte, PageSize::from_i(self.i as usize), 0),
+            );
+        }
+
         Ok(1)
+    }
+
+    fn check_sum_bit(&self) -> bool {
+        if self.mmu_effective_priv != PrivilegeLevels::Supervisor {
+            return true;
+        }
+        // in S-mode
+        self.mstatus.get().sum() || !self.pte.u()
     }
 
     pub fn page_table_walk(&mut self) -> Result<u64, TrapType> {
@@ -260,11 +274,6 @@ impl Mmu {
         self.va_translation_step6()?;
         self.va_translation_step7()?;
         self.va_translation_step8()?;
-
-        if !self.no_tlb() {
-            self.tlb
-                .insert(self.va.raw() & (!0xfff), self.pa.raw() & (!0xfff));
-        }
 
         Ok(self.pa.raw())
     }
@@ -331,9 +340,50 @@ impl Mmu {
         }
 
         if !self.no_tlb() {
-            if let Some(val) = self.fast_path(addr & (!0xfff)) {
-                let offset = addr & 0xfff;
-                return Ok(val | offset);
+            // todo! refactor!!!!!!!!!!!!!
+            if let Some(tlb_entry) = self.fast_path(addr & (!0xfff)) {
+                self.pte = tlb_entry.pte;
+
+                // 1. If accessing pte violates a PMA or PMP check, raise an access-fault exception corresponding to the original access type.
+
+                // 2. If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings that are reserved for
+                // future standard use are set within pte, stop and raise a page-fault exception corresponding
+                // to the original access type.
+                if !self.pte.v() || (!self.pte.r() && self.pte.w()) {
+                    return Err(self.access_type.throw_page_exception());
+                }
+                // 3. A leaf PTE has been found. Determine if the requested memory access is allowed by the
+                // pte.r, pte.w, pte.x, and pte.u bits, given the current privilege mode and the value of the
+                // SUM and MXR fields of the mstatus register. If not, stop and raise a page-fault exception
+                // corresponding to the original access type.
+                match self.access_type {
+                    AccessType::Fetch(_) if !self.pte.x() => {
+                        return Err(self.access_type.throw_page_exception());
+                    }
+                    // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
+                    // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
+                    // MXR has no effect when page-based virtual memory is not in effect.
+                    AccessType::Load(_)
+                        if !(self.pte.r() || self.pte.x() & self.mstatus.get().mxr())
+                            || !self.check_sum_bit() =>
+                    {
+                        return Err(self.access_type.throw_page_exception());
+                    }
+                    AccessType::Store(_) | AccessType::Amo(_)
+                        if !self.pte.w() || !self.check_sum_bit() =>
+                    {
+                        return Err(self.access_type.throw_page_exception());
+                    }
+                    _ => {}
+                }
+                // 4. If pte.a = 0, or if the original memory access is a store and pte.d = 0, either raise a page-fault
+                // exception corresponding to the original access type
+                if !self.pte.a() || ((!self.pte.d()) && self.access_type.is_store()) {
+                    return Err(self.access_type.throw_page_exception());
+                }
+                let pa = tlb_entry.get_pa(self.get_vaops(addr));
+                // debug!("translate: {:x} -> {:x}", addr, pa);
+                return Ok(pa);
             }
         }
 
@@ -343,35 +393,35 @@ impl Mmu {
         self.page_table_walk()
     }
 
-    pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, TrapType> {
-        if !check_aligned(addr, len) {
-            return Err(self.access_type.throw_addr_misaligned_exception());
-        }
+    // pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, TrapType> {
+    //     if !check_aligned(addr, len) {
+    //         return Err(self.access_type.throw_addr_misaligned_exception());
+    //     }
 
-        // no mmu
-        if self.no_mmu() {
-            return self
-                .caches
-                .borrow_mut()
-                .dcache
-                .write(addr, data, len)
-                .map_or(Err(self.access_type.throw_access_exception()), Ok);
-        }
+    //     // no mmu
+    //     if self.no_mmu() {
+    //         return self
+    //             .caches
+    //             .borrow_mut()
+    //             .dcache
+    //             .write(addr, data, len)
+    //             .map_or(Err(self.access_type.throw_access_exception()), Ok);
+    //     }
 
-        // has mmu
-        // update the virtual address and physical address
+    //     // has mmu
+    //     // update the virtual address and physical address
 
-        self.satp_mode = self.satp.get().mode();
-        self.va = self.get_vaops(addr);
-        self.pa = self.get_paops(0);
+    //     self.satp_mode = self.satp.get().mode();
+    //     self.va = self.get_vaops(addr);
+    //     self.pa = self.get_paops(0);
 
-        self.page_table_walk()?; // err return
-        self.caches
-            .borrow_mut()
-            .dcache
-            .write(self.pa.raw(), data, len)
-            .map_or(Err(self.access_type.throw_access_exception()), Ok)
-    }
+    //     self.page_table_walk()?; // err return
+    //     self.caches
+    //         .borrow_mut()
+    //         .dcache
+    //         .write(self.pa.raw(), data, len)
+    //         .map_or(Err(self.access_type.throw_access_exception()), Ok)
+    // }
 
     pub fn update_access_type(&mut self, access_type: &AccessType) {
         self.access_type = access_type.clone();
@@ -406,7 +456,7 @@ impl Mmu {
         }
     }
 
-    pub fn fast_path(&mut self, va: u64) -> Option<u64> {
+    pub fn fast_path(&mut self, va: u64) -> Option<TLBEntry> {
         // self.hash_get(inst_i).copied()
         let ret = self.tlb.get(&va).copied();
         if ret.is_some() {

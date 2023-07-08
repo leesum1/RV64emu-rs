@@ -2,6 +2,96 @@ use super::sv39::{Sv39PA, Sv39PTE, Sv39VA};
 use super::sv48::{Sv48PA, Sv48PTE, Sv48VA};
 use super::sv57::{Sv57PA, Sv57PTE, Sv57VA};
 use enum_dispatch::enum_dispatch;
+use log::debug;
+
+#[derive(Copy, Clone, Debug)]
+pub enum PageSize {
+    P4K,
+    P2M,
+    P1G,
+    P512G,
+    P256T,
+    InValid,
+}
+impl PageSize {
+    pub fn from_i(val: usize) -> Self {
+        match val {
+            0 => PageSize::P4K,
+            1 => PageSize::P2M,
+            2 => PageSize::P1G,
+            3 => PageSize::P512G,
+            4 => PageSize::P256T,
+            _ => panic!("Invalid page size"),
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct TLBEntry {
+    pub pte: PTEenume,
+    page_size: PageSize,
+    pub asid: u16,
+}
+
+// num: 0~64, the zero number in lsbs
+fn zero_mask(num: usize) -> u64 {
+    if num == 64 {
+        return 0;
+    }
+    u64::MAX << num
+}
+
+#[test]
+fn zero_mast_test() {
+    assert_eq!(zero_mask(0), u64::MAX);
+    assert_eq!(zero_mask(1), u64::MAX << 1);
+    assert_eq!(zero_mask(2), u64::MAX << 2);
+    assert_eq!(zero_mask(64), 0);
+}
+
+impl TLBEntry {
+    pub fn new(pte: PTEenume, page_size: PageSize, asid: u16) -> Self {
+        Self {
+            pte,
+            page_size,
+            asid,
+        }
+    }
+
+    pub fn get_pa(&self, va: VAenume) -> u64 {
+        // debug!("pagesize:{:?}", self.page_size);
+        match self.page_size {
+            PageSize::P4K => (self.pte.ppn_all() << 12) | va.offset() as u64,
+            PageSize::P2M => {
+                ((self.pte.ppn_all() & zero_mask(9)) << 12)
+                    | va.get_ppn_by_idx(0) << 12
+                    | va.offset() as u64
+            }
+            PageSize::P1G => {
+                ((self.pte.ppn_all() & zero_mask(18)) << 12)
+                    | va.get_ppn_by_idx(1) << (12 + 9)
+                    | va.get_ppn_by_idx(0) << 12
+                    | va.offset() as u64
+            }
+            PageSize::P512G => {
+                ((self.pte.ppn_all() & zero_mask(27)) << 12)
+                    | va.get_ppn_by_idx(2) << (12 + 9 + 9)
+                    | va.get_ppn_by_idx(1) << (12 + 9)
+                    | va.get_ppn_by_idx(0) << 12
+                    | va.offset() as u64
+            }
+            PageSize::P256T => {
+                ((self.pte.ppn_all() & zero_mask(36)) << 12)
+                    | va.get_ppn_by_idx(3) << (12 + 9 + 9 + 9)
+                    | va.get_ppn_by_idx(2) << (12 + 9 + 9)
+                    | va.get_ppn_by_idx(1) << (12 + 9)
+                    | va.get_ppn_by_idx(0) << 12
+                    | va.offset() as u64
+            }
+            PageSize::InValid => panic!("Invalid page size"),
+        }
+    }
+}
 
 #[enum_dispatch(PTEenume)]
 pub trait PTEops {
@@ -45,6 +135,7 @@ pub trait VAops {
 }
 
 #[enum_dispatch]
+#[derive(Copy, Clone)]
 pub enum PTEenume {
     Sv39PTE,
     Sv48PTE,

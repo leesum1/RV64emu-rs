@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
 
 #[allow(unused_variables)]
@@ -126,6 +128,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
             cpu.cache_system.borrow_mut().clear();
+            cpu.mmu.clear_tlb();
             Ok(())
         },
     },
@@ -153,6 +156,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
                 Err(TrapType::IllegalInstruction(inst.into()))
             } else {
                 // PASS icache-alias.S
+                // info!("SFENCE_VMA");
                 cpu.cache_system.borrow_mut().clear();
                 cpu.mmu.clear_tlb();
                 Ok(())

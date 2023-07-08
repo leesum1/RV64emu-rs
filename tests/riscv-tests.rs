@@ -1,8 +1,13 @@
 extern crate rv64emu;
-use std::{fs, path::Path};
+use std::{fs, path::Path, rc::Rc};
 
 use log::LevelFilter;
-use rv64emu::{device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell, config};
+use rv64emu::{
+    config::{self, Config},
+    device::device_memory::DeviceMemory,
+    rvsim::RVsim,
+    tools::RcRefCell,
+};
 
 use crate::{
     rv64emu::device::device_trait::{DeviceBase, MEM_BASE},
@@ -24,7 +29,14 @@ fn start_test(img: &str) -> bool {
     // let bus_u = Rc::new(Mutex::new(Bus::new()));
     let bus_u: RcRefCell<Bus> = RcRefCell::new(Bus::new().into());
 
-    let cpu = CpuCoreBuild::new(bus_u.clone(),config::Config::new().into())
+    let mut config = Config::new();
+    config.set_tlb_size(256);
+    config.set_icache_size(4096);
+    config.set_decode_cache_size(4096);
+
+    let config = Rc::new(config);
+
+    let cpu = CpuCoreBuild::new(bus_u.clone(), config)
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)
@@ -45,6 +57,14 @@ fn start_test(img: &str) -> bool {
     sim.load_image(img);
 
     sim.run()
+}
+
+
+#[test]
+fn test_once() {
+    let img = get_riscv_tests_path().join("rv64si-p-dirty");
+    let ret = start_test(img.to_str().unwrap());
+    assert_eq!(ret, true);
 }
 
 struct TestRet {
