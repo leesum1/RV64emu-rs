@@ -393,35 +393,6 @@ impl Mmu {
         self.page_table_walk()
     }
 
-    // pub fn do_write(&mut self, addr: u64, data: u64, len: usize) -> Result<u64, TrapType> {
-    //     if !check_aligned(addr, len) {
-    //         return Err(self.access_type.throw_addr_misaligned_exception());
-    //     }
-
-    //     // no mmu
-    //     if self.no_mmu() {
-    //         return self
-    //             .caches
-    //             .borrow_mut()
-    //             .dcache
-    //             .write(addr, data, len)
-    //             .map_or(Err(self.access_type.throw_access_exception()), Ok);
-    //     }
-
-    //     // has mmu
-    //     // update the virtual address and physical address
-
-    //     self.satp_mode = self.satp.get().mode();
-    //     self.va = self.get_vaops(addr);
-    //     self.pa = self.get_paops(0);
-
-    //     self.page_table_walk()?; // err return
-    //     self.caches
-    //         .borrow_mut()
-    //         .dcache
-    //         .write(self.pa.raw(), data, len)
-    //         .map_or(Err(self.access_type.throw_access_exception()), Ok)
-    // }
 
     pub fn update_access_type(&mut self, access_type: &AccessType) {
         self.access_type = access_type.clone();

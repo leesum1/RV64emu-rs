@@ -51,6 +51,7 @@ impl RVsim {
         Self {
             harts,
             bus,
+            config: Rc::new(Config::new()),
             // time: Some(time),
             ..Default::default()
         }

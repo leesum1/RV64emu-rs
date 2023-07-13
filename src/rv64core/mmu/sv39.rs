@@ -82,7 +82,7 @@ impl PAops for Sv39PA {
         }
     }
     fn offset(&self) -> usize {
-        self.offset() as usize
+        self.offset()
     }
 
     fn set_offset(&mut self, val: usize) {

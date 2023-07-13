@@ -4,6 +4,7 @@ use alloc::rc::Rc;
 use hashbrown::HashMap;
 
 use crate::{
+    config::Config,
     rv64core::csr_regs_define::{
         CommonCSR, Counter, Csr, CsrEnum, Medeleg, MedelegIn, Mideleg, MidelegIn, Misa,
         ReadOnlyCSR, Satp, SatpIn, Xcause, XcauseIn, Xie, XieIn, Xip, XipIn, Xstatus, XstatusIn,
@@ -21,6 +22,7 @@ use crate::{
 };
 
 pub struct CsrRegs {
+    config: Rc<Config>,
     pub csr_map: HashMap<u64, CsrEnum>,
     pub cur_priv: PrivilegeLevels,
     pub xstatus: RcCell<XstatusIn>,
@@ -42,7 +44,7 @@ pub struct CsrRegs {
 }
 
 impl CsrRegs {
-    pub fn new(hart_id: usize) -> Self {
+    pub fn new(hart_id: usize, config: Rc<Config>) -> Self {
         let mut misa_val = Misa::new().with_i(true).with_s(true).with_mxl(2); // 64
 
         #[cfg(feature = "rv_m")]
@@ -118,7 +120,11 @@ impl CsrRegs {
         let sscratch = CommonCSR::new_noshare(0);
 
         let satp_share = Rc::new(Cell::new(SatpIn::new()));
-        let satp = Satp::new(satp_share.clone(), xstatus_share.clone());
+        let satp = Satp::new(
+            satp_share.clone(),
+            xstatus_share.clone(),
+            config.get_mmu_type(),
+        );
 
         let cycle_share = Rc::new(Cell::new(0));
         let mcycle = Counter::new(cycle_share.clone());
@@ -174,6 +180,7 @@ impl CsrRegs {
         csr_map.insert(CSR_TSELECT.into(), tselect.into());
 
         Self {
+            config,
             csr_map,
             xstatus: xstatus_share,
             xip: xip_share,

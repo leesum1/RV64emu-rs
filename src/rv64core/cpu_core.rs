@@ -69,7 +69,7 @@ impl CpuCoreBuild {
     }
 
     pub fn build(&self) -> CpuCore {
-        let mut csr_regs_u = CsrRegs::new(self.hart_id);
+        let mut csr_regs_u = CsrRegs::new(self.hart_id,self.config.clone());
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
         // some csr regs are shared with other modules
         let xstatus = csr_regs_u.xstatus.clone();

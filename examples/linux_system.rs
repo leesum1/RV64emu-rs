@@ -190,6 +190,7 @@ fn main() {
     config.set_tlb_size(256);
     config.set_icache_size(4096);
     config.set_decode_cache_size(4096);
+    config.set_mmu_type("sv39"); // sv39 sv48 sv57
 
     let config = Rc::new(config);
 

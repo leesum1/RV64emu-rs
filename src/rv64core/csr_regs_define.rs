@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use bitfield_struct::bitfield;
 use enum_dispatch::enum_dispatch;
@@ -654,7 +653,7 @@ impl Csr for PMPaddr {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy,PartialEq, Eq)]
 pub enum StapMode {
     Bare = 0,
     Sv39 = 8,
@@ -714,23 +713,29 @@ pub struct SatpIn {
     pub mode: StapMode,
 }
 
-impl SatpIn {
-    pub fn unsupport_mod(&self) -> bool {
-        matches!(self.mode(), StapMode::Sv64)
-    }
-}
-
 pub struct Satp {
     inner: RcCell<SatpIn>,
     xstatus: RcCell<XstatusIn>,
+    max_satp_mode: StapMode,
 }
 
 impl Satp {
-    pub fn new(share: RcCell<SatpIn>, xstatus_share: RcCell<XstatusIn>) -> Self {
+    pub fn new(
+        share: RcCell<SatpIn>,
+        xstatus_share: RcCell<XstatusIn>,
+        max_mode: StapMode,
+    ) -> Self {
         Satp {
             inner: share,
             xstatus: xstatus_share,
+            max_satp_mode: max_mode,
         }
+    }
+}
+
+impl Satp {
+    fn unsupport_mod(&self, new_mode: StapMode) -> bool {
+        new_mode as usize > self.max_satp_mode as usize
     }
 }
 
@@ -739,7 +744,7 @@ impl Csr for Satp {
         let new_val = SatpIn::from(data);
 
         let mut stap = self.inner.get();
-        if !new_val.unsupport_mod() {
+        if !self.unsupport_mod(new_val.mode()) {
             stap.set_mode(new_val.mode());
         }
         stap.set_asid(new_val.asid());
