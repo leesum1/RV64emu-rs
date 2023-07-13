@@ -3,7 +3,7 @@ use std::{fs, path::Path, rc::Rc};
 
 use log::LevelFilter;
 use rv64emu::{
-    config::{self, Config},
+    config::{Config},
     device::device_memory::DeviceMemory,
     rvsim::RVsim,
     tools::RcRefCell,
@@ -33,6 +33,8 @@ fn start_test(img: &str) -> bool {
     config.set_tlb_size(256);
     config.set_icache_size(4096);
     config.set_decode_cache_size(4096);
+    config.set_isa("rv64ima");
+    config.set_mmu_type("sv39");
 
     let config = Rc::new(config);
 
@@ -64,7 +66,7 @@ fn start_test(img: &str) -> bool {
 fn test_once() {
     let img = get_riscv_tests_path().join("rv64si-p-dirty");
     let ret = start_test(img.to_str().unwrap());
-    assert_eq!(ret, true);
+    assert!(ret);
 }
 
 struct TestRet {

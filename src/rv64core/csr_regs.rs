@@ -47,12 +47,15 @@ impl CsrRegs {
     pub fn new(hart_id: usize, config: Rc<Config>) -> Self {
         let mut misa_val = Misa::new().with_i(true).with_s(true).with_mxl(2); // 64
 
-        #[cfg(feature = "rv_m")]
-        misa_val.set_m(true);
-        #[cfg(feature = "rv_a")]
-        misa_val.set_a(true);
-        #[cfg(feature = "rv_c")]
-        misa_val.set_c(true);
+        if config.is_enable_isa(b'm') {
+            misa_val.set_m(true);
+        }
+        if config.is_enable_isa(b'a') {
+            misa_val.set_a(true);
+        }
+        if config.is_enable_isa(b'c') {
+            misa_val.set_c(true);
+        }
 
         let mstatus_val = XstatusIn::new()
             .with_uxl(misa_val.mxl())

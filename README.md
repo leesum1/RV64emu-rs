@@ -43,9 +43,7 @@ The simplest example of using rv64emu as a crate.You can find it in `examples` d
 |support_am|support AM environment, use ebread to terminate emulation|[AM github](https://github.com/NJU-ProjectN/abstract-machine) [AM pdf](https://oscpu.github.io/ysyx/events/2021-07-13_AM_Difftest/AM%E8%A3%B8%E6%9C%BA%E8%BF%90%E8%A1%8C%E6%97%B6%E7%8E%AF%E5%A2%83.pdf)|
 |caches|support caches,including inst_cache and decode_cache||
 |rv_debug_trace|support debug trace,including itrace and ftrace|the log file is in /tmp|
-|rv_c|support rv_c extension||
-|rv_m|support rv_m extension||
-|rv_a|support rv_a extension||
+
 
 
 # Run

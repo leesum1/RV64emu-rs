@@ -2,7 +2,7 @@ use core::cell::Cell;
 
 use alloc::rc::Rc;
 use hashlink::LruCache;
-use log::{info, debug};
+use log::{info};
 
 use crate::{
     config::Config,

@@ -44,6 +44,9 @@ use crate::{
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(long, value_name = "String")]
+    /// ISA, default:rv64imac
+    isa: Option<String>,
     #[arg(long, value_name = "FILE")]
     /// IMG bin copy to ram
     img: Option<String>,
@@ -191,7 +194,7 @@ fn main() {
     config.set_icache_size(4096);
     config.set_decode_cache_size(4096);
     config.set_mmu_type("sv39"); // sv39 sv48 sv57
-
+    config.set_isa(args.isa.as_deref().unwrap_or("rv64imac"));
     let config = Rc::new(config);
 
     let mut hart_vec = Vec::new();

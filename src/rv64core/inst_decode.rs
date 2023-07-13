@@ -2,11 +2,8 @@ use alloc::{rc::Rc, vec::Vec};
 use hashlink::LruCache;
 use log::info;
 
-#[cfg(feature = "rv_a")]
 use crate::rv64core::inst::inst_rv64a::INSTRUCTIONS_A;
-#[cfg(feature = "rv_c")]
 use crate::rv64core::inst::inst_rv64c::INSTRUCTIONS_C;
-#[cfg(feature = "rv_m")]
 use crate::rv64core::inst::inst_rv64m::INSTRUCTIONS_M;
 
 use crate::{
@@ -31,12 +28,16 @@ impl InstDecode {
         let mut i_vec = Vec::new();
         i_vec.extend(INSTRUCTIONS_I);
         i_vec.extend(INSTRUCTIONS_Z);
-        #[cfg(feature = "rv_m")]
-        i_vec.extend(INSTRUCTIONS_M);
-        #[cfg(feature = "rv_a")]
-        i_vec.extend(INSTRUCTIONS_A);
-        #[cfg(feature = "rv_c")]
-        i_vec.extend(INSTRUCTIONS_C);
+
+        if config.is_enable_isa(b'm') {
+            i_vec.extend(INSTRUCTIONS_M);
+        }
+        if config.is_enable_isa(b'a') {
+            i_vec.extend(INSTRUCTIONS_A);
+        }
+        if config.is_enable_isa(b'c') {
+            i_vec.extend(INSTRUCTIONS_C);
+        }
 
         i_vec.sort_by(|a: &&Instruction, b: &&Instruction| Instruction::inst_cmp(a, b));
 

@@ -69,7 +69,7 @@ impl CpuCoreBuild {
     }
 
     pub fn build(&self) -> CpuCore {
-        let mut csr_regs_u = CsrRegs::new(self.hart_id,self.config.clone());
+        let mut csr_regs_u = CsrRegs::new(self.hart_id, self.config.clone());
         let privi_u = Rc::new(Cell::new(PrivilegeLevels::Machine));
         // some csr regs are shared with other modules
         let xstatus = csr_regs_u.xstatus.clone();
@@ -135,16 +135,8 @@ unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
         if check_aligned(addr, 4) {
-            #[warn(clippy::needless_return)]
-            return self.icahce_read(addr, 4);
-        } else {
-            #[cfg(not(feature = "rv_c"))]
-            #[warn(clippy::needless_return)]
-            return Err(TrapType::LoadAddressMisaligned(addr));
-        }
-
-        #[cfg(feature = "rv_c")]
-        {
+            self.icahce_read(addr, 4)
+        } else if self.config.is_enable_isa(b'c') {
             // Initialize data_bytes to store the bytes read from memory.
             let mut data_bytes = 0_u32.to_le_bytes();
             // Read two bytes at a time from memory and store them in data_bytes.
@@ -161,8 +153,11 @@ impl CpuCore {
                 }
             }
             // Convert data_bytes to a u64 and return it.
-            Ok(u32::from_le_bytes(data_bytes) as u64)
+            return Ok(u32::from_le_bytes(data_bytes) as u64);
+        } else {
+            return Err(TrapType::LoadAddressMisaligned(addr));
         }
+
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;

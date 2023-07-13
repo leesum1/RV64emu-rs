@@ -2,7 +2,7 @@ use super::sv39::{Sv39PA, Sv39PTE, Sv39VA};
 use super::sv48::{Sv48PA, Sv48PTE, Sv48VA};
 use super::sv57::{Sv57PA, Sv57PTE, Sv57VA};
 use enum_dispatch::enum_dispatch;
-use log::debug;
+
 
 #[derive(Copy, Clone, Debug)]
 pub enum PageSize {

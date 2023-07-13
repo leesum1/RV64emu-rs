@@ -1,4 +1,4 @@
-use log::info;
+
 
 use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
 

@@ -46,7 +46,7 @@ pub struct RVsim {
 
 impl RVsim {
     pub fn new(harts: Vec<CpuCore>) -> Self {
-        let time = SystemTime::now();
+        let _time = SystemTime::now();
         let bus = harts[0].mmu.caches.borrow_mut().bus.clone();
         Self {
             harts,

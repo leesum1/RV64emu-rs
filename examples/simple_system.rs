@@ -12,7 +12,7 @@ use rv64emu::{
         cpu_core::CpuCoreBuild,
     },
     rvsim::RVsim,
-    tools::{fifo_unbounded_new, rc_refcell_new},
+    tools::{fifo_unbounded_new, rc_refcell_new}, config::Config,
 };
 
 fn main() {
@@ -23,6 +23,10 @@ fn main() {
         .join("hello.bin");
     println!("Binary file path: {}", bin_path.display());
 
+    let mut config = Config::new();
+    config.set_mmu_type("bare");
+    config.set_isa("rv64im");
+
     // create system bus, which functions are as follows
     // 1. manage all devices,including plic,clint,and sram
     // 2. shared by all harts
@@ -32,7 +36,7 @@ fn main() {
     // 1. the first instruction is executed at 0x8000_0000
     // 2. hart0 id is 0
     // 3. smode is enabled
-    let hart0 = CpuCoreBuild::new(bus_u.clone(), config::Config::new().into())
+    let hart0 = CpuCoreBuild::new(bus_u.clone(), config.into())
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)

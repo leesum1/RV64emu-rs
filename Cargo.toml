@@ -51,7 +51,7 @@ required-features = ["std"]
 
 [features]
 
-default = ["default_isa", "std", "caches"]
+default = ["std", "caches"]
 
 
 device_sdl2 = ["dep:sdl2", "support_am", "std"]
@@ -68,10 +68,7 @@ data_cache = []                                      # actually no performance i
 decode_cache = []
 tlb_cache = []
 
-default_isa = ["rv_c", "rv_m", "rv_a"]
-rv_c = []
-rv_m = []
-rv_a = []
+
 support_am = []
 
 

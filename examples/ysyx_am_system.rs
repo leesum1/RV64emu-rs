@@ -216,6 +216,9 @@ fn main() {
     config.set_tlb_size(256);
     config.set_icache_size(4096);
     config.set_decode_cache_size(4096);
+    config.set_mmu_type("bare");
+    config.set_isa("rv64im");
+
     let config = Rc::new(config);
 
     let mut hart_vec = Vec::new();
