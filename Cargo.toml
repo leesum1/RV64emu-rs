@@ -1,7 +1,18 @@
 [package]
 name = "rv64emu"
+authors = ["leesum <zl123338@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
+
+description = "A riscv64 emulator written in rust,it can run on Linux, Windows and MacOS. Even on the embedded device, such as `ESP32` and `STM32` which support Embeded RUST"
+
+repository = "https://github.com/leesum1/RV64emu-rs"
+documentation = "https://docs.rs/rv64emu"
+readme = "README.md"
+keywords = ["RISC-V", "riscv","emulator","no_std"]
+license = "MIT"
+
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -51,7 +62,7 @@ required-features = ["std"]
 
 [features]
 
-default = ["std", "caches"]
+default = ["std"]
 
 
 device_sdl2 = ["dep:sdl2", "support_am", "std"]
@@ -60,13 +71,6 @@ rv_debug_trace = ["dep:capstone", "dep:crossbeam-channel", "std"]
 
 std = ["alloc"]
 alloc = []
-
-
-caches = ["decode_cache", "tlb_cache", "inst_cache"]
-inst_cache = []
-data_cache = []                                      # actually no performance improvement
-decode_cache = []
-tlb_cache = []
 
 
 support_am = []
