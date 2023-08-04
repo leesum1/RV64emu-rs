@@ -134,6 +134,7 @@ impl RVsim {
     #[cfg(feature = "std")]
     pub fn load_image(&mut self, file_name: &str) {
         let file_data = std::fs::read(file_name).unwrap();
+        info!("load image from file: {}", file_name);
         self._load_elf(&file_data);
     }
     pub fn load_image_from_slice(&mut self, slice: &[u8]) {

@@ -269,9 +269,22 @@ pub enum TvecMode {
     Reserved,
 }
 
+impl TvecMode {
+    const fn into_bits(self) -> u64 {
+        self as u64
+    }
+    const fn from_bits(v: u64) -> Self {
+        match v {
+            0 => Self::Direct,
+            1 => Self::Vectored,
+            _ => Self::Reserved,
+        }
+    }
+}
+
 #[bitfield(u64)]
 pub struct XtvecIn {
-    #[bits(2)]
+    #[bits(2,default = TvecMode::Direct)]
     pub mode: TvecMode,
     #[bits(62)]
     pub base: u64,
@@ -313,26 +326,6 @@ impl Csr for Xtvec {
     }
     fn read_raw(&self) -> u64 {
         self.inner.get().into()
-    }
-}
-
-impl From<u64> for TvecMode {
-    fn from(val: u64) -> Self {
-        match val {
-            0 => TvecMode::Direct,
-            1 => TvecMode::Vectored,
-            _ => TvecMode::Reserved,
-        }
-    }
-}
-
-impl From<TvecMode> for u64 {
-    fn from(val: TvecMode) -> Self {
-        match val {
-            TvecMode::Direct => 0,
-            TvecMode::Vectored => 1,
-            TvecMode::Reserved => todo!(),
-        }
     }
 }
 
@@ -601,17 +594,28 @@ pub struct PMPcfgIn {
     pub l: bool,
 }
 
-impl From<u64> for PMPcfgIn {
-    fn from(value: u64) -> Self {
-        PMPcfgIn::from(value as u8)
+impl PMPcfgIn {
+    const fn into_bits(self) -> u64 {
+        self.0 as u64
+    }
+    const fn from_bits(v: u64) -> Self {
+        let mut new = Self::new();
+        new.0 = v as u8;
+        new
     }
 }
 
-impl From<PMPcfgIn> for u64 {
-    fn from(val: PMPcfgIn) -> Self {
-        val.0 as u64
-    }
-}
+// impl From<u64> for PMPcfgIn {
+//     fn from(value: u64) -> Self {
+//         PMPcfgIn::from(value as u8)
+//     }
+// }
+
+// impl From<PMPcfgIn> for u64 {
+//     fn from(val: PMPcfgIn) -> Self {
+//         val.0 as u64
+//     }
+// }
 pub type PMPcfgShare = RcCell<Box<PMPcfg>>;
 #[bitfield(u64)]
 pub struct PMPcfg {
@@ -653,7 +657,7 @@ impl Csr for PMPaddr {
     }
 }
 
-#[derive(Debug, Clone, Copy,PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StapMode {
     Bare = 0,
     Sv39 = 8,
@@ -682,26 +686,40 @@ impl StapMode {
             StapMode::Sv64 => 8,
         }
     }
-}
 
-impl From<u64> for StapMode {
-    fn from(value: u64) -> Self {
-        match value {
+    const fn into_bits(self) -> u64 {
+        self as u64
+    }
+    const fn from_bits(v: u64) -> Self {
+        match v {
             0 => StapMode::Bare,
             8 => StapMode::Sv39,
             9 => StapMode::Sv48,
             10 => StapMode::Sv57,
             11 => StapMode::Sv64,
-            val => panic!("StapMode:{val}"),
+            _ => panic!("invalid satp mode"),
         }
     }
 }
 
-impl From<StapMode> for u64 {
-    fn from(val: StapMode) -> Self {
-        val as u64
-    }
-}
+// impl From<u64> for StapMode {
+//     fn from(value: u64) -> Self {
+//         match value {
+//             0 => StapMode::Bare,
+//             8 => StapMode::Sv39,
+//             9 => StapMode::Sv48,
+//             10 => StapMode::Sv57,
+//             11 => StapMode::Sv64,
+//             val => panic!("StapMode:{val}"),
+//         }
+//     }
+// }
+
+// impl From<StapMode> for u64 {
+//     fn from(val: StapMode) -> Self {
+//         val as u64
+//     }
+// }
 
 #[bitfield(u64)]
 pub struct SatpIn {

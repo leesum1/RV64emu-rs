@@ -9,7 +9,7 @@ edition = "2021"
 cfg-if = "1.0.0"
 log = "0.4.17"
 hashbrown = "0.14"
-bitfield-struct = "0.3.2"
+bitfield-struct = "0.5.3"
 enum_dispatch = "0.3.11"
 
 # enable no_std support

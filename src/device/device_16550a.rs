@@ -26,7 +26,7 @@ struct Ier {
 // Bits 4 and 5: Logic ‘0’.
 // Bits 6 and 7: Logic ‘1’ for compatibility reason.
 // Reset Value: C1h
-#[bitfield(u8)]
+#[bitfield(u8, default = false)]
 struct Iir {
     pub ip: bool, // Interrupt Pending
     #[bits(3)]
@@ -48,19 +48,19 @@ struct Fcr {
     pub tx_reset: bool,
     #[bits(3)]
     _reserved: u8,
-    #[bits(2)]
+    #[bits(2, default = 0b11)]
     rx_level: u8,
 }
-impl Default for Fcr {
-    fn default() -> Self {
-        Fcr::from(0xC0)
-    }
-}
+// impl Default for Fcr {
+//     fn default() -> Self {
+//         Fcr::from(0xC0)
+//     }
+// }
 
 //Reset Value: 00000011b
 #[bitfield(u8)]
 struct Lcr {
-    #[bits(2)]
+    #[bits(2, default = 0b11)]
     pub character_length: u8,
     pub stop_bit: bool,
     pub parity_enable: bool,
@@ -68,11 +68,6 @@ struct Lcr {
     pub stick_parity: bool,
     pub set_break: bool,
     pub dlab: bool,
-}
-impl Default for Lcr {
-    fn default() -> Self {
-        Lcr::from(0x03)
-    }
 }
 
 #[bitfield(u8)]
