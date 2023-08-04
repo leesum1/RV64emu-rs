@@ -4,7 +4,7 @@ use super::sv57::{Sv57PA, Sv57PTE, Sv57VA};
 use enum_dispatch::enum_dispatch;
 
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PageSize {
     P4K,
     P2M,
@@ -24,13 +24,41 @@ impl PageSize {
             _ => panic!("Invalid page size"),
         }
     }
+    pub fn get_mask(&self) -> u64 {
+        match self {
+            PageSize::P4K => zero_mask(12),
+            PageSize::P2M => zero_mask(21),
+            PageSize::P1G => zero_mask(30),
+
+            _ => panic!("Invalid page size"),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct TLBEntry {
     pub pte: PTEenume,
-    page_size: PageSize,
+    pub page_size: PageSize,
     pub asid: u16,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct TLBKey {
+    pub va: u64,
+    pub asid: u16,
+}
+
+impl core::fmt::Debug for TLBEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "TLBEntry: ppn_all:{:x}, page_size:{:?}, asid:{:?},Global:{:?}",
+            self.pte.ppn_all(),
+            self.page_size,
+            self.asid,
+            self.pte.g()
+        )
+    }
 }
 
 // num: 0~64, the zero number in lsbs
@@ -58,7 +86,7 @@ impl TLBEntry {
         }
     }
 
-    pub fn get_pa(&self, va: VAenume) -> u64 {
+    pub fn get_pa(&self, va: &VAenume) -> u64 {
         // debug!("pagesize:{:?}", self.page_size);
         match self.page_size {
             PageSize::P4K => (self.pte.ppn_all() << 12) | va.offset() as u64,

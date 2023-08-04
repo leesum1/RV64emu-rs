@@ -2,7 +2,7 @@ use core::cell::Cell;
 
 use alloc::rc::Rc;
 use hashlink::LruCache;
-use log::{info};
+use log::{info, trace};
 
 use crate::{
     config::Config,
@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     sv48::{Sv48PA, Sv48PTE, Sv48VA},
-    vm_info::{PAenume, PAops, PTEenume, PTEops, PageSize, TLBEntry, VAenume, VAops},
+    vm_info::{PAenume, PAops, PTEenume, PTEops, PageSize, TLBEntry, TLBKey, VAenume, VAops},
 };
 
 const PAGESIZE: u64 = 4096; // 2 ^ 12
@@ -31,7 +31,7 @@ pub struct Mmu {
     mmu_effective_priv: PrivilegeLevels,
     satp_mode: StapMode,
     config: Rc<Config>,
-    tlb: LruCache<u64, TLBEntry>,
+    tlb: LruCache<TLBKey, TLBEntry>,
     tlb_hit: u64,
     tlb_miss: u64,
     /* tmp val */
@@ -221,28 +221,31 @@ impl Mmu {
     //      + pa.ppn[LEVELS − 1 : i] = pte.ppn[LEVELS − 1 : i].
 
     fn va_translation_step8(&mut self) -> Result<u8, TrapType> {
-        let pgoff = self.va.offset();
+        let asid = self.satp.get().asid() as u16;
+        let page_size = PageSize::from_i(self.i as usize);
 
-        self.pa.set_offset(pgoff);
+        let tlb_key = TLBKey {
+            va: self.va.raw() & page_size.get_mask(),
+            asid,
+        };
+        let entry = TLBEntry::new(self.pte, page_size, asid);
 
-        if self.i > 0 {
-            for idx in 0..self.i as u8 {
-                let va_ppn: u64 = self.va.get_ppn_by_idx(idx);
-                self.pa.set_ppn_by_idx(va_ppn, idx);
-            }
-        }
+        let pa = entry.get_pa(&self.va);
 
-        for idx in self.i..self.level {
-            let idx = idx as u8;
-            let pte_ppn = self.pte.get_ppn_by_idx(idx);
-            self.pa.set_ppn_by_idx(pte_ppn, idx);
-        }
+        self.pa = self.get_paops(pa);
+
+        // debug!("page_size:{:?}", PageSize::from_i(self.i as usize));
 
         if !self.no_tlb() {
-            self.tlb.insert(
-                self.va.raw() & (!0xfff),
-                TLBEntry::new(self.pte, PageSize::from_i(self.i as usize), 0),
-            );
+            self.tlb.insert(tlb_key, entry);
+            // if (self.va.raw() & !(0xfff_u64)) == 0x1b6000 {
+            //     self.debug_tlb();
+            //     println!("ppn:{:x},asid:{:x}", self.va.raw(), asid);
+            // }
+            let res = self.fast_path(self.va.raw()).unwrap();
+            assert_eq!(res.asid, entry.asid);
+            assert_eq!(res.page_size, entry.page_size);
+            assert_eq!(res.pte.raw(), entry.pte.raw());
         }
 
         Ok(1)
@@ -275,6 +278,8 @@ impl Mmu {
         self.va_translation_step7()?;
         self.va_translation_step8()?;
 
+        // debug!("translate: {:x} -> {:x}", self.va.raw(), self.pa.raw());
+
         Ok(self.pa.raw())
     }
 
@@ -300,37 +305,6 @@ impl Mmu {
         machine_mdoe || satp_bare_mode
     }
 
-    pub fn do_read(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {
-        //check whether the address is aligned
-        if !check_aligned(addr, len) {
-            return Err(self.access_type.throw_addr_misaligned_exception());
-        }
-        // no mmu
-        //if the machine is without mmu,then we need not do page table walk,just return the physical address
-        if self.no_mmu() {
-            return self
-                .caches
-                .borrow_mut()
-                .dcache
-                .read(addr, len)
-                .map_or(Err(self.access_type.throw_access_exception()), Ok);
-        }
-        // has mmu,
-        // update the virtual address and physical address
-        self.va = self.get_vaops(addr);
-        self.pa = self.get_paops(0);
-
-        //do page table walk
-        self.page_table_walk()?; // err return
-
-        //read the data from the physical address
-        self.caches
-            .borrow_mut()
-            .dcache
-            .read(self.pa.raw(), len)
-            .map_or(Err(self.access_type.throw_access_exception()), Ok)
-    }
-
     pub fn translate(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {
         if !check_aligned(addr, len) {
             return Err(self.access_type.throw_addr_misaligned_exception());
@@ -341,7 +315,7 @@ impl Mmu {
 
         if !self.no_tlb() {
             // todo! refactor!!!!!!!!!!!!!
-            if let Some(tlb_entry) = self.fast_path(addr & (!0xfff)) {
+            if let Some(tlb_entry) = self.fast_path(addr) {
                 self.pte = tlb_entry.pte;
 
                 // 1. If accessing pte violates a PMA or PMP check, raise an access-fault exception corresponding to the original access type.
@@ -356,6 +330,8 @@ impl Mmu {
                 // pte.r, pte.w, pte.x, and pte.u bits, given the current privilege mode and the value of the
                 // SUM and MXR fields of the mstatus register. If not, stop and raise a page-fault exception
                 // corresponding to the original access type.
+
+                let sum_bit = self.check_sum_bit();
                 match self.access_type {
                     AccessType::Fetch(_) if !self.pte.x() => {
                         return Err(self.access_type.throw_page_exception());
@@ -365,13 +341,11 @@ impl Mmu {
                     // MXR has no effect when page-based virtual memory is not in effect.
                     AccessType::Load(_)
                         if !(self.pte.r() || self.pte.x() & self.mstatus.get().mxr())
-                            || !self.check_sum_bit() =>
+                            || !sum_bit =>
                     {
                         return Err(self.access_type.throw_page_exception());
                     }
-                    AccessType::Store(_) | AccessType::Amo(_)
-                        if !self.pte.w() || !self.check_sum_bit() =>
-                    {
+                    AccessType::Store(_) | AccessType::Amo(_) if !self.pte.w() || !sum_bit => {
                         return Err(self.access_type.throw_page_exception());
                     }
                     _ => {}
@@ -381,7 +355,7 @@ impl Mmu {
                 if !self.pte.a() || ((!self.pte.d()) && self.access_type.is_store()) {
                     return Err(self.access_type.throw_page_exception());
                 }
-                let pa = tlb_entry.get_pa(self.get_vaops(addr));
+                let pa = tlb_entry.get_pa(&self.get_vaops(addr));
                 // debug!("translate: {:x} -> {:x}", addr, pa);
                 return Ok(pa);
             }
@@ -392,7 +366,6 @@ impl Mmu {
         self.pa = self.get_paops(0);
         self.page_table_walk()
     }
-
 
     pub fn update_access_type(&mut self, access_type: &AccessType) {
         self.access_type = access_type.clone();
@@ -428,14 +401,38 @@ impl Mmu {
     }
 
     pub fn fast_path(&mut self, va: u64) -> Option<TLBEntry> {
-        // self.hash_get(inst_i).copied()
-        let ret = self.tlb.get(&va).copied();
-        if ret.is_some() {
-            self.tlb_hit += 1;
-        } else {
-            self.tlb_miss += 1;
+        // println!("fast_path: {:x}", va);
+        // Compute the masks only once
+        let asid = self.satp.get().asid() as u16;
+        let va_p2m = va & PageSize::P2M.get_mask();
+        // Check for P2M page size
+        if let Some(entry) = self.tlb.get(&TLBKey { va: va_p2m, asid }).copied() {
+            if entry.page_size == PageSize::P2M {
+                self.tlb_hit += 1;
+                return Some(entry);
+            }
         }
-        ret
+        let va_p4k = va & PageSize::P4K.get_mask();
+
+        // Check for P4K page size
+        if let Some(entry) = self.tlb.get(&TLBKey { va: va_p4k, asid }).copied() {
+            if entry.page_size == PageSize::P4K {
+                self.tlb_hit += 1;
+                return Some(entry);
+            }
+        }
+
+        let va_p1g = va & PageSize::P1G.get_mask();
+        // Check for P1G page size
+        if let Some(entry) = self.tlb.get(&TLBKey { va: va_p1g, asid }).copied() {
+            if entry.page_size == PageSize::P1G {
+                self.tlb_hit += 1;
+                return Some(entry);
+            }
+        }
+
+        self.tlb_miss += 1;
+        None
     }
 
     pub fn show_perf(&self) {
@@ -447,5 +444,72 @@ impl Mmu {
     }
     pub fn clear_tlb(&mut self) {
         self.tlb.clear();
+    }
+
+    // fn debug_tlb(&self) {
+    //     self.tlb
+    //         .iter()
+    //         .for_each(|item| println!("key:{:x},value:{:?}", item.0, item.1));
+    //     println!("------------------");
+    // }
+
+    fn fence_vma_trace_log(&self, tlb_entryl: Option<TLBEntry>) {
+        if let Some(tlb_entry) = tlb_entryl {
+            trace!("fence_vma : {:?}", tlb_entry);
+        }else {
+            trace!("fence_vma : None");
+        }
+    }
+
+    pub fn fence_vma(&mut self, va: u64, asid: u16) {
+        // self.debug_tlb();
+
+
+        match (va, asid) {
+            (0, 0) => {
+                self.clear_tlb();
+            }
+            (0, asid) => {
+                let key_list = self
+                    .tlb
+                    .iter()
+                    .filter(|tlb_item| (tlb_item.1.asid == asid) && !tlb_item.1.pte.g())
+                    .map(|(key, _val)| *key)
+                    .collect::<Vec<_>>();
+
+                key_list.iter().for_each(|tlb_key| {
+                    let res = self.tlb.remove(tlb_key);
+                    self.fence_vma_trace_log(res);
+                });
+            }
+            (va, 0) => {
+                let tlb_key = self
+                    .tlb
+                    .iter()
+                    .find(|tlb_item| (tlb_item.0.va == tlb_item.1.page_size.get_mask() & va))
+                    .map(|(key, _val)| *key);
+
+                if let Some(tlb_key) = tlb_key {
+                    let res = self.tlb.remove(&tlb_key);
+                    self.fence_vma_trace_log(res);
+                }
+            }
+            (va, asid) => {
+                let tlb_key = self
+                    .tlb
+                    .iter()
+                    .find(|tlb_item| {
+                        (tlb_item.0.asid == asid)
+                            && (tlb_item.0.va == tlb_item.1.page_size.get_mask() & va)
+                            && (!tlb_item.1.pte.g())
+                    })
+                    .map(|(key, _val)| *key);
+
+                if let Some(tlb_key) = tlb_key {
+                    let res = self.tlb.remove(&tlb_key);
+                    self.fence_vma_trace_log(res);
+                }
+            }
+        }
     }
 }

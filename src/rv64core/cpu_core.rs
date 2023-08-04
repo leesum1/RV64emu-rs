@@ -386,16 +386,11 @@ impl CpuCore {
         access_type: AccessType,
     ) -> Result<u64, TrapType> {
         self.mmu.update_access_type(&access_type);
-
-        #[cfg(feature = "data_cache")]
         let paddr = self.mmu.translate(addr, len)?;
-        #[cfg(feature = "data_cache")]
         match self.cache_system.borrow_mut().dcache.read(paddr, len) {
             Ok(data) => Ok(data),
             Err(_err) => Err(access_type.throw_access_exception()),
         }
-        #[cfg(not(feature = "data_cache"))]
-        self.mmu.do_read(addr, len)
     }
 
     pub fn icahce_read(&mut self, addr: u64, len: usize) -> Result<u64, TrapType> {

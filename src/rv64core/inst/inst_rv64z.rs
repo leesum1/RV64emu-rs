@@ -128,7 +128,6 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         name: "FENCE_I",
         operation: |cpu, inst, pc| {
             cpu.cache_system.borrow_mut().clear();
-            cpu.mmu.clear_tlb();
             Ok(())
         },
     },
@@ -140,6 +139,10 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // if (cur_priv < S_MODE || (cur_priv == S_MODE && mstatus->tvm))
             // return false;
             // require_privilege(get_field(STATE.mstatus->read(), MSTATUS_TVM) ? PRV_M : PRV_S);
+
+            let f = parse_format_r(inst);
+            let rs1_data = cpu.gpr.read(f.rs1);
+            let rs2_data = cpu.gpr.read(f.rs2);
 
             let mstatus = cpu.csr_regs.xstatus.get();
             let cur_priv = cpu.cur_priv.get();
@@ -155,10 +158,8 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             if !require_priv.check_priv(cur_priv) {
                 Err(TrapType::IllegalInstruction(inst.into()))
             } else {
-                // PASS icache-alias.S
-                // info!("SFENCE_VMA");
-                cpu.cache_system.borrow_mut().clear();
-                cpu.mmu.clear_tlb();
+                // info!("SFENCE_VMA:rs1_data:{:x},rs2_data:{:x}", rs1_data, rs2_data);
+                cpu.mmu.fence_vma(rs1_data, rs2_data as u16);
                 Ok(())
             }
         },
