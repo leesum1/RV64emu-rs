@@ -3,7 +3,6 @@ use super::sv48::{Sv48PA, Sv48PTE, Sv48VA};
 use super::sv57::{Sv57PA, Sv57PTE, Sv57VA};
 use enum_dispatch::enum_dispatch;
 
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PageSize {
     P4K,
@@ -14,7 +13,7 @@ pub enum PageSize {
     InValid,
 }
 impl PageSize {
-    pub fn from_i(val: usize) -> Self {
+    pub const fn from_i(val: usize) -> Self {
         match val {
             0 => PageSize::P4K,
             1 => PageSize::P2M,
@@ -24,7 +23,7 @@ impl PageSize {
             _ => panic!("Invalid page size"),
         }
     }
-    pub fn get_mask(&self) -> u64 {
+    pub const fn get_mask(&self) -> u64 {
         match self {
             PageSize::P4K => zero_mask(12),
             PageSize::P2M => zero_mask(21),
@@ -62,7 +61,7 @@ impl core::fmt::Debug for TLBEntry {
 }
 
 // num: 0~64, the zero number in lsbs
-fn zero_mask(num: usize) -> u64 {
+const fn zero_mask(num: usize) -> u64 {
     if num == 64 {
         return 0;
     }
