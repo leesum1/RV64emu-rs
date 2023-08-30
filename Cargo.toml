@@ -13,6 +13,13 @@ keywords = ["RISC-V", "riscv","emulator","no_std"]
 license = "MIT"
 
 
+exclude = [
+    "ready_to_run/*",
+    "tests/*",
+    "doc/*",
+]
+
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
