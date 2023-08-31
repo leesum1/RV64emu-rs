@@ -1,7 +1,7 @@
 [package]
 name = "rv64emu"
 authors = ["leesum <zl123338@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 description = "A riscv64 emulator written in rust,it can run on Linux, Windows and MacOS. Even on the embedded device, such as `ESP32` and `STM32` which support Embeded RUST"

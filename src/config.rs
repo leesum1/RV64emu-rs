@@ -53,7 +53,7 @@ impl Config {
             err => panic!("mmu type err:{err}"),
         }
     }
-
+    // TODO: parse isa string
     pub fn set_isa(&mut self, isa_str: &str) {
         let isa_str = isa_str.to_ascii_lowercase();
         info!("isa_str:{:?}", isa_str);

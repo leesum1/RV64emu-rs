@@ -1,6 +1,6 @@
 use core::cell::Cell;
 
-use alloc::rc::Rc;
+use alloc::{rc::Rc, vec::Vec};
 use hashlink::LruCache;
 use log::{info, trace};
 

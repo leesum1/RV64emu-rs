@@ -1,12 +1,12 @@
 use core::ops;
 
-use std::time::SystemTime;
 #[cfg(feature = "std")]
 use std::{fs::File, io::Write};
 
 use alloc::{
+    rc::Rc,
     string::{String, ToString},
-    vec::Vec, rc::Rc,
+    vec::Vec,
 };
 use elf::{
     abi::{EM_RISCV, PT_LOAD},
@@ -38,15 +38,14 @@ pub struct RVsim {
     harts: Vec<CpuCore>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
-    // system time
-    // time: Option<SystemTime>,
+
     // Config
     config: Rc<Config>,
 }
 
 impl RVsim {
     pub fn new(harts: Vec<CpuCore>) -> Self {
-        let _time = SystemTime::now();
+
         let bus = harts[0].mmu.caches.borrow_mut().bus.clone();
         Self {
             harts,
@@ -99,7 +98,7 @@ impl RVsim {
             self.get_symbol_values();
         }
     }
-    fn _load_elf(&mut self, slice: &[u8]) {
+    fn _load_elf(&mut self, slice: &[u8], collect_symbol: bool) {
         let elf_data = elf::ElfBytes::<AnyEndian>::minimal_parse(slice);
         if let Ok(elf_data) = elf_data {
             let ehdr: elf::file::FileHeader<AnyEndian> = elf_data.ehdr;
@@ -121,7 +120,9 @@ impl RVsim {
             info!("Elf file match,elf load success");
 
             // Collect elf symbols into self.elf_symbols(hashmap)
-            self.collect_elf_symbols(&elf_data);
+            if collect_symbol {
+                self.collect_elf_symbols(&elf_data);
+            }
         } else {
             let boot_pc = self.harts.get(0).unwrap().pc;
             let mut bus = self.bus.borrow_mut();
@@ -135,10 +136,10 @@ impl RVsim {
     pub fn load_image(&mut self, file_name: &str) {
         let file_data = std::fs::read(file_name).unwrap();
         info!("load image from file: {}", file_name);
-        self._load_elf(&file_data);
+        self._load_elf(&file_data, true);
     }
     pub fn load_image_from_slice(&mut self, slice: &[u8]) {
-        self._load_elf(slice);
+        self._load_elf(slice, false);
     }
 
     pub fn prepare_to_run(&mut self) {
@@ -162,12 +163,9 @@ impl RVsim {
     }
     // true: exit, false: abort
     pub fn is_finish(&self) -> bool {
-        // let time_finish = self.time.as_ref().unwrap().elapsed().unwrap().as_secs() > 20;
-
         self.harts
             .iter()
             .any(|hart| hart.cpu_state != CpuState::Running)
-            // || time_finish
     }
 
     pub fn is_exit_normal(&self) -> bool {
