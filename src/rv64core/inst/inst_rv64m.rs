@@ -108,7 +108,6 @@ pub const INSTRUCTIONS_M: &[Instruction] = &[
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
 
-
             let wb_data = match rs2 {
                 0 => -1,
                 _ => (rs1.wrapping_div(rs2)) as i64,
@@ -149,7 +148,6 @@ pub const INSTRUCTIONS_M: &[Instruction] = &[
             let f = parse_format_r(inst);
             let rs1 = cpu.gpr.read(f.rs1);
             let rs2 = cpu.gpr.read(f.rs2);
-
 
             let wb_data = match rs2 {
                 0 => rs1 as i64,
@@ -207,7 +205,6 @@ pub const INSTRUCTIONS_M: &[Instruction] = &[
             let f = parse_format_r(inst);
             let rs1 = cpu.gpr.read(f.rs1) as u32;
             let rs2 = cpu.gpr.read(f.rs2) as u32;
-
 
             let wb_data = match rs2 {
                 0 => -1,

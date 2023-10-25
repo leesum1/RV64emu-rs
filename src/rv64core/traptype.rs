@@ -1,6 +1,5 @@
 use core::fmt;
 
-
 const INTERRUPT_BIT: u64 = 0x8000000000000000_u64;
 
 #[repr(u64)]
@@ -115,6 +114,7 @@ impl TrapType {
             | TrapType::StoreAddressMisaligned(val)
             | TrapType::InstructionAccessFault(val)
             | TrapType::InstructionPageFault(val)
+            | TrapType::InstructionAddressMisaligned(val)
             | TrapType::Breakpoint(val)
             | TrapType::IllegalInstruction(val) => *val,
             _ => 0,

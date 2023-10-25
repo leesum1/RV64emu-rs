@@ -63,7 +63,7 @@ impl CsrRegs {
             misa_val.set_u(true);
         }
 
-        let mut mstatus_val = XstatusIn::new();
+        let mut mstatus_val = XstatusIn::new().with_mpp(PrivilegeLevels::Machine as u8);
 
         mstatus_val.set_mbe(false);
         mstatus_val.set_sbe(false);
