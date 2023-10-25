@@ -195,6 +195,7 @@ fn main() {
     config.set_decode_cache_size(4096);
     config.set_mmu_type("sv39"); // sv39 sv48 sv57
     config.set_isa(args.isa.as_deref().unwrap_or("rv64imac"));
+    config.set_s_mode();
     let config = Rc::new(config);
 
     let mut hart_vec = Vec::new();

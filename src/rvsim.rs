@@ -35,7 +35,7 @@ pub struct RVsim {
     signature_range: Option<ops::Range<u64>>,
     signature_file: Option<String>,
     bus: RcRefCell<Bus>,
-    harts: Vec<CpuCore>,
+    pub harts: Vec<CpuCore>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
 
@@ -161,6 +161,18 @@ impl RVsim {
         #[cfg(feature = "std")]
         self.check_to_host();
     }
+
+    pub fn step(&mut self) {
+        self.harts.iter_mut().for_each(|hart| {
+            hart.execute(1);
+        });
+        let mut bus = self.bus.borrow_mut();
+        bus.update();
+        bus.clint.instance.tick(1);
+        bus.plic.instance.tick();
+        drop(bus);
+    }
+
     // true: exit, false: abort
     pub fn is_finish(&self) -> bool {
         self.harts

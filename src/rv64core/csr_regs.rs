@@ -45,7 +45,7 @@ pub struct CsrRegs {
 
 impl CsrRegs {
     pub fn new(hart_id: usize, config: Rc<Config>) -> Self {
-        let mut misa_val = Misa::new().with_i(true).with_s(true).with_mxl(2); // 64
+        let mut misa_val = Misa::new().with_i(true).with_mxl(2); // 64
 
         if config.is_enable_isa(b'm') {
             misa_val.set_m(true);
@@ -56,24 +56,71 @@ impl CsrRegs {
         if config.is_enable_isa(b'c') {
             misa_val.set_c(true);
         }
+        if config.s_mode() {
+            misa_val.set_s(true);
+        }
+        if config.u_mode() {
+            misa_val.set_u(true);
+        }
 
-        let mstatus_val = XstatusIn::new()
-            .with_uxl(misa_val.mxl())
-            .with_sxl(misa_val.mxl());
+        let mut mstatus_val = XstatusIn::new();
 
-        let sstatus_wmask = XstatusIn::new()
-            .with_spp(true)
-            .with_sie(true)
-            .with_spie(true)
-            .with_ube(true)
-            .with_vs(0b11)
-            .with_fs(0b11)
-            .with_xs(0b11)
-            .with_sum(true)
-            .with_mxr(true)
-            .with_sd(true);
+        mstatus_val.set_mbe(false);
+        mstatus_val.set_sbe(false);
+        mstatus_val.set_ube(false);
+        if config.s_mode() {
+            mstatus_val.set_sxl(misa_val.mxl())
+        }
+        if config.u_mode() {
+            mstatus_val.set_uxl(misa_val.mxl());
+            mstatus_val.set_mprv(false);
+        }
 
-        let mstatus_wmask = XstatusIn::from(u64::MAX).with_uxl(0);
+        let mut mstatus_rmask = XstatusIn::new();
+
+        // only support little endian
+        mstatus_rmask.set_sbe(true);
+        mstatus_rmask.set_mbe(true);
+        mstatus_rmask.set_ube(true);
+
+        if !config.s_mode() {
+            mstatus_rmask.set_mxr(true);
+            mstatus_rmask.set_sum(true);
+            mstatus_rmask.set_tvm(true);
+            mstatus_rmask.set_tsr(true);
+        }
+
+        if !config.u_mode() {
+            mstatus_rmask.set_mprv(true);
+        }
+
+        if !config.u_mode() && !config.s_mode() {
+            mstatus_rmask.set_tw(true);
+        }
+        if !config.is_enable_isa(b'f') {
+            mstatus_rmask.set_fs(0b11);
+            mstatus_rmask.set_vs(0b11);
+            mstatus_rmask.set_xs(0b11);
+            mstatus_rmask.set_sd(true);
+        }
+
+        let mstatus_rmask = !u64::from(mstatus_rmask);
+
+        let sstatus_wmask = u64::from(
+            XstatusIn::new()
+                .with_spp(true)
+                .with_sie(true)
+                .with_spie(true)
+                .with_ube(true)
+                .with_vs(0b11)
+                .with_fs(0b11)
+                .with_xs(0b11)
+                .with_sum(true)
+                .with_mxr(true)
+                .with_sd(true),
+        ) & mstatus_rmask;
+
+        let mstatus_wmask = XstatusIn::from(mstatus_rmask).with_uxl(0).with_sxl(0);
 
         // read only
         let misa = misa_val;
@@ -83,8 +130,8 @@ impl CsrRegs {
         let mimpid = CommonCSR::new_noshare(0);
         // important csrs
         let xstatus_share = RcCell::new(mstatus_val.into());
-        let mstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, mstatus_wmask.into());
-        let sstatus = Xstatus::new(xstatus_share.clone(), MASK_ALL, sstatus_wmask.into());
+        let mstatus = Xstatus::new(xstatus_share.clone(), mstatus_rmask, mstatus_wmask.into());
+        let sstatus = Xstatus::new(xstatus_share.clone(), mstatus_rmask, sstatus_wmask);
 
         let sip_mask = XieIn::new().with_seie(true).with_ssie(true).with_stie(true);
 

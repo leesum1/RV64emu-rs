@@ -3,7 +3,7 @@ use std::{fs, path::Path, rc::Rc};
 
 use log::LevelFilter;
 use rv64emu::{
-    config::{Config},
+    config::Config,
     device::device_memory::DeviceMemory,
     rvsim::RVsim,
     tools::RcRefCell,
@@ -35,6 +35,7 @@ fn start_test(img: &str) -> bool {
     config.set_decode_cache_size(4096);
     config.set_isa("rv64ima");
     config.set_mmu_type("sv39");
+    config.set_s_mode();
 
     let config = Rc::new(config);
 
@@ -64,7 +65,7 @@ fn start_test(img: &str) -> bool {
 
 #[test]
 fn test_once() {
-    let img = get_riscv_tests_path().join("rv64si-p-dirty");
+    let img = get_riscv_tests_path().join("rv64mi-p-csr");
     let ret = start_test(img.to_str().unwrap());
     assert!(ret);
 }
@@ -78,12 +79,8 @@ struct TestRet {
 fn run_arch_tests() {
     // not support misaligned load/store, so skip these tests
 
-    let sikp_files = vec![
-        "rv64ui-p-ma_data",
-        "rv64ui-v-ma_data",
-        // "rv64uc-p-rvc", // tohost is 0x8000_3000
-        // "rv64uc-v-rvc.bin",
-    ];
+    let sikp_files = ["rv64ui-p-ma_data",
+        "rv64ui-v-ma_data"];
     simple_logger::SimpleLogger::new()
         .with_level(LevelFilter::Debug)
         .init()

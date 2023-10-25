@@ -10,6 +10,8 @@ pub struct Config {
     decode_cache_size: Option<usize>,
     tlb_size: Option<usize>,
     mmu_type: StapMode,
+    s_mode: bool,
+    u_mode: bool,
     isa_falgs: u32,
 }
 
@@ -22,6 +24,8 @@ impl Default for Config {
             tlb_size: Default::default(),
             mmu_type: StapMode::Bare,
             isa_falgs: 0,
+            s_mode: false,
+            u_mode: false,
         }
     }
 }
@@ -30,6 +34,14 @@ impl Config {
     pub fn new() -> Self {
         Default::default()
     }
+    pub fn set_s_mode(&mut self) {
+        self.s_mode = true;
+        self.u_mode = true;
+    }
+    pub fn set_u_mode(&mut self) {
+        self.u_mode = true;
+    }
+
     pub fn set_icache_size(&mut self, size: usize) {
         self.icache_size = Some(size);
     }
@@ -91,6 +103,13 @@ impl Config {
     }
     pub fn tlb_size(&self) -> Option<usize> {
         self.tlb_size
+    }
+
+    pub fn s_mode(&self) -> bool {
+        self.s_mode
+    }
+    pub fn u_mode(&self) -> bool {
+        self.u_mode
     }
 }
 

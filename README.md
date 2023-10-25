@@ -79,6 +79,8 @@ cargo run --release --example=linux_system -- --img ready_to_run/linux.elf
 # Test
 **test with `riscv-tests`**
 
+Soupport running `riscv-tests` in rv64emu out of the box.
+There are prebuilt `riscv-tests` in `ready_to_run` directory. You can run it with the following command:
 ```bash
 cargo riscv-tests
 ```

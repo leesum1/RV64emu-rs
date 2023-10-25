@@ -9,9 +9,7 @@ use crate::{
         device_sifive_plic::{DevicePlic, SifvePlic},
         device_trait::DeviceBase,
     },
-    rv64core::inst::{
-        inst_rv64a::LrScReservation,
-    },
+    rv64core::inst::inst_rv64a::LrScReservation,
 };
 
 use super::inst::inst_base::RVerr;

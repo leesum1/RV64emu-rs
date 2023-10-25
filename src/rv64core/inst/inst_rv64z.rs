@@ -44,7 +44,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             let mut mstatus = cpu.csr_regs.xstatus.get();
 
             // supposing xPP holds the value y
-            let y = mstatus.get_mpp_priv();
+            let y: PrivilegeLevels = mstatus.get_mpp_priv();
             // xIE is set to xPIE
             mstatus.set_mie(mstatus.mpie());
             // the privilege mode is changed to xPP
@@ -53,7 +53,13 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             mstatus.set_mpie(true);
             // xPP is set to the least-privileged supported mode
             // (U if U-mode is implemented, else M).
-            mstatus.set_mpp(PrivilegeLevels::User as u8);
+            mstatus.set_mpp(
+                if cpu.config.u_mode() {
+                    PrivilegeLevels::User as u8
+                } else {
+                    PrivilegeLevels::Machine as u8
+                }
+            );
             // (If xPP̸=M, x RET also sets MPRV=0.) Clarify => (If y!=M, x RET also sets MPRV=0.)
             // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
             if y != PrivilegeLevels::Machine {
@@ -190,9 +196,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // warn!("CSRRC:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             };
             cpu.gpr.write(f.rd, t);
 
@@ -218,9 +222,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
 
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             }
 
             cpu.gpr.write(f.rd, t);
@@ -248,9 +250,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // warn!("CSRRW_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             }
             cpu.gpr.write(f.rd, t);
 
@@ -278,9 +278,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // warn!("CSRRCI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             }
             cpu.gpr.write(f.rd, t);
 
@@ -306,9 +304,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // warn!("CSRRSI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             }
             cpu.gpr.write(f.rd, t);
 
@@ -335,9 +331,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             // warn!("CSRRWI_now:{csr_wb_data:x}");
             if t != csr_wb_data {
                 let csr_ret = cpu.csr_regs.write(f.csr, csr_wb_data, cpu.cur_priv.get());
-                if let Err(trap_type) = csr_ret {
-                    return Err(trap_type);
-                };
+                csr_ret?;
             }
             cpu.gpr.write(f.rd, t);
 

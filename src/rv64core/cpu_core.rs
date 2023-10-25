@@ -157,7 +157,6 @@ impl CpuCore {
         } else {
             return Err(TrapType::LoadAddressMisaligned(addr));
         }
-
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
         self.pc = self.npc;
@@ -449,18 +448,6 @@ impl CpuCore {
 }
 
 impl Difftest for CpuCore {
-    fn set_regs(&mut self, regs: &[u64; 32]) {
-        for idx in 0..32 {
-            self.gpr.write(idx, regs[idx as usize]);
-        }
-    }
-    fn get_regs(&mut self) -> [u64; 32] {
-        let mut regs = [0u64; 32];
-        for idx in 0..32 {
-            regs[idx as usize] = self.gpr.read(idx);
-        }
-        regs
-    }
     fn set_csr(&mut self, csr: u64, val: u64) {
         self.csr_regs.write_raw(csr, val);
     }
@@ -470,7 +457,7 @@ impl Difftest for CpuCore {
     fn set_mem(&mut self, paddr: u64, data: u64, len: usize) {
         let _ret = self.mmu.caches.borrow_mut().dcache.write(paddr, data, len);
     }
-    fn get_mem(&mut self, paddr: u64, len: usize) -> u64 {
+    fn get_mem(&self, paddr: u64, len: usize) -> u64 {
         self.mmu
             .caches
             .borrow_mut()
@@ -478,8 +465,8 @@ impl Difftest for CpuCore {
             .read(paddr, len)
             .map_or(0, |x| x)
     }
-    fn get_pc(&mut self) -> u64 {
-        self.npc
+    fn get_pc(&self) -> u64 {
+        self.pc
     }
     fn set_pc(&mut self, pc: u64) {
         self.npc = pc;
@@ -489,5 +476,15 @@ impl Difftest for CpuCore {
         xip.set_irq(irq_num as usize);
         self.csr_regs.xip.set(xip);
         self.handle_interrupt();
+    }
+
+    fn set_reg(&mut self, idx: usize, val: u64) {
+        assert!(idx < 32, "idx must be less than 32");
+        self.gpr.write(idx as u64, val)
+    }
+
+    fn get_reg(&self, idx: usize) -> u64 {
+        assert!(idx < 32, "idx must be less than 32");
+        self.gpr.read(idx as u64)
     }
 }
