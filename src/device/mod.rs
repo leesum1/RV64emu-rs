@@ -6,9 +6,6 @@ pub mod device_sifive_plic;
 pub mod device_sifive_uart;
 pub mod device_trait;
 
-
-
-
 #[cfg(feature = "std")]
 pub mod device_am_rtc;
 cfg_if::cfg_if! {

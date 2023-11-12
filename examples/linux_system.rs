@@ -27,11 +27,9 @@ use std::{
     io::{stdin, Write},
 };
 
-use log::{debug, info, LevelFilter};
+use log::{ info, LevelFilter};
 use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
-#[cfg(feature = "rv_debug_trace")]
-use crate::rv64emu::trace::traces::Traces;
 use crate::{
     rv64emu::device::{
         device_memory::DeviceMemory, device_sifive_plic::SIFIVE_UART_IRQ,
@@ -44,9 +42,6 @@ use crate::{
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, value_name = "String")]
-    /// ISA, default:rv64imac
-    isa: Option<String>,
     #[arg(long, value_name = "FILE")]
     /// IMG bin copy to ram
     img: Option<String>,
@@ -59,9 +54,6 @@ struct Args {
     #[arg(short, long, value_name = "USIZE")]
     /// Number of harts,default:1
     num_harts: Option<usize>,
-    #[arg(short, long, value_name = "FILE")]
-    /// optional:Write torture test signature to FILE
-    signature: Option<String>,
 }
 // -------------Device Tree MAP-------------
 // name:CLINT           Area:0X02000000-->0X02010000,len:0X00010000
@@ -80,6 +72,18 @@ fn main() {
     if args.img.is_none() && args.xipflash.is_none() {
         panic!("Please specify the img or xipflash");
     }
+
+    // config
+    let mut config = Config::new();
+    config.set_tlb_size(256);
+    config.set_icache_size(4096);
+    config.set_decode_cache_size(4096);
+    config.set_mmu_type("sv39"); // sv39 sv48 sv57
+    config.set_isa("rv64imac");
+    config.set_s_mode();
+    let config = Rc::new(config);
+
+
 
     let signal_term = Arc::new(AtomicBool::new(false));
 
@@ -110,7 +114,7 @@ fn main() {
     });
 
     // we use crossbeam_queue::SegQueue as the uart fifo
-    // each uart has a tx and rx fifo, and we use them to communicate with the host
+    // each uart has a tx and rx fifo, and we use them to communicate with the host pc
     // at the host side, we use two threads to handle the uart tx and rx
     let uart_tx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
     let uart_rx_fifo = FifoUnbounded::new(crossbeam_queue::SegQueue::<u8>::new());
@@ -142,7 +146,7 @@ fn main() {
         if signal_term_uart.load(Ordering::Relaxed) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        // std::thread::sleep(Duration::from_millis(100));
     });
 
     // device 16650_uart
@@ -172,88 +176,41 @@ fn main() {
         name: "Sifive_Uart",
     });
 
+    let boot_pc = args.boot_pc.as_ref().map_or(0x8000_0000, |x| {
+        let cleaned = x.trim_start_matches(|c| c == '0' || c == 'x' || c == 'X');
+        u64::from_str_radix(cleaned, 16)
+            .unwrap_or_else(|_| panic!("boot_pc is not a valid hex number"))
+    });
+
     // show device address map
-    debug!("{0}", bus_u.borrow_mut());
-
-    let hart_num: usize = args.num_harts.unwrap_or(1);
-
-    let boot_pc = if let Some(x) = args.boot_pc.as_ref() {
-        u64::from_str_radix(
-            x.trim_start_matches(|c| c == '0' || c == 'x' || c == 'X'),
-            16,
-        )
-        .expect("boot_pc is not a valid hex number")
-    } else {
-        0x8000_0000
-    };
-
+    info!("{0}", bus_u.borrow_mut());
     info!("boot_pc:0x{:x}", boot_pc);
 
-    let mut config = Config::new();
-    config.set_tlb_size(256);
-    config.set_icache_size(4096);
-    config.set_decode_cache_size(4096);
-    config.set_mmu_type("sv39"); // sv39 sv48 sv57
-    config.set_isa(args.isa.as_deref().unwrap_or("rv64imac"));
-    config.set_s_mode();
-    let config = Rc::new(config);
-
+    let hart_num: usize = args.num_harts.unwrap_or(1);
     let mut hart_vec = Vec::new();
-    #[allow(unused_mut)]
-    let mut trace_handle: Vec<thread::JoinHandle<()>> = Vec::new();
-    // create hart according to the number of harts
+    // create harts
     for hart_id in 0..hart_num {
-        cfg_if::cfg_if! {
-                if #[cfg(feature = "rv_debug_trace")] {
-                let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu = CpuCoreBuild::new(bus_u.clone(),config.clone())
-                    .with_boot_pc(boot_pc)
-                    .with_hart_id(hart_id)
-                    .with_trace(trace_tx)
-                    .with_smode(true)
-                    .build();
-                hart_vec.push(cpu);
-                let mut trace_log = Traces::new(0, trace_rx);
-                let term_sig_trace = signal_term.clone();
-
-                // create another thread to handle trace log
-                let trace_thread = thread::spawn(move || {
-                    while !term_sig_trace.load(Ordering::Relaxed) {
-                        trace_log.run();
-                    }
-                });
-
-                trace_handle.push(trace_thread);
-            } else {
-                let hart = CpuCoreBuild::new(bus_u.clone(),config.clone())
-                    .with_boot_pc(boot_pc)
-                    .with_hart_id(hart_id)
-                    .with_smode(true)
-                    .build();
-                hart_vec.push(hart);
-            }
-        };
+        let hart = CpuCoreBuild::new(bus_u.clone(), config.clone())
+            .with_boot_pc(boot_pc)
+            .with_hart_id(hart_id)
+            .with_smode(true)
+            .build();
+        hart_vec.push(hart);
     }
 
     // create another thread to simmulate the harts
-    // while the main thread is used to handle sdl events
-    // which will be send to the coresponding devices through channel
     let cpu_main = thread::spawn(move || {
         let mut sim = RVsim::new(hart_vec);
         if let Some(ram_img) = args.img {
             sim.load_image(&ram_img);
         }
-        if let Some(signature_file) = args.signature {
-            sim.set_signature_file(signature_file);
-        }
+
         sim.run();
+        // notify the uart thread to exit
         signal_term.store(true, Ordering::Relaxed);
     });
 
-    // wait for all trace threads to finish
-    for handle in trace_handle {
-        handle.join().unwrap();
-    }
+
     cpu_main.join().unwrap();
     uart_tx_thread.join().unwrap();
 }

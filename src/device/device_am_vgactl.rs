@@ -28,7 +28,6 @@ impl DeviceBase for DeviceVGACTL {
     fn do_write(&mut self, addr: u64, _data: u64, len: usize) -> u64 {
         assert_eq!(addr, 4);
         assert_eq!(len, 4);
-        // self.tx.push(true).unwrap();
         self.tx.set(true);
         0
     }

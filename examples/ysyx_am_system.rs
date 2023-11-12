@@ -4,14 +4,15 @@ use clap::Parser;
 #[allow(unused_imports)]
 use rv64emu::tools::Fifobounded;
 use rv64emu::{
-    config::{self, Config},
+    config::Config,
+    device::device_am_vga::VGA_BUF_SIZE,
     tools::{rc_refcell_new, FifoUnbounded},
 };
 
-use std::io::{stdin, Write};
 #[allow(unused_imports)]
 use std::{
     cell::Cell,
+    cell::RefCell,
     io::{self, Read},
     num::NonZeroUsize,
     process,
@@ -22,6 +23,10 @@ use std::{
     },
     thread,
     time::Duration,
+};
+use std::{
+    io::{stdin, Write},
+    sync::Mutex,
 };
 
 use log::{info, LevelFilter};
@@ -40,8 +45,7 @@ use sdl2::{
 };
 
 use crate::rv64emu::tools::RcRefCell;
-#[cfg(feature = "rv_debug_trace")]
-use crate::rv64emu::trace::traces::Traces;
+
 use crate::{
     rv64emu::device::{
         device_am_rtc::DeviceRTC,
@@ -54,7 +58,6 @@ use crate::{
     rv64emu::rv64core::cpu_core::CpuCoreBuild,
 };
 
-// /* 各个设备地址 */
 // -------------Device Tree MAP-------------
 // name:CLINT           Area:0X02000000-->0X02010000,len:0X00010000
 // name:PLIC            Area:0X0C000000-->0X10000000,len:0X04000000
@@ -82,9 +85,6 @@ struct Args {
     #[arg(short, long, value_name = "USIZE")]
     /// Number of harts,default:1
     num_harts: Option<usize>,
-    #[arg(short, long, value_name = "FILE")]
-    /// optional:Write torture test signature to FILE
-    signature: Option<String>,
 }
 
 fn main() {
@@ -222,40 +222,16 @@ fn main() {
     let config = Rc::new(config);
 
     let mut hart_vec = Vec::new();
-    #[allow(unused_mut)]
-    let mut trace_handle: Vec<thread::JoinHandle<()>> = Vec::new();
+
     // create hart according to the number of harts
     for hart_id in 0..hart_num {
-        cfg_if::cfg_if! {
-                if #[cfg(feature = "rv_debug_trace")] {
-                let (trace_tx, trace_rx) = crossbeam_channel::bounded(8096);
-                let cpu: = CpuCoreBuild::new(bus_u.clone(),config.clone())
-                    .with_boot_pc(boot_pc)
-                    .with_hart_id(hart_id)
-                    .with_trace(trace_tx)
-                    .with_smode(true)
-                    .build();
-                hart_vec.push(cpu);
-                let mut trace_log = Traces::new(0, trace_rx);
-                let term_sig_trace = signal_term.clone();
-
-                // create another thread to handle trace log
-                let trace_thread = thread::spawn(move || {
-                    while !term_sig_trace.load(Ordering::Relaxed) {
-                        trace_log.run();
-                    }
-                });
-
-                trace_handle.push(trace_thread);
-            } else {
-                let hart: rv64emu::rv64core::cpu_core::CpuCore = CpuCoreBuild::new(bus_u.clone(),config.clone())
-                    .with_boot_pc(boot_pc)
-                    .with_hart_id(hart_id)
-                    .with_smode(true)
-                    .build();
-                hart_vec.push(hart);
-            }
-        };
+        let hart: rv64emu::rv64core::cpu_core::CpuCore =
+            CpuCoreBuild::new(bus_u.clone(), config.clone())
+                .with_boot_pc(boot_pc)
+                .with_hart_id(hart_id)
+                .with_smode(false)
+                .build();
+        hart_vec.push(hart);
     }
 
     // create another thread to simmulate the harts
@@ -271,9 +247,7 @@ fn main() {
         if let Some(ram_img) = args.img {
             sim.load_image(&ram_img);
         }
-        if let Some(signature_file) = args.signature {
-            sim.set_signature_file(signature_file);
-        }
+
         sim.run();
 
         // send signal to all other threads
@@ -282,10 +256,6 @@ fn main() {
 
     create_sdl2_devices(bus_u, signal_term_sdl_event, ready_to_run);
 
-    // wait for all trace threads to finish
-    for handle in trace_handle {
-        handle.join().unwrap();
-    }
     cpu_main.join().unwrap();
     uart_tx_thread.join().unwrap();
 }
@@ -314,11 +284,12 @@ fn create_sdl2_devices(
     let window = video_subsystem
         .window("rust-sdl2 demo: Video", 800, 600)
         .position_centered()
+        .opengl()
         .build()
         .map_err(|e| e.to_string())
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().expect("canvas err");
+    let mut canvas = window.into_canvas().software().build().expect("canvas err");
     canvas.set_scale(2.0, 2.0).unwrap();
 
     // device vgactl
@@ -335,7 +306,10 @@ fn create_sdl2_devices(
     });
 
     // device vga
-    let vga = DeviceVGA::new(canvas, vgactl_msg);
+
+    let vga_fb = Arc::new(Mutex::new(vec![0_u8; VGA_BUF_SIZE].into_boxed_slice()));
+
+    let vga = DeviceVGA::new(vga_fb.clone());
     let device_name = vga.get_name();
     bus_u.borrow_mut().add_device(DeviceType {
         start: FB_ADDR,
@@ -380,6 +354,9 @@ fn create_sdl2_devices(
         kb_am_fifo,
         kb_sdl_fifo,
         mouse_fifo,
+        vga_fb.clone(),
+        vgactl_msg.clone(),
+        canvas,
         ready_to_run,
     );
 }
@@ -390,8 +367,17 @@ fn handle_sdl_event(
     kb_am_tx: Fifobounded<DeviceKbItem>,
     kb_sdl_tx: Fifobounded<Keycode>,
     mouse_sdl_tx: Fifobounded<DeviceMouseItem>,
+    vga_fb: Arc<Mutex<Box<[u8]>>>,
+    vga_ctl_msg: Rc<Cell<bool>>,
+    mut canvas: sdl2::render::WindowCanvas,
     ready_to_run: Arc<AtomicBool>,
 ) {
+    let texture_creator = canvas.texture_creator();
+    let mut texture = texture_creator
+        .create_texture_target(sdl2::pixels::PixelFormatEnum::ARGB8888, 400_u32, 300_u32)
+        .map_err(|e| e.to_string())
+        .unwrap();
+
     // send signal to sim thread, all devices are ready
     ready_to_run.store(true, Ordering::Release);
     while !signal_term.load(Ordering::Relaxed) {
@@ -423,6 +409,18 @@ fn handle_sdl_event(
                 _ => (),
             }
         }
-        std::thread::sleep(Duration::from_millis(100));
+
+        if vga_ctl_msg.get() {
+            vga_ctl_msg.set(false);
+            let fb = vga_fb.lock().unwrap();
+            let fb_copy = fb.clone();
+            drop(fb);
+            texture
+                .update(None, &fb_copy, 4 * 400)
+                .expect("update texture failed");
+            canvas.copy(&texture, None, None).unwrap();
+            canvas.present();
+        }
+        std::thread::sleep(Duration::from_millis(20));
     }
 }

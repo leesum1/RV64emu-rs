@@ -231,7 +231,6 @@ impl CpuCore {
 
     #[cfg(feature = "support_am")]
     pub fn halt(&mut self) -> usize {
-        use log::info;
 
         let a0 = self.gpr.read_by_name("a0");
 

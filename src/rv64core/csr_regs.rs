@@ -190,7 +190,7 @@ impl CsrRegs {
         let scounteren = CommonCSR::new(scounteren_share);
 
         // not support debug mode,just to pass breakpoint test
-        // Skip tselect if hard-wired.
+        // Skip tselect if hard-wired. RISC-V Debug Specification
         let tselect = ReadOnlyCSR(u64::MAX);
 
         let mut csr_map: HashMap<u64, CsrEnum> = HashMap::new();
