@@ -148,6 +148,7 @@ impl RVsim {
             .for_each(|hart| hart.cpu_state = CpuState::Running);
     }
 
+    // run 5000 cycles
     pub fn run_once(&mut self) {
         self.harts.iter_mut().for_each(|hart| {
             hart.execute(5000);
@@ -186,7 +187,7 @@ impl RVsim {
             .all(|hart| hart.cpu_state == CpuState::Stop)
     }
 
-    fn show_perf(&self) {
+    pub fn show_perf(&self) {
         self.harts.iter().for_each(|hart| {
             hart.show_perf();
         });

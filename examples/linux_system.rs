@@ -27,7 +27,7 @@ use std::{
     io::{stdin, Write},
 };
 
-use log::{ info, LevelFilter};
+use log::{info, LevelFilter};
 use rv64emu::{device::device_16550a::Device16550aUART, rvsim::RVsim};
 
 use crate::{
@@ -64,9 +64,10 @@ struct Args {
 // name:Sifive_Uart     Area:0XC0000000-->0XC0001000,len:0X00001000
 fn main() {
     simple_logger::SimpleLogger::new()
-        .with_level(LevelFilter::Debug)
+        .with_level(LevelFilter::Off)
         .init()
         .unwrap();
+
     let args = Args::parse();
 
     if args.img.is_none() && args.xipflash.is_none() {
@@ -82,8 +83,6 @@ fn main() {
     config.set_isa("rv64imac");
     config.set_s_mode();
     let config = Rc::new(config);
-
-
 
     let signal_term = Arc::new(AtomicBool::new(false));
 
@@ -209,7 +208,6 @@ fn main() {
         // notify the uart thread to exit
         signal_term.store(true, Ordering::Relaxed);
     });
-
 
     cpu_main.join().unwrap();
     uart_tx_thread.join().unwrap();

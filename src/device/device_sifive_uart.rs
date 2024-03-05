@@ -141,10 +141,8 @@ impl DeviceBase for DeviceSifiveUart {
             _ => panic!("sifive_uart: unknown addr: {:#x}", addr),
         }
     }
-
     fn do_write(&mut self, addr: u64, data: u64, len: usize) -> u64 {
         assert_eq!(len, 4);
-
         match addr as usize {
             TXDATA => self.put_char(data),
             TXCTRL => self.regs.txctrl.0 = data as u32,

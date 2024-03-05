@@ -229,9 +229,41 @@ impl CpuCore {
         }
     }
 
+    pub fn execute_as_ref(&mut self, num: usize) {
+        for _ in 0..num {
+            match self.cpu_state {
+                CpuState::Running => {
+                    // Increment the cycle counter
+                    let cycle = self.csr_regs.cycle.get();
+                    self.csr_regs.cycle.set(cycle + 1);
+
+                    let fetch_ret = self.inst_fetch();
+                    let exe_ret = match fetch_ret {
+                        // op ret
+                        Ok(inst_val) => {
+                            self.advance_pc(inst_val as u32);
+                            self.step(inst_val as u32)
+                        }
+                        // fetch fault
+                        Err(trap_type) => Err(trap_type),
+                    };
+
+                    if let Err(trap_type) = exe_ret {
+                        self.handle_exceptions(trap_type);
+                        continue;
+                    }
+                    // self.handle_interrupt();
+                    // Increment the instruction counter
+                    let instret = self.csr_regs.instret.get();
+                    self.csr_regs.instret.set(instret + 1);
+                }
+                _ => break,
+            };
+        }
+    }
+
     #[cfg(feature = "support_am")]
     pub fn halt(&mut self) -> usize {
-
         let a0 = self.gpr.read_by_name("a0");
 
         if let 0 = a0 {
@@ -253,6 +285,14 @@ impl CpuCore {
 
         let tval = trap_type.get_tval();
         let cause = trap_type.idx();
+
+        log::info!(
+            "pc:{:x},trap_type:{:?},cause:{:?},tval:{:x}",
+            self.pc,
+            trap_type,
+            cause,
+            tval
+        );
 
         // exception to S mode
         if has_exception & trap_to_s_enable {
@@ -328,9 +368,19 @@ impl CpuCore {
         let int_to_s_enable = s_a1 | s_a2;
         let int_to_s_peding = mip_mie_val & u64::from(mideleg);
 
+
         // handing interupt in M mode
         if int_to_m_enable && int_to_m_peding != 0 {
             let cause = XipIn::from(int_to_m_peding).get_priority_interupt();
+
+
+            log::info!(
+                "mmode int pc:{:x},cause:{:?}",
+                self.pc,
+                cause,
+            );
+
+
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv.get() as u8);
             mstatus.set_mie(false);
@@ -356,6 +406,14 @@ impl CpuCore {
         // so, we use mstatus instead of sstatus below
         else if int_to_s_enable && int_to_s_peding != 0 {
             let cause = XipIn::from(int_to_s_peding).get_priority_interupt();
+
+
+            log::info!(
+                "smode int pc:{:x},cause:{:?}",
+                self.pc,
+                cause,
+            );
+
             // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
             mstatus.set_spp(!(self.cur_priv.get() == PrivilegeLevels::User));
             // When a trap is taken into supervisor mode, SPIE is set to SIE
