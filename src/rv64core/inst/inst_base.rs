@@ -1443,6 +1443,15 @@ impl PrivilegeLevels {
     pub fn check_priv(&self, another_priv: PrivilegeLevels) -> bool {
         (another_priv as u64) >= (*self as u64)
     }
+
+    pub fn from_usize(priv_num: usize) -> Option<PrivilegeLevels> {
+        match priv_num {
+            0 => Some(PrivilegeLevels::User),
+            1 => Some(PrivilegeLevels::Supervisor),
+            3 => Some(PrivilegeLevels::Machine),
+            _ => None,
+        }
+    }
 }
 
 pub const MASK_ALL: u64 = 0xffff_ffff_ffff_ffff;

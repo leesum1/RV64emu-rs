@@ -21,6 +21,11 @@ use crate::{
     tools::RcCell,
 };
 
+use super::{
+    csr_regs_define::{Dcsr, DcsrIn},
+    inst::inst_base::{CSR_DCSR, CSR_DPC, CSR_DSCRATCH0, CSR_DSCRATCH1},
+};
+
 pub struct CsrRegs {
     config: Rc<Config>,
     pub csr_map: HashMap<u64, CsrEnum>,
@@ -41,6 +46,10 @@ pub struct CsrRegs {
     pub stval: RcCell<u64>,
     pub cycle: RcCell<u64>,
     pub instret: RcCell<u64>,
+
+    // debug mode
+    pub dcsr: RcCell<DcsrIn>,
+    pub dpc: RcCell<u64>,
 }
 
 impl CsrRegs {
@@ -189,6 +198,14 @@ impl CsrRegs {
         let mcounteren = CommonCSR::new(mcounteren_share);
         let scounteren = CommonCSR::new(scounteren_share);
 
+        // debug mode
+        let dcsr_share = Rc::new(Cell::new(DcsrIn::new().with_debugver(4).with_mprven(true)));
+        let dpc_share = Rc::new(Cell::new(0));
+        let dpc = CommonCSR::new(dpc_share.clone());
+        let dcsr = Dcsr::new(dcsr_share.clone());
+        let dscratch0 = CommonCSR::new_noshare(0);
+        let dscratch1 = CommonCSR::new_noshare(0);
+
         // not support debug mode,just to pass breakpoint test
         // Skip tselect if hard-wired. RISC-V Debug Specification
         let tselect = ReadOnlyCSR(u64::MAX);
@@ -229,6 +246,12 @@ impl CsrRegs {
         csr_map.insert(CSR_SCOUNTEREN.into(), scounteren.into());
         csr_map.insert(CSR_TSELECT.into(), tselect.into());
 
+        // debug mode
+        csr_map.insert(CSR_DCSR.into(), dcsr.into());
+        csr_map.insert(CSR_DPC.into(), dpc.into());
+        csr_map.insert(CSR_DSCRATCH0.into(), dscratch0.into());
+        csr_map.insert(CSR_DSCRATCH1.into(), dscratch1.into());
+
         Self {
             config,
             csr_map,
@@ -249,6 +272,8 @@ impl CsrRegs {
             cur_priv: PrivilegeLevels::Machine,
             mtvec: mtvec_share,
             stvec: stvec_share,
+            dcsr: dcsr_share,
+            dpc: dpc_share,
         }
     }
 

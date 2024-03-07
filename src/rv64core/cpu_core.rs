@@ -1,18 +1,21 @@
-use core::cell::Cell;
+use core::{cell::Cell, result};
 
 use alloc::rc::Rc;
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use crate::{
     config::Config,
+    dbg::dm_interface::DebugModuleSlave,
     difftest::difftest_trait::Difftest,
-    rv64core::bus::Bus,
-    rv64core::csr_regs::CsrRegs,
-    rv64core::csr_regs_define::XipIn,
-    rv64core::gpr::Gpr,
-    rv64core::inst::inst_base::{AccessType, PrivilegeLevels},
-    rv64core::inst_decode::InstDecode,
-    rv64core::traptype::TrapType,
+    rv64core::{
+        bus::Bus,
+        csr_regs::CsrRegs,
+        csr_regs_define::XipIn,
+        gpr::Gpr,
+        inst::inst_base::{AccessType, PrivilegeLevels},
+        inst_decode::InstDecode,
+        traptype::TrapType,
+    },
     tools::{check_aligned, RcRefCell},
 };
 
@@ -20,12 +23,54 @@ use crate::{
 use crate::trace::traces::TraceType;
 
 use super::{
-    cache::cache_system::CacheSystem, inst::inst_base::is_compressed_instruction, mmu::cpu_mmu::Mmu,
+    cache::cache_system::CacheSystem, inst::inst_base::is_compressed_instruction,
+    mmu::cpu_mmu::Mmu, traptype::DebugCause,
 };
 
-#[derive(PartialEq)]
+pub struct DebugState {
+    // 临时的状态位
+    pub resumereq_flag: bool,
+    pub resetreq_flag: bool,
+    pub singlestep_flag: bool,
+
+    // dm 给啥就是啥
+    pub haltreq: bool,
+
+    // 发送 resumereq 时，resumeack 首先被置为0, 进入 resume 状态
+    // 处理器 resume 时，resumeack 被置为1
+    pub resumeack: bool,
+
+    // 处理器复位时，havereset被置为1
+    // 通过往 ackhaveReset 写入 1 来清除
+    pub havereset: bool,
+    // 处理器是否处于 debug 模式
+    pub debug_mode: bool,
+}
+
+impl DebugState {
+    pub fn new() -> Self {
+        DebugState {
+            resumereq_flag: false,
+            resetreq_flag: false,
+            haltreq: false,
+            resumeack: false,
+            havereset: false,
+            debug_mode: false,
+            singlestep_flag: false,
+        }
+    }
+}
+
+impl Default for DebugState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub enum CpuState {
     Running,
+    Haltd,
     Stop,
     Abort,
 }
@@ -113,6 +158,7 @@ impl CpuCoreBuild {
             #[cfg(feature = "rv_debug_trace")]
             trace_sender: self.trace_sender.clone(),
             config: self.config.clone(),
+            debug_state: DebugState::new(),
         }
     }
 }
@@ -127,6 +173,7 @@ pub struct CpuCore {
     pub npc: u64,
     pub cur_priv: Rc<Cell<PrivilegeLevels>>,
     pub cpu_state: CpuState,
+    pub debug_state: DebugState,
     pub config: Rc<Config>,
     #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
@@ -153,9 +200,9 @@ impl CpuCore {
                 }
             }
             // Convert data_bytes to a u64 and return it.
-            return Ok(u32::from_le_bytes(data_bytes) as u64);
+            Ok(u32::from_le_bytes(data_bytes) as u64)
         } else {
-            return Err(TrapType::LoadAddressMisaligned(addr));
+            Err(TrapType::LoadAddressMisaligned(addr))
         }
     }
     pub fn inst_fetch(&mut self) -> Result<u64, TrapType> {
@@ -165,9 +212,8 @@ impl CpuCore {
         self.fetch_from_mem(self.pc, 4)
     }
 
-    pub fn step(&mut self, inst: u32) -> Result<(), TrapType> {
+    pub fn decode_and_excute(&mut self, inst: u32) -> Result<(), TrapType> {
         let inst_op = self.decode.fast_path(inst);
-
         match inst_op {
             Some(i) => {
                 #[cfg(feature = "rv_debug_trace")]
@@ -196,39 +242,109 @@ impl CpuCore {
         self.mmu.show_perf();
     }
 
+    fn set_pc(&mut self, pc: u64) {
+        self.npc = pc;
+    }
+
+    pub fn resume_proc(&mut self) {
+        assert!(self.debug_state.debug_mode, "not in debug mode");
+
+        self.debug_state.resumereq_flag = false;
+        debug!("exit debug mode");
+
+        let dcsr = self.csr_regs.dcsr.get();
+        // 1. pc changes to the value stored in dpc.
+        self.set_pc(self.csr_regs.dpc.get());
+        // 2. The current privilege mode and virtualization mode are changed to that specified by prv and v.
+        // NOT support virtualization now
+        self.cur_priv
+            .set(PrivilegeLevels::from_usize(dcsr.prv().into()).unwrap());
+
+        // 3. When resuming from debug mode, clear mstatus.MPRV if the new privilege mode is less than M-mode
+        if (self.cur_priv.get() as usize) < (PrivilegeLevels::Machine as usize) {
+            let mut xstatus_tmp = self.csr_regs.xstatus.get();
+            xstatus_tmp.set_mprv(false);
+            self.csr_regs.xstatus.set(xstatus_tmp)
+        }
+
+        // 4. The debug mode is cleared.
+        self.debug_state.debug_mode = false;
+        self.cpu_state = CpuState::Running;
+
+        self.debug_state.resumeack = true;
+
+        // 5. check step, and set single step flag
+        if dcsr.step() {
+            self.debug_state.singlestep_flag = true;
+            self.single_step_proc();
+        }
+    }
+
+    fn single_step_proc(&mut self) {
+        if self.debug_state.singlestep_flag {
+            debug!("single step");
+            self.debug_state.singlestep_flag = false;
+
+            // execute one instruction
+            self.real_excute();
+            // after execute one instruction, enter debug mode
+            self.enter_debug_mode(DebugCause::Step)
+        }
+    }
+
+    // fetch and execute one instruction
+    fn real_excute(&mut self) {
+        assert!(!self.debug_state.debug_mode, "in debug mode");
+        assert_eq!(self.cpu_state, CpuState::Running, "not in running state");
+
+        // Increment the cycle counter
+        let cycle = self.csr_regs.cycle.get();
+        self.csr_regs.cycle.set(cycle + 1);
+
+        let fetch_ret = self.inst_fetch();
+        let exe_ret = match fetch_ret {
+            // op ret
+            Ok(inst_val) => {
+                self.advance_pc(inst_val as u32);
+                self.decode_and_excute(inst_val as u32)
+            }
+            // fetch fault
+            Err(trap_type) => Err(trap_type),
+        };
+
+        if let Err(trap_type) = exe_ret {
+            self.handle_exceptions(trap_type);
+        } else {
+            // Increment the instruction counter
+            let instret = self.csr_regs.instret.get();
+            self.csr_regs.instret.set(instret + 1);
+        }
+    }
+
     pub fn execute(&mut self, num: usize) {
         for _ in 0..num {
             match self.cpu_state {
                 CpuState::Running => {
-                    // Increment the cycle counter
-                    let cycle = self.csr_regs.cycle.get();
-                    self.csr_regs.cycle.set(cycle + 1);
-
-                    let fetch_ret = self.inst_fetch();
-                    let exe_ret = match fetch_ret {
-                        // op ret
-                        Ok(inst_val) => {
-                            self.advance_pc(inst_val as u32);
-                            self.step(inst_val as u32)
-                        }
-                        // fetch fault
-                        Err(trap_type) => Err(trap_type),
-                    };
-
-                    if let Err(trap_type) = exe_ret {
-                        self.handle_exceptions(trap_type);
-                        continue;
+                    if self.debug_state.resetreq_flag {
+                        todo!("reset")
+                    } else if self.debug_state.haltreq {
+                        self.enter_debug_mode(DebugCause::HaltReq)
+                    } else {
+                        self.real_excute();
+                        self.handle_interrupt();
                     }
-                    self.handle_interrupt();
-                    // Increment the instruction counter
-                    let instret = self.csr_regs.instret.get();
-                    self.csr_regs.instret.set(instret + 1);
+                }
+                CpuState::Haltd => {
+                    if self.debug_state.resumereq_flag {
+                        self.resume_proc();
+                    }
                 }
                 _ => break,
             };
         }
     }
 
+    // for difftest
     pub fn execute_as_ref(&mut self, num: usize) {
         for _ in 0..num {
             match self.cpu_state {
@@ -242,7 +358,7 @@ impl CpuCore {
                         // op ret
                         Ok(inst_val) => {
                             self.advance_pc(inst_val as u32);
-                            self.step(inst_val as u32)
+                            self.decode_and_excute(inst_val as u32)
                         }
                         // fetch fault
                         Err(trap_type) => Err(trap_type),
@@ -286,7 +402,7 @@ impl CpuCore {
         let tval = trap_type.get_tval();
         let cause = trap_type.idx();
 
-        log::info!(
+        log::trace!(
             "pc:{:x},trap_type:{:?},cause:{:?},tval:{:x}",
             self.pc,
             trap_type,
@@ -368,18 +484,11 @@ impl CpuCore {
         let int_to_s_enable = s_a1 | s_a2;
         let int_to_s_peding = mip_mie_val & u64::from(mideleg);
 
-
         // handing interupt in M mode
         if int_to_m_enable && int_to_m_peding != 0 {
             let cause = XipIn::from(int_to_m_peding).get_priority_interupt();
 
-
-            log::info!(
-                "mmode int pc:{:x},cause:{:?}",
-                self.pc,
-                cause,
-            );
-
+            log::trace!("mmode int pc:{:x},cause:{:?}", self.pc, cause,);
 
             mstatus.set_mpie(mstatus.mie());
             mstatus.set_mpp(self.cur_priv.get() as u8);
@@ -407,12 +516,7 @@ impl CpuCore {
         else if int_to_s_enable && int_to_s_peding != 0 {
             let cause = XipIn::from(int_to_s_peding).get_priority_interupt();
 
-
-            log::info!(
-                "smode int pc:{:x},cause:{:?}",
-                self.pc,
-                cause,
-            );
+            log::trace!("smode int pc:{:x},cause:{:?}", self.pc, cause,);
 
             // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
             mstatus.set_spp(!(self.cur_priv.get() == PrivilegeLevels::User));
@@ -502,6 +606,30 @@ impl CpuCore {
     // pub fn lr_sc_reservation_clear(&mut self) {
     //     self.lr_sc_set.lock().unwrap().clear();
     // }
+
+    // halt
+    fn enter_debug_mode(&mut self, cause: DebugCause) {
+        debug!("enter debug mode,cause:{:?}", cause);
+
+        let mut dcsr = self.csr_regs.dcsr.get();
+
+        // 1. dcsr->cause is updated.
+        dcsr.set_cause(cause as u8);
+        // 2. dcsr->prv and dcsr->v are set to reflect current privilege mode.
+        dcsr.set_prv(self.cur_priv.get() as u8);
+        dcsr.set_v(false); // do not support virtualnization
+
+        self.csr_regs.dcsr.set(dcsr);
+
+        // 3. dpc is set to the next instruction that should be executed.
+        self.csr_regs.dpc.set(self.npc);
+        // 4. The hart enters Debug Mode.
+        self.debug_state.debug_mode = true;
+        self.cpu_state = CpuState::Haltd;
+
+        // 5. debug mode is always performed in M mode
+        self.cur_priv.set(PrivilegeLevels::Machine);
+    }
 }
 
 impl Difftest for CpuCore {
@@ -543,5 +671,93 @@ impl Difftest for CpuCore {
     fn get_reg(&self, idx: usize) -> u64 {
         assert!(idx < 32, "idx must be less than 32");
         self.gpr.read(idx as u64)
+    }
+}
+
+impl DebugModuleSlave for CpuCore {
+    fn read_gpr(&mut self, regno: usize) -> u64 {
+        let val = self.gpr.read(regno as u64);
+        debug!("[DebugModuleSlave] read gpr[{}]:{:x}", regno, val);
+        val
+    }
+
+    fn write_gpr(&mut self, regno: usize, value: u64) {
+        self.gpr.write(regno as u64, value);
+        debug!("[DebugModuleSlave] write gpr[{}]:{:x}", regno, value);
+    }
+
+    fn read_memory(&mut self, address: u64, length: usize) -> Option<u64> {
+        let paddr = address;
+        let result = match self.cache_system.borrow_mut().dcache.read(paddr, length) {
+            Ok(data) => Some(data),
+            Err(_err) => None,
+        };
+        debug!(
+            "[DebugModuleSlave] read memory address:{:x},length:{},value:{:x?}",
+            address, length, result
+        );
+        result
+    }
+
+    fn write_memory(&mut self, address: u64, length: usize, value: u64) -> Option<u64> {
+        let paddr = address;
+        let result = match self
+            .cache_system
+            .borrow_mut()
+            .dcache
+            .write(paddr, value, length)
+        {
+            Ok(data) => Some(data),
+            Err(_err) => None,
+        };
+        debug!(
+            "[DebugModuleSlave] write memory address:{:x},length:{},value:{:x?}",
+            address, length, value
+        );
+        result
+    }
+
+    fn read_csr(&mut self, csr_addr: usize) -> u64 {
+        let val = self.csr_regs.read_raw(csr_addr as u64);
+        debug!("[DebugModuleSlave] read csr[{:x}]:{:x}", csr_addr, val);
+        val
+    }
+
+    fn write_csr(&mut self, csr_addr: usize, value: u64) {
+        self.csr_regs.write_raw(csr_addr as u64, value);
+        debug!("[DebugModuleSlave] write csr[{:x}]:{:x}", csr_addr, value);
+    }
+
+    fn set_haltreq(&mut self, val: bool) {
+        self.debug_state.haltreq = val;
+        debug!("[DebugModuleSlave] set haltreq:{:?}", val);
+    }
+
+    fn resumereq(&mut self) {
+        self.debug_state.resumereq_flag = true;
+        self.debug_state.resumeack = false;
+        debug!("[DebugModuleSlave] resumereq");
+    }
+
+    fn halted(&mut self) -> bool {
+        self.cpu_state == CpuState::Haltd
+    }
+
+    fn resume_ack(&mut self) -> bool {
+        self.debug_state.resumeack
+    }
+
+    fn reset_req(&mut self) {
+        self.debug_state.resetreq_flag = true;
+        debug!("[DebugModuleSlave] resetreq");
+    }
+
+    fn havereset(&mut self) -> bool {
+        self.debug_state.havereset
+    }
+
+    fn clear_havereset(&mut self) {
+        debug!("[DebugModuleSlave] clear havereset");
+        self.debug_state.havereset = false;
     }
 }

@@ -2,6 +2,8 @@
 #[macro_use]
 extern crate alloc;
 
+
+pub mod dbg;
 pub mod device;
 pub mod difftest;
 pub mod rv64core;

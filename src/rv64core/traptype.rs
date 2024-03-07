@@ -121,3 +121,28 @@ impl TrapType {
         }
     }
 }
+#[derive(Debug)]
+pub enum DebugCause {
+    NoDebug = 0,
+    Ebreak = 1,
+    Trigger = 2,
+    HaltReq = 3,
+    Step = 4,
+    ResetHaltReq = 5,
+    Group = 6,
+}
+
+impl DebugCause {
+    pub fn from_usize(val: usize) -> DebugCause {
+        match val {
+            0 => DebugCause::NoDebug,
+            1 => DebugCause::Ebreak,
+            2 => DebugCause::Trigger,
+            3 => DebugCause::HaltReq,
+            4 => DebugCause::Step,
+            5 => DebugCause::ResetHaltReq,
+            6 => DebugCause::Group,
+            _ => panic!("Invalid DebugCause"),
+        }
+    }
+}

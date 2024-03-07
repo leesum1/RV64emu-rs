@@ -14,7 +14,10 @@ use elf::{
 };
 use log::info;
 
-use crate::config::Config;
+use crate::{
+    config::Config,
+    dbg::{debug_module_new::DebugModule, jtag_driver::JtagDriver, remote_bitbang::RemoteBitBang},
+};
 #[allow(unused_imports)]
 use crate::{
     rv64core::{
@@ -26,7 +29,7 @@ use crate::{
     tools::RcRefCell,
 };
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct RVsim {
     /* riscv-arch-tests */
     tohost: Option<u64>,
@@ -35,24 +38,36 @@ pub struct RVsim {
     signature_range: Option<ops::Range<u64>>,
     signature_file: Option<String>,
     bus: RcRefCell<Bus>,
-    pub harts: Vec<CpuCore>,
+    pub harts: Vec<RcRefCell<CpuCore>>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
 
+    // debug
+    remote_bitbang: RemoteBitBang,
+    jtag_driver: JtagDriver,
     // Config
     config: Rc<Config>,
 }
 
 impl RVsim {
-    pub fn new(harts: Vec<CpuCore>) -> Self {
+    pub fn new(harts: Vec<RcRefCell<CpuCore>>) -> Self {
+        let bus = harts[0].borrow_mut().mmu.caches.borrow_mut().bus.clone();
 
-        let bus = harts[0].mmu.caches.borrow_mut().bus.clone();
+        let dm = DebugModule::new(harts[0].clone());
+        let remote_bitbang = RemoteBitBang::new("0.0.0.0", 23456);
+        let mut jtag_driver = JtagDriver::new(dm);
+
         Self {
             harts,
             bus,
             config: Rc::new(Config::new()),
-            // time: Some(time),
-            ..Default::default()
+            elf_symbols: hashbrown::HashMap::new(),
+            tohost: None,
+            _fromhost: None,
+            signature_range: None,
+            signature_file: None,
+            remote_bitbang,
+            jtag_driver,
         }
     }
     fn get_symbol_values(&mut self) {
@@ -124,7 +139,8 @@ impl RVsim {
                 self.collect_elf_symbols(&elf_data);
             }
         } else {
-            let boot_pc = self.harts.get(0).unwrap().pc;
+            let boot_pc = self.harts.get(0).unwrap().borrow().pc;
+
             let mut bus = self.bus.borrow_mut();
             bus.copy_from_slice(boot_pc, slice).unwrap();
 
@@ -145,13 +161,15 @@ impl RVsim {
     pub fn prepare_to_run(&mut self) {
         self.harts
             .iter_mut()
-            .for_each(|hart| hart.cpu_state = CpuState::Running);
+            .for_each(|hart| hart.borrow_mut().cpu_state = CpuState::Running);
     }
 
     // run 5000 cycles
     pub fn run_once(&mut self) {
+        self.remote_bitbang.tick(&mut self.jtag_driver);
+
         self.harts.iter_mut().for_each(|hart| {
-            hart.execute(5000);
+            hart.borrow_mut().execute(5000);
         });
         let mut bus = self.bus.borrow_mut();
         bus.update();
@@ -165,7 +183,7 @@ impl RVsim {
 
     pub fn step(&mut self) {
         self.harts.iter_mut().for_each(|hart| {
-            hart.execute(1);
+            hart.borrow_mut().execute(1);
         });
         let mut bus = self.bus.borrow_mut();
         bus.update();
@@ -178,18 +196,18 @@ impl RVsim {
     pub fn is_finish(&self) -> bool {
         self.harts
             .iter()
-            .any(|hart| hart.cpu_state != CpuState::Running)
+            .any(|hart| hart.borrow().cpu_state == CpuState::Stop)
     }
 
     pub fn is_exit_normal(&self) -> bool {
         self.harts
             .iter()
-            .all(|hart| hart.cpu_state == CpuState::Stop)
+            .all(|hart| hart.borrow().cpu_state == CpuState::Stop)
     }
 
     pub fn show_perf(&self) {
         self.harts.iter().for_each(|hart| {
-            hart.show_perf();
+            hart.borrow().show_perf();
         });
     }
 
@@ -216,7 +234,7 @@ impl RVsim {
             return;
         }
 
-        self.harts[0].cache_system.borrow_mut().clear();
+        self.harts[0].borrow_mut().cache_system.borrow_mut().clear();
         let mut bus_u = self.bus.borrow_mut();
         let tohost = self.tohost.unwrap_or(0x8000_1000);
         let data = bus_u.read(tohost, 8).unwrap();
@@ -228,13 +246,13 @@ impl RVsim {
             if pass {
                 self.harts
                     .iter_mut()
-                    .for_each(|hart| hart.cpu_state = CpuState::Stop);
+                    .for_each(|hart| hart.borrow_mut().cpu_state = CpuState::Stop);
             }
             // fail
             else {
                 self.harts
                     .iter_mut()
-                    .for_each(|hart| hart.cpu_state = CpuState::Abort);
+                    .for_each(|hart| hart.borrow_mut().cpu_state = CpuState::Abort);
                 info!("FAIL WITH EXIT CODE:{}", cmd.exit_code())
             }
         }

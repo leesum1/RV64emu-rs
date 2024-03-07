@@ -66,6 +66,10 @@ required-features = ["std", "device_sdl2"]
 name = "linux_system"
 required-features = ["std"]
 
+[[example]]
+name = "debug_system"
+required-features = ["std"]
+
 
 [features]
 

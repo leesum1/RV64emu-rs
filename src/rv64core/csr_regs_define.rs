@@ -29,6 +29,7 @@ pub enum CsrEnum {
     PMPaddr,
     Satp,
     Counter,
+    Dcsr,
 }
 
 #[enum_dispatch(CsrEnum)]
@@ -808,5 +809,75 @@ impl Counter {
 impl Csr for Counter {
     fn read_raw(&self) -> u64 {
         self.inner.get()
+    }
+}
+
+#[bitfield(u32)]
+pub struct DcsrIn {
+    #[bits(2)]
+    pub prv: u8,
+    pub step: bool,
+    pub nmip: bool,
+    pub mprven: bool,
+    pub v: bool,
+    #[bits(3)]
+    pub cause: u8,
+    pub stoptime: bool,
+    pub stopcount: bool,
+    pub stepie: bool,
+    pub ebreaku: bool,
+    pub ebreaks: bool,
+    pub zero0: bool,
+    pub ebreakm: bool,
+    pub ebreakvu: bool,
+    pub ebreakvs: bool,
+    #[bits(10)]
+    pub zero1: u16,
+    #[bits(4)]
+    pub debugver: u8,
+}
+
+pub struct Dcsr {
+    inner: RcCell<DcsrIn>,
+}
+
+impl Dcsr {
+    pub fn new(share: RcCell<DcsrIn>) -> Self {
+        Dcsr { inner: share }
+    }
+}
+
+impl Csr for Dcsr {
+    fn read_raw(&self) -> u64 {
+        u32::from(self.inner.get()) as u64
+    }
+
+    fn write(&mut self, _data: u64) {
+        let new_in = DcsrIn::from(_data as u32);
+        let mut old_val = self.inner.get();
+
+        // This bit is hardwired to 0 if the hart does not
+        // support virtualization mode.
+        old_val.set_ebreakvs(false);
+        old_val.set_ebreakvu(false);
+
+        old_val.set_ebreakm(new_in.ebreakm());
+        old_val.set_ebreaks(new_in.ebreaks());
+        old_val.set_ebreaku(new_in.ebreaku());
+        old_val.set_step(new_in.step());
+
+        // PrivilegeLevels::from_repr(new_in.prv()).unwrap();
+
+        if let Some(new_prv) = PrivilegeLevels::from_usize(new_in.prv().into()) {
+            old_val.set_prv(new_prv as u8);
+        }
+
+        old_val.set_stepie(false); // hard code to zero
+        old_val.set_stopcount(false); // hard code to zero
+        old_val.set_stoptime(false); // hard code to zero
+        old_val.set_v(false); // hard code to zero
+        old_val.set_mprven(true); // hard code to one (1 (enabled): MPRV in mstatus takes effect in Debug Mode.)
+
+        self.inner.set(old_val);
     }
 }

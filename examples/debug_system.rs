@@ -64,7 +64,7 @@ struct Args {
 // name:Sifive_Uart     Area:0XC0000000-->0XC0001000,len:0X00001000
 fn main() {
     simple_logger::SimpleLogger::new()
-        .with_level(LevelFilter::Off)
+        .with_level(LevelFilter::Debug)
         .init()
         .unwrap();
 
