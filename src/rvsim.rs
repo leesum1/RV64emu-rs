@@ -177,8 +177,8 @@ impl RVsim {
         bus.plic.instance.tick();
         drop(bus);
 
-        #[cfg(feature = "std")]
-        self.check_to_host();
+        // #[cfg(feature = "std")]
+        // self.check_to_host();
     }
 
     pub fn step(&mut self) {

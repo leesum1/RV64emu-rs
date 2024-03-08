@@ -214,13 +214,20 @@ impl DebugModule {
                     let mut hart0 = self.hart0.borrow_mut(); // only support single hart now
 
                     if new_dmcontrol.ackhavereset() {
+                        // Clears havereset for any selected harts.
                         hart0.clear_havereset();
                     }
+
+                    // Writing 0 clears the halt request bit for all currently selected harts.
+                    // This may cancel outstanding halt requests for those harts.
+                    // Writing 1 sets the halt request bit for all currently
+                    // selected harts. Running harts will halt whenever
+                    // their halt request bit is set.
+                    hart0.set_haltreq(new_dmcontrol.haltreq());
 
                     if new_dmcontrol.haltreq() {
                         // halt request
                         debug!("DM: hart haltreq");
-                        hart0.set_haltreq(true);
                     } else if new_dmcontrol.resumereq() {
                         // Writing 1 causes the currently selected harts to
                         // resume once, if they are halted when the write
@@ -231,22 +238,20 @@ impl DebugModule {
                         hart0.resumereq();
                     }
 
-                    if new_dmcontrol.hartreset() {
-                        // This optional field writes the reset bit for all the
-                        // currently selected harts. To perform a reset the
-                        // debugger writes 1, and then writes 0 to deassert
-                        // the reset signal.
-                        hart0.reset_req();
-                    }
+                    // This optional field writes the reset bit for all the
+                    // currently selected harts. To perform a reset the
+                    // debugger writes 1, and then writes 0 to deassert
+                    // the reset signal.
+                    hart0.set_reset_req(new_dmcontrol.hartreset());
 
-                    if new_dmcontrol.ndmreset() {
-                        // This bit controls the reset signal from the DM
-                        // to the rest of the hardware platform. The signal
-                        // should reset every part of the hardware platform,
-                        // including every hart, except for the DM and any
-                        // logic required to access the DM
-                        hart0.reset_req();
-                    }
+                    // This bit controls the reset signal from the DM
+                    // to the rest of the hardware platform. The signal
+                    // should reset every part of the hardware platform,
+                    // including every hart, except for the DM and any
+                    // logic required to access the DM
+                    hart0.set_reset_req(new_dmcontrol.ndmreset());
+
+                    // TODO: is ndmreset and hartreset has priority?
 
                     self.dmcontrol = new_dmcontrol;
                     Some(())
@@ -264,9 +269,11 @@ impl DebugModule {
                 HAWINDOW => Some(()),
                 ABSTRACTCS_ADDR => {
                     let new_abstractcs = Abstractcs::from(wdata as u32);
-                    //The bits in this field remain set until they are cleared by writ-
-                    // ing 1 to them.
-                    if new_abstractcs.cmderr() == 1 {
+                    // Gets set if an abstract command fails. The bits in
+                    // this field remain set until they are cleared by writ-
+                    // ing 1 to them. No abstract command is started
+                    // until the value is reset to 0.
+                    if new_abstractcs.cmderr() == 7 {
                         debug!("clear cmderr");
                         self.abstractcs.set_cmderr(0);
                     }
@@ -419,53 +426,85 @@ impl DebugModule {
 
                 if command_mem.aamvirtual() {
                     self.abstractcs.set_cmderr(debug_const::CMDERR_NOTSUP as u8);
-                }
-
-                match command_mem.aamsize() as usize {
-                    debug_const::AAMSIZE_8 => {
-                        let address = self.arg_read64(1);
-                        if command_mem.write() {
-                            let value = self.arg_read64(0);
-                            hart0.write_memory(address, 1, value).unwrap();
-                        } else {
-                            // TODO: may fail?
-                            let value = hart0.read_memory(address, 1).unwrap();
-                            self.arg_write64(0, value);
+                } else {
+                    // physical memory access
+                    match command_mem.aamsize() as usize {
+                        debug_const::AAMSIZE_8 => {
+                            let address = self.arg_read64(1);
+                            if command_mem.write() {
+                                let wdata = self.arg_read64(0);
+                                if hart0.write_memory(address, 1, wdata).is_none() {
+                                    debug!("write_memory failed, address: {:x}", address);
+                                    self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8);
+                                }
+                            } else {
+                                match hart0.read_memory(address, 1) {
+                                    Some(rdata) => self.arg_write64(0, rdata),
+                                    None => {
+                                        debug!("read_memory failed, address: {:x}", address);
+                                        self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8)
+                                    }
+                                };
+                            }
                         }
-                    }
-                    debug_const::AAMSIZE_16 => {
-                        let address = self.arg_read64(1);
-                        if command_mem.write() {
-                            let value = self.arg_read64(0);
-                            hart0.write_memory(address, 2, value).unwrap();
-                        } else {
-                            let value = hart0.read_memory(address, 2).unwrap();
-                            self.arg_write64(0, value);
+                        debug_const::AAMSIZE_16 => {
+                            let address = self.arg_read64(1);
+                            if command_mem.write() {
+                                let wdata = self.arg_read64(0);
+                                if hart0.write_memory(address, 2, wdata).is_none() {
+                                    debug!("write_memory failed, address: {:x}", address);
+                                    self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8);
+                                }
+                            } else {
+                                match hart0.read_memory(address, 2) {
+                                    Some(rdata) => self.arg_write64(0, rdata),
+                                    None => {
+                                        debug!("read_memory failed, address: {:x}", address);
+                                        self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8)
+                                    }
+                                };
+                            }
                         }
-                    }
-                    debug_const::AAMSIZE_32 => {
-                        let address = self.arg_read64(1);
-                        if command_mem.write() {
-                            let value = self.arg_read64(0);
-                            hart0.write_memory(address, 4, value).unwrap();
-                        } else {
-                            let value = hart0.read_memory(address, 4).unwrap();
-                            self.arg_write64(0, value);
+                        debug_const::AAMSIZE_32 => {
+                            let address = self.arg_read64(1);
+                            if command_mem.write() {
+                                let wdata = self.arg_read64(0);
+                                if hart0.write_memory(address, 4, wdata).is_none() {
+                                    debug!("write_memory failed, address: {:x}", address);
+                                    self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8);
+                                }
+                            } else {
+                                match hart0.read_memory(address, 4) {
+                                    Some(rdata) => self.arg_write64(0, rdata),
+                                    None => {
+                                        debug!("read_memory failed, address: {:x}", address);
+                                        self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8)
+                                    }
+                                };
+                            }
                         }
-                    }
-                    debug_const::AAMSIZE_64 => {
-                        let address = self.arg_read64(1);
-                        if command_mem.write() {
-                            let value = self.arg_read64(0);
-                            hart0.write_memory(address, 8, value).unwrap();
-                        } else {
-                            let value = hart0.read_memory(address, 8).unwrap();
-                            self.arg_write64(0, value);
+                        debug_const::AAMSIZE_64 => {
+                            let address = self.arg_read64(1);
+                            if command_mem.write() {
+                                let wdata = self.arg_read64(0);
+                                if hart0.write_memory(address, 8, wdata).is_none() {
+                                    debug!("write_memory failed, address: {:x}", address);
+                                    self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8);
+                                }
+                            } else {
+                                match hart0.read_memory(address, 8) {
+                                    Some(rdata) => self.arg_write64(0, rdata),
+                                    None => {
+                                        debug!("read_memory failed, address: {:x}", address);
+                                        self.abstractcs.set_cmderr(debug_const::CMDERR_BUS as u8)
+                                    }
+                                };
+                            }
                         }
-                    }
-                    _ => {
-                        debug!("unimplemented aamsize: {}", command_mem.aamsize());
-                        self.abstractcs.set_cmderr(debug_const::CMDERR_NOTSUP as u8);
+                        _ => {
+                            debug!("unimplemented aamsize: {}", command_mem.aamsize());
+                            self.abstractcs.set_cmderr(debug_const::CMDERR_NOTSUP as u8);
+                        }
                     }
                 }
             }

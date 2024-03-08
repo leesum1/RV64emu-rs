@@ -3,10 +3,7 @@ use std::{fs, path::Path, rc::Rc};
 
 use log::LevelFilter;
 use rv64emu::{
-    config::Config,
-    device::device_memory::DeviceMemory,
-    rvsim::RVsim,
-    tools::RcRefCell,
+    config::Config, device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell,
 };
 
 use crate::{
@@ -62,7 +59,6 @@ fn start_test(img: &str) -> bool {
     sim.run()
 }
 
-
 #[test]
 fn test_once() {
     let img = get_riscv_tests_path().join("rv64mi-p-csr");
@@ -79,8 +75,7 @@ struct TestRet {
 fn run_arch_tests() {
     // not support misaligned load/store, so skip these tests
 
-    let sikp_files = ["rv64ui-p-ma_data",
-        "rv64ui-v-ma_data"];
+    let sikp_files = ["rv64ui-p-ma_data", "rv64ui-v-ma_data"];
     simple_logger::SimpleLogger::new()
         .with_level(LevelFilter::Debug)
         .init()

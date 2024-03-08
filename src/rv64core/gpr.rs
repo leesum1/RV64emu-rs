@@ -143,6 +143,12 @@ impl Gpr {
 
         self.read(idx as u64)
     }
+
+    pub fn reset(&mut self) {
+        for i in 0..32 {
+            self.write(i, 0);
+        }
+    }
 }
 
 impl Default for Gpr {

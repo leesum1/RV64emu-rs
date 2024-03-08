@@ -24,7 +24,7 @@ pub trait DebugModuleSlave {
         !self.halted()
     }
     fn resume_ack(&mut self) -> bool;
-    fn reset_req(&mut self);
+    fn set_reset_req(&mut self, val: bool);
     fn havereset(&mut self) -> bool;
     fn clear_havereset(&mut self);
 }

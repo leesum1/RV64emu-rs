@@ -1,4 +1,4 @@
-use core::{cell::Cell, result};
+use core::{borrow::Borrow, cell::Cell, result};
 
 use alloc::rc::Rc;
 use log::{debug, info, warn};
@@ -28,13 +28,15 @@ use super::{
 };
 
 pub struct DebugState {
-    // 临时的状态位
+    // 临时的状态位，dm 只负责置 1
     pub resumereq_flag: bool,
-    pub resetreq_flag: bool,
     pub singlestep_flag: bool,
 
-    // dm 给啥就是啥
-    pub haltreq: bool,
+    // 由 dm 控制置 1 或者清零
+    pub resetreq_signal: bool,
+
+    // 由 dm 控制置 1 或者清零
+    pub haltreq_signal: bool,
 
     // 发送 resumereq 时，resumeack 首先被置为0, 进入 resume 状态
     // 处理器 resume 时，resumeack 被置为1
@@ -51,8 +53,8 @@ impl DebugState {
     pub fn new() -> Self {
         DebugState {
             resumereq_flag: false,
-            resetreq_flag: false,
-            haltreq: false,
+            resetreq_signal: false,
+            haltreq_signal: false,
             resumeack: false,
             havereset: false,
             debug_mode: false,
@@ -180,6 +182,20 @@ pub struct CpuCore {
 }
 unsafe impl Send for CpuCore {}
 impl CpuCore {
+    fn reset(&mut self) {
+        self.gpr = Gpr::new();
+        self.csr_regs.reset();
+        self.npc = 0x8000_0000; //TODO: config
+        self.cpu_state = CpuState::Running;
+        self.debug_state = DebugState::new();
+        self.decode.reset();
+        let mut cache = self.cache_system.borrow_mut();
+        cache.icache.clear();
+        cache.dcache.clear();
+
+        debug!("cpu reset: pc:{:x}", self.npc);
+    }
+
     fn fetch_from_mem(&mut self, addr: u64, size: u64) -> Result<u64, TrapType> {
         if check_aligned(addr, 4) {
             self.icahce_read(addr, 4)
@@ -237,9 +253,9 @@ impl CpuCore {
         let cycle = self.csr_regs.cycle.get();
         let instret = self.csr_regs.instret.get();
         info!("cycle:{},instret:{}", cycle, instret);
-        self.cache_system.borrow().show_perf();
-        self.decode.show_perf();
-        self.mmu.show_perf();
+        // let x = self.cache_system.borrow();
+        // self.decode.show_perf();
+        // self.mmu.show_perf();
     }
 
     fn set_pc(&mut self, pc: u64) {
@@ -325,9 +341,10 @@ impl CpuCore {
         for _ in 0..num {
             match self.cpu_state {
                 CpuState::Running => {
-                    if self.debug_state.resetreq_flag {
-                        todo!("reset")
-                    } else if self.debug_state.haltreq {
+                    if self.debug_state.resetreq_signal {
+                        self.debug_state.havereset = true;
+                        self.reset();
+                    } else if self.debug_state.haltreq_signal {
                         self.enter_debug_mode(DebugCause::HaltReq)
                     } else {
                         self.real_excute();
@@ -402,7 +419,7 @@ impl CpuCore {
         let tval = trap_type.get_tval();
         let cause = trap_type.idx();
 
-        log::trace!(
+        log::debug!(
             "pc:{:x},trap_type:{:?},cause:{:?},tval:{:x}",
             self.pc,
             trap_type,
@@ -729,8 +746,7 @@ impl DebugModuleSlave for CpuCore {
     }
 
     fn set_haltreq(&mut self, val: bool) {
-        self.debug_state.haltreq = val;
-        debug!("[DebugModuleSlave] set haltreq:{:?}", val);
+        self.debug_state.haltreq_signal = val;
     }
 
     fn resumereq(&mut self) {
@@ -747,9 +763,8 @@ impl DebugModuleSlave for CpuCore {
         self.debug_state.resumeack
     }
 
-    fn reset_req(&mut self) {
-        self.debug_state.resetreq_flag = true;
-        debug!("[DebugModuleSlave] resetreq");
+    fn set_reset_req(&mut self, val: bool) {
+        self.debug_state.resetreq_signal = val;
     }
 
     fn havereset(&mut self) -> bool {

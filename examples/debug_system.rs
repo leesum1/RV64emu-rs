@@ -76,9 +76,9 @@ fn main() {
 
     // config
     let mut config = Config::new();
-    config.set_tlb_size(256);
-    config.set_icache_size(4096);
-    config.set_decode_cache_size(4096);
+    // config.set_tlb_size(256);
+    // config.set_icache_size(4096);
+    // config.set_decode_cache_size(4096);
     config.set_mmu_type("sv39"); // sv39 sv48 sv57
     config.set_isa("rv64imac");
     config.set_s_mode();

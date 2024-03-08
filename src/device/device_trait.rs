@@ -28,4 +28,6 @@ pub trait DeviceBase {
     }
     fn get_name(&self) -> &'static str;
     fn do_update(&mut self) {}
+
+    fn reset(&mut self) {}
 }

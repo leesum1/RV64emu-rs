@@ -55,6 +55,13 @@ impl InstDecode {
         self.inst_hash.capacity() == 0
     }
 
+    pub fn reset(&mut self) {
+        self.inst_hash.clear();
+        self.hit = 0;
+        self.miss = 0;
+        self.remove_count = 0;
+    }
+
     fn slow_path(&mut self, inst_i: u32) -> Option<&Instruction> {
         let slowpath = self
             .inst_vec

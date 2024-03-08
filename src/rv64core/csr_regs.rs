@@ -53,6 +53,41 @@ pub struct CsrRegs {
 }
 
 impl CsrRegs {
+    pub fn reset(&mut self) {
+        let mut mstatus_val = XstatusIn::new().with_mpp(PrivilegeLevels::Machine as u8);
+
+        mstatus_val.set_mbe(false);
+        mstatus_val.set_sbe(false);
+        mstatus_val.set_ube(false);
+        if self.config.s_mode() {
+            mstatus_val.set_sxl(2) // 64
+        }
+        if self.config.u_mode() {
+            mstatus_val.set_uxl(2); // 64
+            mstatus_val.set_mprv(false);
+        }
+        self.xstatus.set(mstatus_val);
+
+        self.xip.set(XipIn::new());
+        self.xie.set(XieIn::new());
+        self.mtvec.set(XtvecIn::new());
+        self.stvec.set(XtvecIn::new());
+        self.mcause.set(XcauseIn::new());
+        self.scause.set(XcauseIn::new());
+        self.medeleg.set(MedelegIn::new());
+        self.mideleg.set(MidelegIn::new());
+        self.mepc.set(0);
+        self.sepc.set(0);
+        self.satp.set(SatpIn::new());
+        self.mtval.set(0);
+        self.stval.set(0);
+        self.cycle.set(0);
+        self.instret.set(0);
+        self.dcsr
+            .set(DcsrIn::new().with_debugver(4).with_mprven(true));
+        self.dpc.set(0);
+    }
+
     pub fn new(hart_id: usize, config: Rc<Config>) -> Self {
         let mut misa_val = Misa::new().with_i(true).with_mxl(2); // 64
 
@@ -206,9 +241,13 @@ impl CsrRegs {
         let dscratch0 = CommonCSR::new_noshare(0);
         let dscratch1 = CommonCSR::new_noshare(0);
 
-        // not support debug mode,just to pass breakpoint test
-        // Skip tselect if hard-wired. RISC-V Debug Specification
-        let tselect = ReadOnlyCSR(u64::MAX);
+        // not support hardware trigger now
+        let tselect = ReadOnlyCSR(0);
+        let tdata1 = ReadOnlyCSR(0);
+        let tdata2 = ReadOnlyCSR(0);
+        let tdata3 = ReadOnlyCSR(0);
+        let tinfo = ReadOnlyCSR(0);
+
 
         let mut csr_map: HashMap<u64, CsrEnum> = HashMap::new();
 
