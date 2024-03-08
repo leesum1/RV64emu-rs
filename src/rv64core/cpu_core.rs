@@ -291,21 +291,20 @@ impl CpuCore {
 
         // 5. check step, and set single step flag
         if dcsr.step() {
+            debug!("set single step flag");
             self.debug_state.singlestep_flag = true;
-            self.single_step_proc();
         }
     }
 
     fn single_step_proc(&mut self) {
-        if self.debug_state.singlestep_flag {
-            debug!("single step");
-            self.debug_state.singlestep_flag = false;
+        assert!(self.debug_state.singlestep_flag, "not in single step mode");
+        debug!("single step");
+        self.debug_state.singlestep_flag = false;
 
-            // execute one instruction
-            self.real_excute();
-            // after execute one instruction, enter debug mode
-            self.enter_debug_mode(DebugCause::Step)
-        }
+        // execute one instruction
+        self.real_excute();
+        // after execute one instruction, enter debug mode
+        self.enter_debug_mode(DebugCause::Step, self.npc)
     }
 
     // fetch and execute one instruction
@@ -345,7 +344,9 @@ impl CpuCore {
                         self.debug_state.havereset = true;
                         self.reset();
                     } else if self.debug_state.haltreq_signal {
-                        self.enter_debug_mode(DebugCause::HaltReq)
+                        self.enter_debug_mode(DebugCause::HaltReq, self.npc)
+                    } else if self.debug_state.singlestep_flag {
+                        self.single_step_proc();
                     } else {
                         self.real_excute();
                         self.handle_interrupt();
@@ -625,8 +626,8 @@ impl CpuCore {
     // }
 
     // halt
-    fn enter_debug_mode(&mut self, cause: DebugCause) {
-        debug!("enter debug mode,cause:{:?}", cause);
+    pub fn enter_debug_mode(&mut self, cause: DebugCause, pc: u64) {
+        debug!("enter debug mode,cause:{:?},pc:{:x}", cause, pc);
 
         let mut dcsr = self.csr_regs.dcsr.get();
 
@@ -639,7 +640,8 @@ impl CpuCore {
         self.csr_regs.dcsr.set(dcsr);
 
         // 3. dpc is set to the next instruction that should be executed.
-        self.csr_regs.dpc.set(self.npc);
+
+        self.csr_regs.dpc.set(pc);
         // 4. The hart enters Debug Mode.
         self.debug_state.debug_mode = true;
         self.cpu_state = CpuState::Haltd;

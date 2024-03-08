@@ -1,6 +1,9 @@
+use log::debug;
 
-
-use crate::{rv64core::inst::inst_base::*, rv64core::traptype::TrapType};
+use crate::rv64core::{
+    inst::inst_base::*,
+    traptype::{DebugCause, TrapType},
+};
 
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_Z: &[Instruction] = &[
@@ -8,11 +11,7 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         mask: MASK_EBREAK,
         match_data: MATCH_EBREAK,
         name: "EBREAK",
-        operation: |cpu, inst, pc| {
-            #[cfg(feature = "support_am")]
-            cpu.halt();
-            Err(TrapType::Breakpoint(pc))
-        },
+        operation: |cpu, inst, pc| handle_ebreak(cpu, pc),
     },
     Instruction {
         mask: MASK_ECALL,
@@ -53,13 +52,11 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
             mstatus.set_mpie(true);
             // xPP is set to the least-privileged supported mode
             // (U if U-mode is implemented, else M).
-            mstatus.set_mpp(
-                if cpu.config.u_mode() {
-                    PrivilegeLevels::User as u8
-                } else {
-                    PrivilegeLevels::Machine as u8
-                }
-            );
+            mstatus.set_mpp(if cpu.config.u_mode() {
+                PrivilegeLevels::User as u8
+            } else {
+                PrivilegeLevels::Machine as u8
+            });
             // (If xPP̸=M, x RET also sets MPRV=0.) Clarify => (If y!=M, x RET also sets MPRV=0.)
             // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
             if y != PrivilegeLevels::Machine {
@@ -339,3 +336,48 @@ pub const INSTRUCTIONS_Z: &[Instruction] = &[
         },
     },
 ];
+
+pub fn handle_ebreak(
+    cpu: &mut crate::rv64core::cpu_core::CpuCore,
+    pc: u64,
+) -> Result<(), TrapType> {
+    let in_debug_mode = cpu.debug_state.debug_mode;
+    let dcsr = cpu.csr_regs.dcsr.get();
+    let cur_priv = cpu.cur_priv.get();
+
+    let cur_priv_m = cur_priv == PrivilegeLevels::Machine;
+    let cur_priv_s = cur_priv == PrivilegeLevels::Supervisor;
+    let cur_priv_u = cur_priv == PrivilegeLevels::User;
+
+    let enter_debug_cond = [
+        cur_priv_m && dcsr.ebreakm(),
+        cur_priv_s & dcsr.ebreaks(),
+        cur_priv_u & dcsr.ebreaku(),
+    ]
+    .iter()
+    .any(|&x| x);
+
+    let enter_excp_cond = [
+        cur_priv_m && !dcsr.ebreakm(),
+        cur_priv_s & !dcsr.ebreaks(),
+        cur_priv_u & !dcsr.ebreaku(),
+    ]
+    .iter()
+    .any(|&x| x);
+
+    if in_debug_mode {
+        debug!("EBREAK:in_debug_mode");
+    } else if !in_debug_mode && enter_excp_cond {
+        debug!("EBREAK:enter_excp_cond,pc:{:x}", pc);
+        return Err(TrapType::Breakpoint(pc));
+    } else if !in_debug_mode && enter_debug_cond {
+        debug!("EBREAK:entry_debug_mode,pc:{:x}", pc);
+        cpu.enter_debug_mode(DebugCause::Ebreak, pc);
+    } else {
+        unreachable!("EBREAK:unreachable");
+    };
+
+    #[cfg(feature = "support_am")]
+    cpu.halt();
+    Ok(())
+}

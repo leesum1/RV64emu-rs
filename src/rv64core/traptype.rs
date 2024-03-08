@@ -121,7 +121,7 @@ impl TrapType {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug,Clone, Copy)]
 pub enum DebugCause {
     NoDebug = 0,
     Ebreak = 1,

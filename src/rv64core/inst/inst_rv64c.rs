@@ -2,6 +2,8 @@ use crate::{rv64core::{inst::inst_base::*, traptype::TrapType}, tools::check_ali
 
 #[cfg(feature = "rvc_debug_trace")]
 use crate::trace::traces::TraceType;
+
+use super::inst_rv64z::handle_ebreak;
 // https://stackoverflow.com/questions/50241218/risc-v-compressed-instructions-can-compiler-be-forced-to-align-32bit-instructio
 #[allow(unused_variables)]
 pub const INSTRUCTIONS_C: &[Instruction] = &[
@@ -582,9 +584,7 @@ pub const INSTRUCTIONS_C: &[Instruction] = &[
         match_data: MATCH_C_EBREAK,
         name: "c.ebreak",
         operation: |cpu, inst, pc| {
-            #[cfg(feature = "support_am")]
-            cpu.halt();
-            Err(TrapType::Breakpoint(pc))
+            handle_ebreak(cpu,pc)
         },
     },
 ];
