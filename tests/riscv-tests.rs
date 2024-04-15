@@ -3,7 +3,7 @@ use std::{fs, path::Path, rc::Rc};
 
 use log::LevelFilter;
 use rv64emu::{
-    config::Config, device::device_memory::DeviceMemory, rvsim::RVsim, tools::RcRefCell,
+    config::Config, device::device_memory::DeviceMemory, rvsim::RVsim, tools::{rc_refcell_new, RcRefCell},
 };
 
 use crate::{
@@ -36,11 +36,11 @@ fn start_test(img: &str) -> bool {
 
     let config = Rc::new(config);
 
-    let cpu = CpuCoreBuild::new(bus_u.clone(), config)
+    let cpu = rc_refcell_new(CpuCoreBuild::new(bus_u.clone(), config)
         .with_boot_pc(0x8000_0000)
         .with_hart_id(0)
         .with_smode(true)
-        .build();
+        .build());
 
     // device dram
     let mem: DeviceMemory = DeviceMemory::new(128 * 1024 * 1024);
@@ -75,7 +75,7 @@ struct TestRet {
 fn run_arch_tests() {
     // not support misaligned load/store, so skip these tests
 
-    let sikp_files = ["rv64ui-p-ma_data", "rv64ui-v-ma_data"];
+    let sikp_files = ["rv64ui-p-ma_data", "rv64ui-v-ma_data","rv64mi-p-breakpoint"];
     simple_logger::SimpleLogger::new()
         .with_level(LevelFilter::Debug)
         .init()

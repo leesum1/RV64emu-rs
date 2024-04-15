@@ -42,7 +42,7 @@ pub struct RVsim {
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
 
-    // debug
+    // debug module
     remote_bitbang: RemoteBitBang,
     jtag_driver: JtagDriver,
     // Config
@@ -55,7 +55,7 @@ impl RVsim {
 
         let dm = DebugModule::new(harts[0].clone());
         let remote_bitbang = RemoteBitBang::new("0.0.0.0", 23456);
-        let mut jtag_driver = JtagDriver::new(dm);
+        let jtag_driver = JtagDriver::new(dm);
 
         Self {
             harts,
@@ -177,8 +177,8 @@ impl RVsim {
         bus.plic.instance.tick();
         drop(bus);
 
-        // #[cfg(feature = "std")]
-        // self.check_to_host();
+        #[cfg(feature = "std")]
+        self.check_to_host();
     }
 
     pub fn step(&mut self) {

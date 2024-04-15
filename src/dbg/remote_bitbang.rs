@@ -17,6 +17,7 @@ impl RemoteBitBang {
     pub fn new(ip: &str, port: u16) -> RemoteBitBang {
         let socket = std::net::TcpListener::bind((ip, port)).unwrap();
         socket.set_nonblocking(true).unwrap();
+        info!("Remote Bitbang listening on {}:{}", ip, port);
         RemoteBitBang {
             socket,
             client: None,
