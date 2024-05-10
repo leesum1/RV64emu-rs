@@ -359,12 +359,24 @@ impl DebugModule {
                 if command_reg.transfer() {
                     let reg_data = match command_reg.regno() {
                         0x0000..=0x0fff => {
+                            let csr_address = (command_reg.regno()) as usize;
                             if command_reg.write() {
-                                hart0.write_csr(
-                                    command_reg.regno().into(),
-                                    self.abstract_data[0] as u64,
-                                );
-                                Some(self.abstract_data[0] as u64)
+                                match command_reg.aarsize() as usize {
+                                    debug_const::AARSIZE_32 => {
+                                        let wdata = self.arg_read32(0) as u64;
+                                        hart0.write_csr(csr_address, wdata);
+                                        Some(wdata)
+                                    }
+                                    debug_const::AARSIZE_64 => {
+                                        let wdata = self.arg_read64(0);
+                                        hart0.write_csr(csr_address, wdata);
+                                        Some(wdata)
+                                    }
+                                    _ => {
+                                        debug!("unimplemented aarsize: {}", command_reg.aarsize());
+                                        None
+                                    }
+                                }
                             } else {
                                 Some(hart0.read_csr(command_reg.regno().into()))
                             }
