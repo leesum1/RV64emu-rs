@@ -201,7 +201,7 @@ fn main() {
 
     // create another thread to simmulate the harts
     // let cpu_main = thread::spawn(move || {
-    let mut sim = RVsim::new(hart_vec);
+    let mut sim = RVsim::new(hart_vec, 23456);
     if let Some(ram_img) = args.img {
         sim.load_image(&ram_img);
     }

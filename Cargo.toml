@@ -1,7 +1,7 @@
 [package]
 name = "rv64emu"
 authors = ["leesum <zl123338@gmail.com>"]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 description = "A riscv64 emulator written in rust,it can run on Linux, Windows and MacOS. Even on the embedded device, such as `ESP32` and `STM32` which support Embeded RUST"
@@ -9,16 +9,11 @@ description = "A riscv64 emulator written in rust,it can run on Linux, Windows a
 repository = "https://github.com/leesum1/RV64emu-rs"
 documentation = "https://docs.rs/rv64emu"
 readme = "README.md"
-keywords = ["RISC-V", "riscv","emulator","no_std"]
+keywords = ["RISC-V", "riscv", "emulator", "no_std"]
 license = "MIT"
 
 
-exclude = [
-    "ready_to_run/*",
-    "tests/*",
-    "doc/*",
-]
-
+exclude = ["ready_to_run/*", "tests/*", "doc/*"]
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -58,9 +53,9 @@ path = "src/lib.rs"
 name = "simple_system"
 required-features = ["std", "support_am"]
 
-[[example]]
-name = "ysyx_am_system"
-required-features = ["std", "device_sdl2"]
+# [[example]]
+# name = "ysyx_am_system"
+# required-features = ["std", "device_sdl2"]
 
 [[example]]
 name = "linux_system"
@@ -73,17 +68,14 @@ required-features = ["std"]
 
 [features]
 
+
 default = ["std"]
-
-
+# support sdl2 device, such as vga and keyboard
 device_sdl2 = ["dep:sdl2", "support_am", "std"]
+# support debug trace,including itrace and ftrace, the log file is in /tmp
 rv_debug_trace = ["dep:capstone", "dep:crossbeam-channel", "std"]
-
-
 std = ["alloc"]
 alloc = []
-
-
 support_am = []
 
 

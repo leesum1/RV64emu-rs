@@ -2,6 +2,7 @@ use std::{env, path::PathBuf};
 extern crate rv64emu;
 
 use rv64emu::{
+    config::Config,
     device::{
         device_am_uart::DeviceUart,
         device_memory::DeviceMemory,
@@ -12,7 +13,7 @@ use rv64emu::{
         cpu_core::CpuCoreBuild,
     },
     rvsim::RVsim,
-    tools::{fifo_unbounded_new, rc_refcell_new}, config::Config,
+    tools::{fifo_unbounded_new, rc_refcell_new},
 };
 
 fn main() {
@@ -70,14 +71,14 @@ fn main() {
     println!("{0}", bus_u.borrow());
 
     let harts = vec![hart0];
-    let mut sim = RVsim::new(harts);
+    let mut sim = RVsim::new(harts, 23456);
 
     // run simulation
     let bin_data = std::fs::read(bin_path).unwrap();
     sim.load_image_from_slice(&bin_data);
     sim.prepare_to_run();
     while !sim.is_finish() {
-        sim.run_once();
+        sim.run_once(5000);
 
         while let Some(c) = uart0_tx_fifo.pop() {
             print!("{}", c as char);

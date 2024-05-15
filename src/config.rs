@@ -4,6 +4,8 @@ use crate::rv64core::csr_regs_define::StapMode;
 
 const IMPLMENTED_ISA: [u8; 4] = [b'i', b'm', b'a', b'c'];
 
+
+#[derive(Debug)]
 pub struct Config {
     icache_size: Option<usize>,
     dcache_size: Option<usize>,
@@ -13,6 +15,7 @@ pub struct Config {
     s_mode: bool,
     u_mode: bool,
     isa_falgs: u32,
+    disable_check_tohost: bool,
 }
 
 impl Default for Config {
@@ -26,6 +29,7 @@ impl Default for Config {
             isa_falgs: 0,
             s_mode: false,
             u_mode: false,
+            disable_check_tohost: false,
         }
     }
 }
@@ -82,7 +86,14 @@ impl Config {
         )
     }
 
-    #[inline]
+    pub fn set_disable_check_tohost(&mut self, disable: bool) {
+        self.disable_check_tohost = disable;
+    }
+
+    pub fn disable_check_tohost(&self) -> bool {
+        self.disable_check_tohost
+    }
+
     pub fn is_enable_isa(&self, isa: u8) -> bool {
         let idx = isa - b'a';
         self.isa_falgs & (1 << idx) != 0

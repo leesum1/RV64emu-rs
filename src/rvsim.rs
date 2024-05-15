@@ -15,7 +15,7 @@ use elf::{
 use log::info;
 
 use crate::{
-    config::Config,
+    config::{self, Config},
     dbg::{debug_module_new::DebugModule, jtag_driver::JtagDriver, remote_bitbang::RemoteBitBang},
 };
 #[allow(unused_imports)]
@@ -31,18 +31,19 @@ use crate::{
 
 // #[derive(Default)]
 pub struct RVsim {
-    /* riscv-arch-tests */
+    /* riscv-arch-tests need this symbol */
     tohost: Option<u64>,
     _fromhost: Option<u64>,
-    /* riscof tests */
+    /* riscof tests need this symbol*/
     signature_range: Option<ops::Range<u64>>,
     signature_file: Option<String>,
+    /* SOC bus */
     bus: RcRefCell<Bus>,
     pub harts: Vec<RcRefCell<CpuCore>>,
     // name: String,value: u64
     elf_symbols: hashbrown::HashMap<String, u64>,
 
-    // debug module
+    /*  debug module */
     remote_bitbang: RemoteBitBang,
     jtag_driver: JtagDriver,
     // Config
@@ -50,17 +51,18 @@ pub struct RVsim {
 }
 
 impl RVsim {
-    pub fn new(harts: Vec<RcRefCell<CpuCore>>) -> Self {
+    pub fn new(harts: Vec<RcRefCell<CpuCore>>, rbb_port: u16) -> Self {
+        assert_ne!(harts.len(), 0, "No hart in rvsim");
         let bus = harts[0].borrow_mut().mmu.caches.borrow_mut().bus.clone();
 
         let dm = DebugModule::new(harts[0].clone());
-        let remote_bitbang = RemoteBitBang::new("0.0.0.0", 23456);
+        let remote_bitbang = RemoteBitBang::new("0.0.0.0", rbb_port);
         let jtag_driver = JtagDriver::new(dm);
-
+        let config = harts[0].borrow().config.clone();
         Self {
             harts,
             bus,
-            config: Rc::new(Config::new()),
+            config,
             elf_symbols: hashbrown::HashMap::new(),
             tohost: None,
             _fromhost: None,
@@ -165,31 +167,19 @@ impl RVsim {
     }
 
     // run 5000 cycles
-    pub fn run_once(&mut self) {
+    pub fn run_once(&mut self, interval_cycle: usize) {
         self.remote_bitbang.tick(&mut self.jtag_driver);
 
         self.harts.iter_mut().for_each(|hart| {
-            hart.borrow_mut().execute(5000);
+            hart.borrow_mut().execute(interval_cycle);
         });
         let mut bus = self.bus.borrow_mut();
-        bus.update();
-        bus.clint.instance.tick(5000 / 10);
-        bus.plic.instance.tick();
+        bus.update(interval_cycle);
+
         drop(bus);
 
         #[cfg(feature = "std")]
         self.check_to_host();
-    }
-
-    pub fn step(&mut self) {
-        self.harts.iter_mut().for_each(|hart| {
-            hart.borrow_mut().execute(1);
-        });
-        let mut bus = self.bus.borrow_mut();
-        bus.update();
-        bus.clint.instance.tick(1);
-        bus.plic.instance.tick();
-        drop(bus);
     }
 
     // true: exit, false: abort
@@ -216,7 +206,7 @@ impl RVsim {
         self.prepare_to_run();
 
         while !self.is_finish() {
-            self.run_once();
+            self.run_once(5000);
         }
         #[cfg(feature = "std")]
         self.dump_signature();
@@ -230,9 +220,10 @@ impl RVsim {
     // (0x80001000 in mose test cases)
     #[cfg(feature = "std")]
     pub fn check_to_host(&mut self) {
-        if self.tohost.is_none() {
+        if self.tohost.is_none() || self.config.disable_check_tohost() {
             return;
         }
+
 
         self.harts[0].borrow_mut().cache_system.borrow_mut().clear();
         let mut bus_u = self.bus.borrow_mut();

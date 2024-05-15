@@ -1,3 +1,5 @@
+use core::cmp::max;
+
 use alloc::vec::Vec;
 use alloc::{boxed::Box, string::ToString};
 use log::warn;
@@ -132,7 +134,6 @@ impl Bus {
     }
 
     pub fn copy_from_slice(&mut self, addr: u64, data: &[u8]) -> Result<(), RVerr> {
-
         let mut special_device = || -> Result<(), RVerr> {
             if check_area(self.clint.start, self.clint.len, addr) {
                 self.clint
@@ -196,10 +197,12 @@ impl Bus {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, interval_cycle: usize) {
         self.devices
             .iter_mut()
             .for_each(|device| device.instance.do_update());
+        self.clint.instance.tick(max(interval_cycle / 10, 1));
+        self.plic.instance.tick();
     }
 }
 

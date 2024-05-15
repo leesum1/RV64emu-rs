@@ -180,7 +180,6 @@ pub struct CpuCore {
     #[cfg(feature = "rv_debug_trace")]
     pub trace_sender: Option<crossbeam_channel::Sender<TraceType>>,
 }
-unsafe impl Send for CpuCore {}
 impl CpuCore {
     fn reset(&mut self) {
         self.gpr = Gpr::new();

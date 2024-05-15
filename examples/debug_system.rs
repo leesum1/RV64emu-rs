@@ -82,8 +82,9 @@ fn main() {
     config.set_mmu_type("sv39"); // sv39 sv48 sv57
     config.set_isa("rv64imac");
     config.set_s_mode();
+    config.set_disable_check_tohost(true);
+    info!("{:?}", config);
     let config = Rc::new(config);
-
     let signal_term = Arc::new(AtomicBool::new(false));
 
     let bus_u = rc_refcell_new(Bus::new());
@@ -201,7 +202,7 @@ fn main() {
 
     // create another thread to simmulate the harts
     // let cpu_main = thread::spawn(move || {
-    let mut sim = RVsim::new(hart_vec);
+    let mut sim = RVsim::new(hart_vec, 23456);
     if let Some(ram_img) = args.img {
         sim.load_image(&ram_img);
     }
@@ -211,6 +212,5 @@ fn main() {
     signal_term.store(true, Ordering::Relaxed);
     // });
 
-    // cpu_main.join().unwrap();
     uart_tx_thread.join().unwrap();
 }
