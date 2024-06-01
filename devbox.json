@@ -5,14 +5,13 @@
     "libiconv@latest",
     "neovim@latest"
   ],
+  "env": {
+    "PROJECT_DIR": "$PWD"
+  },
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null",
-      "echo \"project dir is ${PROJECT_DIR}\"",
-      "rustupHomeDir=\"${PROJECT_DIR}/.rustup\"",
-      "mkdir -p \"${rustupHomeDir}\"",
-      "export RUSTUP_HOME=\"${rustupHomeDir}\"",
-      "export LIBRARY_PATH=\"${LIBRARY_PATH}:${PROJECT_DIR}/nix/profile/default/lib\"",
+      ". my-flakes/set-env.sh",
       "rustup default stable"
     ],
     "scripts": {
