@@ -32,7 +32,6 @@ fn main() {
     // 1. manage all devices,including plic,clint,and sram
     // 2. shared by all harts
     let bus_u = rc_refcell_new(Bus::new());
-
     // create hart0 with smode support, some additional features are as follows
     // 1. the first instruction is executed at 0x8000_0000
     // 2. hart0 id is 0
