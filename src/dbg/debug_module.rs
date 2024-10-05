@@ -127,10 +127,13 @@ impl DebugModule {
                     self.dmstatus.set_anynonexistent(false);
                     self.dmstatus.set_allnonexistent(false);
 
-                    if hart0.havereset() {
-                        self.dmstatus.set_anyhavereset(true);
-                        self.dmstatus.set_allhavereset(true);
-                    }
+                    // if hart0.havereset() {
+                    //     self.dmstatus.set_anyhavereset(true);
+                    //     self.dmstatus.set_allhavereset(true);
+                    // }
+
+                    self.dmstatus.set_anyhavereset(hart0.havereset());
+                    self.dmstatus.set_allhavereset(hart0.havereset());
 
                     self.dmstatus.set_anyresumeack(hart0.resume_ack());
                     self.dmstatus.set_allresumeack(hart0.resume_ack());
@@ -269,20 +272,43 @@ impl DebugModule {
                 HAWINDOW => Some(()),
                 ABSTRACTCS_ADDR => {
                     let new_abstractcs = Abstractcs::from(wdata as u32);
-                    // Gets set if an abstract command fails. The bits in
-                    // this field remain set until they are cleared by writ-
-                    // ing 1 to them. No abstract command is started
-                    // until the value is reset to 0.
-                    if new_abstractcs.cmderr() == 7 {
-                        debug!("clear cmderr");
-                        self.abstractcs.set_cmderr(0);
+
+                    if (new_abstractcs.busy()) {
+                        // Writing this register while an abstract command is executing causes cmderr to become 1 (busy) once
+                        self.abstractcs.set_cmderr(debug_const::CMDERR_BUSY as u8);
+                    } else {
+                        // this field remain set until they are cleared by writ-
+                        // ing 1 to them.
+                        let old_cmderr = self.abstractcs.cmderr();
+                        let new_cmderr = old_cmderr & !new_abstractcs.cmderr();
+
+                        // if new_abstractcs.cmderr() == 7 {
+                        //     debug!("clear cmderr");
+                        //     self.abstractcs.set_cmderr(0);
+                        // }
+                        self.abstractcs.set_cmderr(new_cmderr);
                     }
+
                     Some(())
                 }
                 COMMAND_ADDR => {
                     self.command = Command::from(wdata as u32);
 
-                    self.perform_abstract_command();
+                    // If cmderr is non-zero, writes to this register are ignored.
+                    if self.abstractcs.cmderr() != debug_const::CMDERR_NONE as u8 {
+                        debug!(
+                            "Do not perform command when cmderr is not NONE, cmderr: {}",
+                            self.abstractcs.cmderr()
+                        );
+                    } else {
+
+                        // This bit is set as soon as command is written, and is not
+                        // cleared until that command has completed.
+                        self.abstractcs.set_busy(true);
+                        self.perform_abstract_command();
+                        self.abstractcs.set_busy(false);
+                    }
+
                     Some(())
                 }
                 ABSTRACTAUTO_ADDR => Some(()),
@@ -329,14 +355,6 @@ impl DebugModule {
     }
 
     fn perform_abstract_command(&mut self) {
-        //No abstract command is started until the value is reset to 0.
-        if self.abstractcs.cmderr() != debug_const::CMDERR_NONE as u8 {
-            debug!(
-                "Do not perform command when cmderr is not NONE, cmderr: {}",
-                self.abstractcs.cmderr()
-            );
-            return;
-        }
         // only support single hart now
         let binding = self.hart0.clone();
         let mut hart0 = binding.borrow_mut();
@@ -525,8 +543,5 @@ impl DebugModule {
                 self.abstractcs.set_cmderr(debug_const::CMDERR_NOTSUP as u8);
             }
         };
-
-        // The abstract command completed successfully.
-        self.abstractcs.set_busy(false);
     }
 }

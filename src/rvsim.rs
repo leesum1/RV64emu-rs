@@ -16,7 +16,7 @@ use log::info;
 
 use crate::{
     config::{self, Config},
-    dbg::{debug_module_new::DebugModule, jtag_driver::JtagDriver, remote_bitbang::RemoteBitBang},
+    dbg::{debug_module::DebugModule, jtag_driver::JtagDriver, remote_bitbang::RemoteBitBang},
 };
 #[allow(unused_imports)]
 use crate::{

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use bitfield_struct::bitfield;
 use log::{debug, trace};
 
-use super::{debug_module_new::DebugModule, jtag_state::JtagState};
+use super::{debug_module::DebugModule, jtag_state::JtagState};
 
 
 const DMI_OP_STATUS_SUCCESS: u8 = 0;
